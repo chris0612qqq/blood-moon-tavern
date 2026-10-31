@@ -145,7 +145,6 @@ def join_form(page: Page, name: str, password: str | None) -> None:
         fill(page, "input-join_password", password)
     fill(page, "input-join_name", name)
     fill(page, "input-join_pin", "1111")
-    fill(page, "input-join_pin2", "1111")
     press(page, "btn-join")
     wait(page, "my-seat")
 
@@ -418,7 +417,7 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
 
 
 def test_join_form_rules(server_url: str) -> None:
-    """UT3 灰盒版：名字、PIN 的基本防呆。"""
+    """UT3 灰盒版：名字、PIN 的基本防呆；PIN 只打一次（試玩回饋）。"""
     with sync_playwright() as driver:
         browser = driver.chromium.launch()
         admin = browser.new_context(viewport=MOBILE).new_page()
@@ -427,15 +426,61 @@ def test_join_form_rules(server_url: str) -> None:
         page = browser.new_context(viewport=MOBILE).new_page()
         page.goto(server_url)
         wait(page, "input-join_name")
+        assert not has(page, "input-join_pin2")
         fill(page, "input-join_password", "1234")
         fill(page, "input-join_name", "太長名字")
+        fill(page, "input-join_pin", "11")
+        page.wait_for_timeout(200)
+        assert page.locator('[data-testid="btn-join"]').is_disabled()  # PIN 不足 4 碼
         fill(page, "input-join_pin", "1111")
-        fill(page, "input-join_pin2", "2222")
-        page.wait_for_timeout(200)
-        assert page.locator('[data-testid="btn-join"]').is_disabled()
-        fill(page, "input-join_pin2", "1111")
-        page.wait_for_timeout(200)
         press(page, "btn-join")
         wait(page, "error-join")
         assert "2 個字" in page.locator('[data-testid="error-join"]').inner_text()
+        browser.close()
+
+
+def test_room_name_optional_and_copy_without_clipboard_api(server_url: str) -> None:
+    """試玩回饋：房名不用填；iPhone 連 http 沒有剪貼簿 API，複製邀請文字仍要能用。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        context = browser.new_context(viewport=MOBILE)
+        # 模擬非 HTTPS：localhost 在瀏覽器眼中算安全環境，所以手動拿掉 API
+        context.add_init_script(
+            """
+            Object.defineProperty(navigator, 'clipboard', { value: undefined });
+            window.__copied = [];
+            const original = document.execCommand.bind(document);
+            document.execCommand = (name) => {
+              window.__copied.push(document.activeElement.value);
+              return name === 'copy' ? true : original(name);
+            };
+            """
+        )
+        page = context.new_page()
+        page.goto(server_url)
+        wait(page, "btn-admin-key")
+        press(page, "btn-admin-key")
+        fill(page, "input-admin_user", "boss")
+        fill(page, "input-admin_pass", "password1")
+        press(page, "btn-admin-login")
+        wait(page, "btn-open-room")
+        press(page, "mode-god")
+        press(page, "btn-open-room")  # 什麼都沒填也能開房
+        wait(page, "screen-s3")
+        press(page, "btn-copy-invite")
+        wait(page, "toast")
+        assert page.locator('[data-testid="toast"]').inner_text() == "已複製"
+        copied = page.evaluate("window.__copied")
+        password = page.locator('[data-testid="room-password"]').inner_text()
+        assert f"#pw={password}" in copied[0]
+        health = httpx.get(f"{server_url}/api/health").json()
+        assert health["room"]["name"] == "血月酒館"
+
+        # 兩種方法都失敗時要說清楚，不能沒反應
+        page.evaluate("document.execCommand = () => false")
+        page.wait_for_timeout(3200)  # 等上一則 toast 消失
+        press(page, "btn-copy-invite")
+        page.wait_for_function(
+            "document.querySelector('[data-testid=\"toast\"]')?.innerText.includes('手動複製')"
+        )
         browser.close()

@@ -42,6 +42,7 @@ button.btn--error { border-color: #e66; background: #633; }
 button.btn:disabled { color: #999; border-color: #666; }
 .reason { font-size: 14px; color: #dbb; margin: -2px 0 6px; }
 
+.selectable { user-select: text; -webkit-user-select: text; }
 label.field { display: block; margin: 12px 0; }
 input, select, textarea { font-size: 16px; width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #888; background: #222; color: #eee; }
 .error-text { color: #f99; font-size: 14px; }
