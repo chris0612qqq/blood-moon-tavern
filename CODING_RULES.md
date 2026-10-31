@@ -97,6 +97,8 @@
 | unauthorized | 未登入或 token 無效 | 請重新加入房間 |
 | forbidden | 沒有權限 | 你現在不能這樣做 |
 | stale_step | 步驟已經換了 | 這一步已經結束 |
+| step_not_open | 旁白還沒念完，步驟未開放 | 請稍等，旁白念完才能操作 |
+| version_mismatch | 前後端協定版本不符（M7） | 有新版本，請重新整理 |
 | invalid_target | 目標不合法 | 不能選這個人，請重選 |
 | deadline_passed | 時間已到 | 時間到了 |
 | room_full / room_closed / no_room | 房間狀態 | 房間已滿／房間已關閉／還沒開房 |
