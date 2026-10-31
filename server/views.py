@@ -145,7 +145,8 @@ def public_history(state: GameState) -> list[Message]:
 def _wolf_block(state: GameState, player: PlayerState) -> Message:
     pack = [p.id for p in state.players if is_wolf(p.role)]
     block: Message = {"pack": pack}
-    if player.alive and state.step is Step.WOLF:
+    # 確認後步驟立刻換到狼人閉眼，結果要留著，狼人才看得到今晚刀了誰（SPEC C8.3）
+    if player.alive and state.step in (Step.WOLF, Step.WOLF_END):
         block.update(_wolf_picks(state))
     return block
 
@@ -217,6 +218,7 @@ def _me_block(state: GameState, player: PlayerState) -> Message:
         block["my_bet"] = {"wolves": list(bet.wolves), "faceless_guess": bet.faceless}
     if is_wolf(player.role):
         block["wolf_pack"] = _wolf_block(state, player)
+        block["can_wolf_mask"] = rules.can_wolf_mask(state, player.id)
     if player.role is Role.SEER:
         block["seer_info"] = _seer_block(state)
     if player.role is Role.WITCH:
@@ -270,12 +272,14 @@ def chat_message(msg: Message, viewer: Viewer, state: GameState) -> Message | No
         return None
     author_is_me = viewer.player_id is not None and msg["real_author"] == viewer.player_id
     disguised = msg["disguise_period"] is not None
+    masked = msg["is_wolf_mask"]
     out: Message = {
         "t": "chat.msg",
         "id": msg["id"],
         "channel": msg["channel"],
         "display_player_id": msg["display"],
         "is_host_msg": msg["is_host"],
+        "is_wolf_mask": masked,
         "kind": msg["kind"],
         "content": msg["content"],
         "media_id": msg["media_id"],
@@ -286,7 +290,9 @@ def chat_message(msg: Message, viewer: Viewer, state: GameState) -> Message | No
         out["mine"] = True
         if disguised:
             out["disguised_by_me"] = True
-    if disguised and (is_host or ended):
+        if masked:
+            out["masked_by_me"] = True
+    if (disguised or masked) and (is_host or ended):
         out["real_author"] = msg["real_author"]
     return out
 
@@ -307,7 +313,7 @@ def truth_block(state: GameState, chat: Sequence[Message] = ()) -> Message:
         "disguised_messages": [
             {"id": m["id"], "real_author": m["real_author"], "display": m["display"]}
             for m in chat
-            if m["disguise_period"] is not None
+            if m["disguise_period"] is not None or m["is_wolf_mask"]
         ],
         "bets": [
             {
@@ -465,6 +471,7 @@ def lobby_chat_message(msg: Message, viewer: Viewer) -> Message:
         "channel": msg["channel"],
         "display_player_id": msg["display"],
         "is_host_msg": msg["is_host"],
+        "is_wolf_mask": False,
         "kind": msg["kind"],
         "content": msg["content"],
         "media_id": msg["media_id"],

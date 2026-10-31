@@ -2,11 +2,11 @@
 import { h } from '../dom.js';
 import { send } from '../net.js';
 import { store, changed } from '../store.js';
-import { errorText, roleName, roleStory, stepName, t } from '../strings.js';
+import { errorText, roleAbility, roleName, roleStory, stepName, t } from '../strings.js';
 import { actionButton, countdown, nameOf, pickGrid, selection, toast } from '../ui/common.js';
 
 /** 角色卡：長按才顯示，放開蓋回；秘密只在顯示時才進 DOM（CODING_RULES V18、V19）。 */
-export function roleCard(server, extra = null) {
+export function roleCard(server) {
   const me = server.me;
   const release = () => { store.ui.cardHeld = false; changed(); };
   const held = store.ui.cardHeld;
@@ -25,30 +25,50 @@ export function roleCard(server, extra = null) {
   }, held
     ? [
       h('div', { class: 'big', testid: 'role-name' }, roleName(me.role)),
-      h('p', {}, roleStory(me.role)),
-      extra,
+      h('p', { class: 'hint', testid: 'role-faction' }, t(me.wolf_pack ? 's6.factionWolf' : 's6.factionGood')),
+      h('p', { testid: 'role-ability' }, roleAbility(me.role)),
+      h('p', { class: 'hint', testid: 'role-story' }, roleStory(me.role)),
+      roleSecrets(server),
     ]
     : t('s6.hold'));
 }
 
-function packLine(server) {
-  const pack = server.me.wolf_pack?.pack;
-  if (!pack) return null;
-  const names = pack.filter((id) => id !== server.me.id).map((id) => nameOf(server, id)).join('、');
-  return h('p', {}, t('s6.pack', { names }));
+/** 只有本人知道的資訊，一律放在卡片裡，放開就離開 DOM（CODING_RULES V19）。 */
+function roleSecrets(server) {
+  const me = server.me;
+  const pack = me.wolf_pack?.pack;
+  const names = pack?.filter((id) => id !== me.id).map((id) => nameOf(server, id)).join('、');
+  const potion = (used) => t(used ? 's10.used' : 's10.left');
+  return [
+    pack ? h('p', { testid: 'role-pack' }, t('s6.pack', { names })) : null,
+    me.disguise_info?.target
+      ? h('p', { testid: 'role-disguise' }, t('s19.panel', {
+        name: nameOf(server, me.disguise_info.target),
+        n: me.disguise_info.rounds_left,
+      }))
+      : null,
+    me.witch_info
+      ? h('p', { testid: 'role-potions' }, t('s10.potions', {
+        antidote: potion(me.witch_info.antidote_used),
+        poison: potion(me.witch_info.poison_used),
+      }))
+      : null,
+    (me.seer_info?.checks ?? []).map((c) => h('p', { key: `check${c.round_no}`, testid: `role-check-${c.round_no}` },
+      t('role.seerRow', {
+        n: c.round_no,
+        name: nameOf(server, c.target),
+        result: t(c.is_wolf ? 'role.wolfResult' : 'role.goodResult'),
+      }))),
+  ];
 }
 
 export function s6(server) {
   const me = server.me;
   const { done = 0, total = 0 } = server.progress ?? {};
-  const extra = [
-    packLine(server),
-    me.disguise_info ? h('p', {}, t('s6.first', { name: nameOf(server, me.disguise_info.target) })) : null,
-  ];
   return [
     h('h1', { testid: 'screen-s6' }, t('s6.title')),
     countdown(server, t('s6.timeout')),
-    roleCard(server, extra),
+    roleCard(server),
     h('p', { class: 'center', testid: 'deal-progress' }, t('s6.progress', { done, total })),
     me.done
       ? h('p', { class: 'center' }, t('pending'))
@@ -105,6 +125,11 @@ export function s8(server) {
       if (!result.ok) toast('error.raw', { text: errorText(result.code) });
     });
   };
+  if (info.decided) {
+    return h('div', { class: 'center' },
+      h('h1', { testid: 'screen-s8-done' }, t('s7.title')),
+      h('div', { class: 'panel', testid: 'wolf-status' }, wolfStatus(server, info)));
+  }
   return [
     h('h1', { testid: 'screen-s8' }, t('s8.title')),
     countdown(server, t('s8.timeout')),

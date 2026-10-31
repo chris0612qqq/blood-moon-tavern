@@ -1,4 +1,4 @@
-# 血月酒館 — 狼人殺主持 App 規格 v4.8
+# 血月酒館 — 狼人殺主持 App 規格 v4.9
 
 > 狀態：規格階段，**尚未寫程式**。v2 已移到 `_archive/SPEC_v2.md`。
 > 撰寫順序：**A 規格 → B 程式設計 → C UI**，三部分都定案後才開始寫 code。
@@ -38,7 +38,7 @@
 | 女巫 | 解藥、毒藥各一次；解藥僅首夜可自救；同夜不可雙用；解藥用掉後不再告知被殺者 |
 | 獵人 | 被毒死不能開槍；可選擇不開槍；開槍時身分公開 |
 | 狼人選刀 | 只能選非狼人的存活者或空刀；所有狼人即時看到彼此選擇；全選同一選項後 3 秒可取消倒數才確認 |
-| 狼人發言 | 公共頻道只用自己名字（**無「狼人」匿名標籤**）＋狼人頻道 |
+| 狼人發言 | 公共頻道可選自己名字或匿名「狼人」身分（白天與白天暫停，A9）＋狼人頻道 |
 | 死亡玩家 | 公共頻道只讀；死亡狼人的狼人頻道只讀 |
 | 出局公開 | 出局者一律公開角色；千面狼出局只顯示「狼人」，結算才揭曉 |
 | 已死角色步驟 | 夜晚直接略過（女巫藥用完但還活著不算，步驟照常） |
@@ -109,7 +109,7 @@
 
 | 角色 | 陣營 | 能力 |
 |---|---|---|
-| 狼人 | 暗夜 | 每晚與同伴共選一名非狼人存活者擊殺，或空刀；狼人頻道 |
+| 狼人 | 暗夜 | 每晚與同伴共選一名非狼人存活者擊殺，或空刀；狼人頻道；白天可在公共頻道以匿名「狼人」身分發言 |
 | 千面狼 | 暗夜 | 狼人的全部能力＋公共頻道假扮（A6） |
 | 村民 | 好人 | 無技能 |
 | 預言家 | 好人 | 每晚查驗一名其他存活者：狼人／好人（千面狼也顯示「狼人」） |
@@ -189,6 +189,7 @@
 | 已出局者的角色 | 全員（千面狼顯示「狼人」） | | | | ✔ 真實 | 全員 |
 | 誰是千面狼、假扮對象 | 千面狼本人 | ✘ | ✘ | ✘ | ✔ | 全員 |
 | 假扮訊息的真實發言者 | 千面狼本人 | ✘ | ✘ | ✘ | ✔ | 全員 |
+| 匿名「狼人」訊息的真實發言者 | 發言者本人 | ✘ | ✘ | ✘ | ✔ | 全員 |
 | 狼人頻道 | — | ✔（死亡狼只讀） | ✘ | 死亡狼只讀 | ✔ 只讀 | 全員 |
 | 狼人選刀即時狀態 | — | ✔ | ✘ | ✘ | ✔ | 全員 |
 | 預言家查驗結果 | 僅預言家 | — | ✘ | ✘ | ✔ | 全員 |
@@ -242,15 +243,16 @@
 全員顯示「遊戲暫停中」與原因（管理員暫停／伺服器重啟／多人斷線／主持人斷線）、倒數凍結、聊天照常；繼續後先 5 秒倒數，再從原步驟與剩餘秒數接續；無管理員模式自動重念當前步驟，上帝模式由主持人按「重念」。暫停期間不計回合。
 
 ### A8.7 結算
-旁白「遊戲結束，○○陣營獲勝」→ 勝利畫面 → 全部角色（含千面狼）→ **看真相**：狼人頻道全紀錄、千面狼每期假扮對象與每則假扮訊息的真身、每晚行動時間軸、投票明細 → 10 分鐘倒數關房。
+旁白「遊戲結束，○○陣營獲勝」→ 勝利畫面 → 全部角色（含千面狼）→ **看真相**：狼人頻道全紀錄、千面狼每期假扮對象與每則假扮訊息的真身、每則匿名「狼人」訊息的真身、每晚行動時間軸、投票明細 → 10 分鐘倒數關房。
 
 ## A9 聊天
 
 | 情境 | 公共頻道 | 狼人頻道 |
 |---|---|---|
 | 大廳、結算 | 所有人可發言 | — |
-| 活著的好人、狼人 | 自己名字 | 狼人可發言 |
-| 活著的千面狼 | 「我自己」或「假扮：○○」 | 可發言（本名） |
+| 活著的好人 | 自己名字 | — |
+| 活著的狼人 | 「我自己」或匿名「狼人」 | 可發言（本名） |
+| 活著的千面狼 | 「我自己」、匿名「狼人」或「假扮：○○」 | 可發言（本名） |
 | 死亡玩家 | 只讀 | 死亡狼人只讀 |
 | 遺言中的死者 | 可發一則文字 | 死亡狼人只讀 |
 | 遲到旁觀者 | 只讀（只有進房參與本局的玩家能發言） | 看不到 |
@@ -258,6 +260,7 @@
 | 夜晚 | **所有人只讀**（上帝主持人除外）；輸入框顯示「夜晚公共頻道暫停發言」，打到一半的內容保留成草稿 | 照常（存活狼人可發言） |
 | 暫停中 | 白天暫停：照常；**夜晚暫停：仍只讀** | 照常 |
 
+- **匿名「狼人」身分**：白天（含白天的暫停）才能用；畫面顯示「狼人」，沒有名字與頭像，資料裡也沒有真實發言者，連狼同伴都不知道是誰；上帝主持人即時看得到，其他人到結算才揭曉。
 - 內容：文字 ≤ 500 字；照片（去 EXIF、長邊 ≤ 1280 壓縮）；語音（按住錄、上滑取消，≤ 60 秒）。
 - 不可編輯撤回；無「正在輸入」、已讀、最後上線時間；玩家名單只顯示「離線」。
 - 房間關閉即刪除。
@@ -434,7 +437,7 @@ CHECK_WIN 有勝負 或 admin.end ─▶ END（10 分鐘）─▶ CLOSED
 | player | id, room_id, device_id, name（房內唯一，恰 2 字）, avatar_media_id（可空）, pin_hash, seat, is_spectator, kicked, last_seen, prep_json（S24 準備檢查：聲音／螢幕常亮／主畫面） |
 | session | token_hash, room_id, player_id（主持人為 NULL）, is_admin, device_id, created_at |
 | game | id, room_id, started_at, ended_at, winner |
-| chat_message | id, room_id, channel(public/wolf), real_author_id, is_last_words（遺言那一則）, display_player_id（假扮時＝被假扮者，否則＝本人；主持人為 NULL＋is_host）, disguise_period_id, kind, content, media_id, ts |
+| chat_message | id, room_id, channel(public/wolf), real_author_id, is_last_words（遺言那一則）, display_player_id（假扮時＝被假扮者，否則＝本人；主持人為 NULL＋is_host）, disguise_period_id, is_wolf_mask（匿名「狼人」訊息，此時 display_player_id 為 NULL）, kind, content, media_id, ts |
 | media | id, room_id, kind, path, bytes, mime |
 | event_log | id, game_id, ts, type, payload_json |
 | snapshot | id, game_id, seq, state_json（保留 20） |
@@ -463,7 +466,7 @@ CHECK_WIN 有勝負 或 admin.end ─▶ END（10 分鐘）─▶ CLOSED
 **訊息外框**（每則都有）：客戶端→伺服器 `{t, msg_id, step_seq, ...}`；伺服器→客戶端 `{t, seq, server_ts, ...}`。`msg_id` 用於去重（CODING_RULES L3），`step_seq` 只在換步驟時增加，步驟行動的 `step_seq` 不符回 `stale_step`（L2），`seq` **每條連線各自編號**（全房共用的話，跳號會洩漏別人收到了私密事件），`server_ts` 供手機校正倒數。對每則客戶端訊息，伺服器都回 `ack{msg_id}` 或 `error{msg_id, code}`。
 
 客戶端 → 伺服器
-- 共通：`ping`、`state.request`（回到前景時重新同步）、`deal.ack`、`prep.report{audio, wakelock, pwa}`、`narrator.takeover`、`chat.send{channel, as:"self"|"disguise", kind, content|media_id}`（遺言中的死者限一則）、`chat.history{channel, before_id}`（往上捲動取更舊訊息，CODING_RULES P6）、`media.refresh{media_id}`（簽章網址過期時取新網址，N21）
+- 共通：`ping`、`state.request`（回到前景時重新同步）、`deal.ack`、`prep.report{audio, wakelock, pwa}`、`narrator.takeover`、`chat.send{channel, as:"self"|"disguise"|"wolf", kind, content|media_id}`（遺言中的死者限一則）、`chat.history{channel, before_id}`（往上捲動取更舊訊息，CODING_RULES P6）、`media.refresh{media_id}`（簽章網址過期時取新網址，N21）
 - 夜晚：`wolf.pick{target|null, clear?}`（`target=null`＝空刀；`clear=true`＝收回選擇）、`seer.check{target}`、`seer.ok`、`witch.act{save, poison}`
 - 白天：`hunter.shoot{target|null}`、`speak.end`（發言與遺言共用）、`vote.cast{target|null}`（揭曉前可再送一次改票）
 - 管理員（兩模式）：`admin.seat{order}`、`admin.kick{player}`、`admin.start`、`admin.end`、`admin.pause`、`admin.resume`、`admin.narrator{player}`、`admin.reset_pin{player}`
@@ -475,7 +478,7 @@ CHECK_WIN 有勝負 或 admin.end ─▶ END（10 分鐘）─▶ CLOSED
 - `wolf.picks{picks, confirming_until?}`（狼人＋主持人）、`seer.result`、`witch.info`（本人＋主持人）、`host.progress`（主持人）
 - `disguise{target, rounds_left}`（只給千面狼＋主持人）
 - `death{players:[{id, public_role}]}`（**不含死因**；主持人另收 `host.progress` 內的死因）、`vote.reveal{ballots}`、`hunter.shot{hunter, target|null}`、`last_words{queue, current}`
-- `chat.msg{id, channel, display_player_id, kind, content|media_url, ts, mine?, disguised_by_me?}`（他人收到的版本沒有真實發言者欄位）
+- `chat.msg{id, channel, display_player_id, is_wolf_mask, kind, content|media_url, ts, mine?, disguised_by_me?, masked_by_me?}`（他人收到的版本沒有真實發言者欄位）
 - `roster`、`paused`、`end{winner, roles, faceless, truth}`、`room.closing{at}`、`room.closed`、`kicked`、`error{code,msg}`
 
 ## B8 安全
@@ -485,6 +488,7 @@ CHECK_WIN 有勝負 或 admin.end ─▶ END（10 分鐘）─▶ CLOSED
 - 押注：`bet.set` 只接受本人已出局、屬好人陣營且不是被踢、遊戲進行中；名單人數不得超過狼人總數；不得包含自己。
 - 名字驗證：伺服器以 Unicode 字素計算恰為 2 個，只允許中日韓文字、英文字母、數字；違反回 `error{code:"name_invalid"}`。
 - 上傳：照片 ≤ 5 MB、語音 ≤ 60 秒且 ≤ 2 MB；驗檔頭；伺服器產生檔名。
+- 匿名「狼人」驗證：`chat.send as=wolf` 只在 `can_wolf_mask` 為真時接受（本人是存活的狼人或千面狼、白天（含白天的暫停）、頻道為公共）。
 - 假扮驗證：`chat.send as=disguise` 只在 `can_disguise` 為真時接受（本人是存活千面狼、遊戲進行中且為白天（含白天的暫停）、頻道為公共）。
 - 密碼、token、`data/`、`local_assets/` 都不進 git。
 
@@ -585,7 +589,7 @@ P0 環境與骨架 → P1（M1）規則核心 → P2（M2）引擎、保密視�
 - 形狀：圓角 2–6px、金屬雙線邊框＋四角裝飾、石板雜訊、羊皮紙漸層、內發光。
 
 ## C3 共通元件
-主要按鈕（金邊深底金字，高 ≥ 48px）｜危險按鈕（血紅邊＋二次確認）｜次要按鈕（羊皮紙）｜頭像（圓形金屬環；死亡＝灰階＋骷髏角標＋角色小徽章；離線＝半透明＋「離線」；管理員＝小鑰匙；上帝主持人＝燭台）｜倒數環（沙漏＋Cinzel，剩 10 秒轉 ember）｜選擇格（3 欄頭像，選中金光；狼人同伴選擇＝紅爪痕＋同伴名字（2 字））｜聊天泡（羊皮紙；自己靠右；主持人＝燭光金底；狼人頻道＝暗紅背景；**假扮訊息對他人與一般訊息完全相同**，只有千面狼自己看到面具角標＋「你以 ○○ 身分發言」）｜**身分切換器**（千面狼專用，輸入框上方：「我自己｜🎭 假扮：○○」，切到假扮時輸入框變 mask 紫＋面具紋，避免誤發）｜對話框（卷軸）｜toast（頂部小卷軸）｜旁白字幕（月光藍淡入）。
+主要按鈕（金邊深底金字，高 ≥ 48px）｜危險按鈕（血紅邊＋二次確認）｜次要按鈕（羊皮紙）｜頭像（圓形金屬環；死亡＝灰階＋骷髏角標＋角色小徽章；離線＝半透明＋「離線」；管理員＝小鑰匙；上帝主持人＝燭台）｜倒數環（沙漏＋Cinzel，剩 10 秒轉 ember）｜選擇格（3 欄頭像，選中金光；狼人同伴選擇＝紅爪痕＋同伴名字（2 字））｜聊天泡（羊皮紙；自己靠右；主持人＝燭光金底；狼人頻道＝暗紅背景；**假扮訊息對他人與一般訊息完全相同**，只有千面狼自己看到面具角標＋「你以 ○○ 身分發言」）｜**身分切換器**（狼人與千面狼，輸入框上方：「我自己｜狼人」，千面狼多一個「🎭 假扮：○○」；切換後送出鈕寫出身分，切到假扮時輸入框變 mask 紫＋面具紋，避免誤發）｜對話框（卷軸）｜toast（頂部小卷軸）｜旁白字幕（月光藍淡入）。
 
 **元件狀態（詳見 UI_RULES）**：所有送出按鈕共用 `ActionButton` 五態（idle／pending「送出中…」／success ✔／error／disabled＋原因），點下即鎖、最長 8 秒必解鎖；聊天泡泡三態（送出中／已送達／失敗可重送）；回饋分四級（toast／banner／dialog／全畫面）。
 
@@ -848,6 +852,8 @@ P0 環境與骨架 → P1（M1）規則核心 → P2（M2）引擎、保密視�
 目前沒有待確認項目，規格定稿（遺言已採用）。
 
 ## D2 變更紀錄
+
+**v4.8 → v4.9**（使用者決定，2026-10-31）：狼人與千面狼白天可在公共頻道以匿名「狼人」身分發言，讓白天與暫停時的閒聊更有趣（A2、A5.2、A7、A9、B6、B7、B8、C3）。這是恢復 v2 的做法；v3.1 曾拿掉。
 
 **v4.7 → v4.8**（開工前與使用者確認，2026-10-31）
 | # | 變更 |

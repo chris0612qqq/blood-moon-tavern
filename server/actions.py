@@ -300,7 +300,9 @@ def _chat_send(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
     state = engine.state
     channel = Channel(payload["channel"])
     kind = ChatKind(payload.get("kind", ChatKind.TEXT))
-    as_disguise = payload.get("as") == "disguise"
+    speak_as = payload.get("as")
+    as_disguise = speak_as == "disguise"
+    as_wolf = speak_as == "wolf"
     if not _can_post(state, actor, channel, kind):
         raise _fail(ErrorCode.FORBIDDEN)
     author = actor.player_id
@@ -316,6 +318,15 @@ def _chat_send(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
         assert state.disguise is not None
         display = state.disguise.target_id
         period = len(state.disguise.periods) - 1
+    if as_wolf:
+        if (
+            author is None
+            or channel is not Channel.PUBLIC
+            or not state.has_player(author)
+            or not rules.can_wolf_mask(state, author)
+        ):
+            raise _fail(ErrorCode.FORBIDDEN)
+        display = None  # 匿名：資料裡就沒有名字（SPEC A9）
     is_last_words = (
         author is not None
         and channel is Channel.PUBLIC
@@ -332,6 +343,7 @@ def _chat_send(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
         display=display,
         is_host=actor.is_host,
         disguise_period=period,
+        is_wolf_mask=as_wolf,
         kind=kind.value,
         content=payload.get("content"),
         media_id=payload.get("media_id"),

@@ -40,5 +40,6 @@ function gameScreen(server) {
   if (PUBLIC_SCREENS[step]) return PUBLIC_SCREENS[step];
   if (me && !me.alive) return 'S17';
   if (me?.is_actor && NIGHT_ACTOR_SCREENS[step]) return NIGHT_ACTOR_SCREENS[step];
+  if (me?.wolf_pack && step === STEP.WOLF_END) return 'S8';
   return 'S7';
 }

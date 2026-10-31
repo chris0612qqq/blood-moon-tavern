@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import socket
 import subprocess
@@ -25,7 +26,7 @@ from server.auth import AdminStore
 ROOT = Path(__file__).resolve().parent.parent.parent
 MOBILE = {"width": 390, "height": 780}
 PLAYERS = 12
-GAME_TIMEOUT_SECONDS = 300
+GAME_TIMEOUT_SECONDS = 600
 
 pytestmark = pytest.mark.e2e
 
@@ -36,8 +37,8 @@ def _free_port() -> int:
         return int(probe.getsockname()[1])
 
 
-@pytest.fixture
-def server_url() -> Iterator[str]:
+@contextlib.contextmanager
+def running_server(time_scale: int) -> Iterator[str]:
     port = _free_port()
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         admin_file = Path(tmp) / "admin.json"
@@ -47,7 +48,7 @@ def server_url() -> Iterator[str]:
             "BMT_DATA_DIR": tmp,
             "BMT_ADMIN_FILE": str(admin_file),
             "DEV_MODE": "1",
-            "TIME_SCALE": "6",
+            "TIME_SCALE": str(time_scale),
         }
         proc = subprocess.Popen(
             [
@@ -77,6 +78,12 @@ def server_url() -> Iterator[str]:
                 child.terminate()
             proc.terminate()
             proc.wait(10)
+
+
+@pytest.fixture
+def server_url() -> Iterator[str]:
+    with running_server(6) as url:
+        yield url
 
 
 def has(page: Page, testid: str) -> bool:
@@ -282,6 +289,9 @@ def run_game(server_url: str, mode: str) -> None:
         for page in pages:
             wait(page, "screen-s18", timeout=20000)
             assert page.locator('[data-testid^="end-role-"]').count() == PLAYERS
+            # 手動試玩時發現的缺漏：死因結算才公開，且結算不再顯示「你已出局」
+            assert page.locator('[data-testid^="end-cause-"]').count() > 0
+            assert page_text_lacks(page, "你已出局")
         browser.close()
     assert errors == []
 

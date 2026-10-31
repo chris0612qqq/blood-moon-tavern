@@ -991,6 +991,48 @@ def test_T5_restart_restores_game_and_sessions(env: Env) -> None:
         ws.close()
 
 
+def test_masked_chat_survives_restart_and_stays_secret(env: Env) -> None:
+    with TestClient(env.app) as client:
+        open_room(env, client)
+        tokens = dict((pid, token) for token, pid in player_tokens(client, 8))
+        admin = Ws(client, env.admin_token)
+        admin.reply("admin.start")
+        engine = env.service.engine
+        assert engine is not None
+        wolf = next(p.id for p in engine.state.players if p.role is Role.WOLF)
+        good = next(p.id for p in engine.state.players if p.role is Role.VILLAGER)
+        engine.state.step = Step.DAY_SPEAK  # 直接放到白天，只測聊天
+        ws = Ws(client, tokens[wolf])
+        assert ws.reply("chat.send", channel="public", content="嗷", **{"as": "wolf"})["t"] == "ack"
+        ws.close()
+        admin.close()
+    service = env.make_service()
+    with TestClient(create_app(service)) as client:
+        assert service.disguised_chat[0]["is_wolf_mask"] is True
+        viewer = Ws(client, tokens[good])
+        msg = next(m for m in viewer.state["chat"] if m["content"] == "嗷")
+        assert msg["is_wolf_mask"] is True and msg["display_player_id"] is None
+        assert wolf not in json.dumps(msg)
+        viewer.close()
+
+
+def test_old_database_gets_mask_column(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    # v4.8 的欄位（沒有 is_wolf_mask）
+    old.execute(
+        "CREATE TABLE chat_message(id INTEGER PRIMARY KEY, room_id TEXT NOT NULL, "
+        "channel TEXT NOT NULL, real_author_id TEXT, is_last_words INTEGER NOT NULL, "
+        "display_player_id TEXT, is_host INTEGER NOT NULL, disguise_period_id INTEGER, "
+        "kind TEXT NOT NULL, content TEXT, media_id TEXT, ts REAL NOT NULL)"
+    )
+    old.commit()
+    old.close()
+    db = Database(path)
+    columns = {row["name"] for row in db.rows("PRAGMA table_info(chat_message)")}
+    assert "is_wolf_mask" in columns
+
+
 def test_restart_lobby_room(env: Env) -> None:
     with TestClient(env.app) as client:
         open_room(env, client)

@@ -12,15 +12,19 @@ const NIGHT_STEPS = new Set(['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_EN
 
 function displayName(server, msg) {
   if (msg.is_host_msg) return t('chat.host');
+  if (msg.is_wolf_mask) return t('chat.wolfName');
   return nameOf(server, msg.display_player_id);
 }
 
 function bubble(server, msg) {
-  const mine = msg.mine && !msg.disguised_by_me;
-  const classes = ['bubble', mine ? 'bubble--mine' : '', msg.is_host_msg ? 'bubble--host' : ''];
+  // 假扮和匿名訊息不放到右邊：旁人瞄到畫面也不會立刻看出是他發的
+  const mine = msg.mine && !msg.disguised_by_me && !msg.masked_by_me;
+  const classes = ['bubble', mine ? 'bubble--mine' : '', msg.is_host_msg ? 'bubble--host' : '',
+    msg.is_wolf_mask ? 'bubble--wolf' : ''];
   return h('div', { class: classes.join(' '), key: `m${msg.id}`, testid: `chat-${msg.id}` },
     h('div', { class: 'bubble__who' }, displayName(server, msg),
       msg.disguised_by_me ? ` ${t('chat.fakeMark', { name: displayName(server, msg) })}` : '',
+      msg.masked_by_me ? ` ${t('chat.wolfMark')}` : '',
       msg.real_author ? ` ← ${nameOf(server, msg.real_author)}` : ''),
     msg.content);
 }
@@ -35,20 +39,39 @@ function postBlock(server, channel) {
   return me.alive ? null : t('chat.dead');
 }
 
+function asButton(label, value, active) {
+  return button(label, () => { store.ui.chatAs = value; changed(); }, {
+    small: true,
+    kind: active ? 'suggest' : 'secondary',
+    testid: `chat-as-${value}`,
+  });
+}
+
+// 送出鈕寫出身分，避免切了之後忘記（SPEC C9.2 #7）
+function sendLabel(fake, masked, targetName) {
+  if (fake) return t('chat.sendAs', { name: targetName });
+  if (masked) return t('chat.sendAs', { name: t('chat.wolfName') });
+  return t('chat.send');
+}
+
 export function chatTab(server, channel) {
   const messages = (server.chat ?? []).filter((m) => m.channel === channel);
   const block = postBlock(server, channel);
   const draftKey = `chat-${channel}`;
   const draft = store.ui.drafts[draftKey] ?? '';
   const canFake = channel === 'public' && server.me?.can_disguise;
+  const canMask = channel === 'public' && server.me?.can_wolf_mask;
+  // 選過的身分現在不能用（例如天黑、死亡）就回到本人，不會誤用舊身分送出
   const fake = canFake && store.ui.chatAs === 'fake';
+  const masked = canMask && store.ui.chatAs === 'wolf';
   const target = server.me?.disguise_info?.target;
   return h('div', { class: 'chat' },
     h('div', { class: 'chat__list', testid: `chat-list-${channel}` },
       messages.length ? messages.map((m) => bubble(server, m)) : h('p', { class: 'hint center' }, t('chat.empty'))),
-    canFake ? h('div', { class: 'row' },
-      button(t('chat.asSelf'), () => { store.ui.chatAs = 'self'; changed(); }, { small: true, kind: fake ? 'secondary' : 'suggest', testid: 'chat-as-self' }),
-      button(t('chat.asFake', { name: nameOf(server, target) }), () => { store.ui.chatAs = 'fake'; changed(); }, { small: true, kind: fake ? 'suggest' : 'secondary', testid: 'chat-as-fake' })) : null,
+    canFake || canMask ? h('div', { class: 'row' },
+      asButton(t('chat.asSelf'), 'self', !fake && !masked),
+      canMask ? asButton(t('chat.asWolf'), 'wolf', masked) : null,
+      canFake ? asButton(t('chat.asFake', { name: nameOf(server, target) }), 'fake', fake) : null) : null,
     block ? h('p', { class: 'hint center', testid: 'chat-blocked' }, block) : h('div', { class: 'chat__input' },
       h('textarea', {
         testid: 'chat-input',
@@ -60,11 +83,12 @@ export function chatTab(server, channel) {
       h('div', { style: 'width:110px' }, actionButton({
         id: `chat-send-${channel}-${(server.chat ?? []).length}`,
         small: true,
-        label: fake ? t('chat.sendAs', { name: nameOf(server, target) }) : t('chat.send'),
+        label: sendLabel(fake, masked, nameOf(server, target)),
         disabled: draft.trim() ? null : ' ',
         run: async () => {
           const fields = { channel, kind: 'text', content: draft };
           if (fake) fields.as = 'disguise';
+          if (masked) fields.as = 'wolf';
           const result = await send('chat.send', fields);
           if (result.ok) {
             store.ui.drafts[draftKey] = '';
@@ -78,18 +102,9 @@ export function chatTab(server, channel) {
 export function roleTab(server) {
   const me = server.me;
   if (!me?.role) return h('p', { class: 'hint center' }, t('chat.spectator'));
-  const checks = me.seer_info?.checks ?? [];
   return [
-    h('h1', { testid: 'tab-role' }, t('tab.role')),
-    roleCard(server, me.wolf_pack ? h('p', {}, t('s6.pack', {
-      names: me.wolf_pack.pack.filter((id) => id !== me.id).map((id) => nameOf(server, id)).join('、'),
-    })) : null),
-    checks.length ? h('h2', {}, t('role.seerLog')) : null,
-    checks.map((c) => h('p', { key: `check${c.round_no}` }, t('role.seerRow', {
-      n: c.round_no,
-      name: nameOf(server, c.target),
-      result: t(c.is_wolf ? 'role.wolfResult' : 'role.goodResult'),
-    }))),
+    h('h1', { testid: 'view-role' }, t('tab.role')),
+    roleCard(server),
   ];
 }
 
@@ -98,7 +113,7 @@ export function playersTab(server) {
   const offline = new Set((server.roster ?? []).filter((r) => r.offline).map((r) => r.id));
   const canPause = server.is_admin && !server.host && !server.paused && server.phase === 'game' && !NIGHT_STEPS.has(server.step) && server.step !== 'END';
   return [
-    h('h1', { testid: 'tab-players' }, t('players.title')),
+    h('h1', { testid: 'view-players' }, t('players.title')),
     [...list].sort((a, b) => a.seat - b.seat).map((p) => h('div', { class: 'list-row', key: p.id },
       h('span', {}, `#${p.seat}`),
       avatar(server, p.id),
@@ -149,6 +164,10 @@ export function s18(server) {
     [...server.players].sort((a, b) => a.seat - b.seat).map((p) => h('div', { class: 'list-row', key: p.id },
       avatar(server, p.id),
       h('span', { class: 'grow' }, p.name),
+      // 夜晚死因結算才公開（SPEC A2）
+      truth.death_causes?.[p.id]
+        ? h('span', { class: 'hint', testid: `end-cause-${p.id}` }, t(`s18.cause.${truth.death_causes[p.id]}`))
+        : null,
       h('span', { class: 'badge', testid: `end-role-${p.id}` }, roleName(p.role)))),
     h('h2', {}, t('s18.truth')),
     h('h2', {}, t('s18.disguise')),
@@ -156,7 +175,7 @@ export function s18(server) {
     (truth.disguised_messages ?? []).map((m) => h('p', { key: `f${m.id}` }, t('s18.fakeMsg', {
       id: m.id,
       real: name(m.real_author),
-      shown: name(m.display),
+      shown: m.display ? name(m.display) : t('chat.wolfName'),
     }))),
     h('h2', {}, t('s18.nights')),
     (truth.nights ?? []).map((n) => h('p', { key: `n${n.round_no}` }, t('s18.night', {
@@ -172,7 +191,13 @@ export function s18(server) {
       Object.entries(v.ballots).map(([from, to]) => h('div', { class: 'hint', key: from },
         t('s15.ballot', { from: name(from), to: to ? name(to) : t('s14.abstain') }))))),
     (truth.bets ?? []).length ? h('h2', {}, t('s18.bets')) : null,
-    (truth.bets ?? []).map((b) => h('p', { key: `b${b.player_id}` }, t('s18.betRow', { rank: b.rank, name: name(b.player_id), score: b.score }))),
+    // SPEC A13：名次、分數、每人押了誰
+    (truth.bets ?? []).map((b) => h('div', { class: 'panel', key: `b${b.player_id}`, testid: `end-bet-${b.player_id}` },
+      h('div', {}, t('s18.betRow', { rank: b.rank, name: name(b.player_id), score: b.score })),
+      h('div', { class: 'hint' }, t('s18.betPicks', {
+        wolves: b.wolves.length ? b.wolves.map(name).join('、') : t('players.nobody'),
+        faceless: name(b.faceless),
+      })))),
     server.is_admin ? actionButton({
       id: 'btn-end-close',
       label: t('s18.closeNow'),
@@ -212,6 +237,7 @@ export function s26() {
     h('h1', { testid: 'screen-s26' }, t('s26.title')),
     h('p', {}, t('s26.goal')),
     h('p', {}, t('s26.night')),
+    h('p', {}, t('s26.mask')),
     h('p', {}, t('s26.witch')),
     h('p', {}, t('s26.hunter')),
     h('p', {}, t('s26.terms')),

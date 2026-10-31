@@ -194,7 +194,7 @@ export function clearFormError(name) {
 
 /** 出局後的共用角標（SPEC C8.5）。 */
 export function deadTag(server) {
-  if (server.phase !== 'game') return null;
+  if (server.phase !== 'game' || server.step === 'END') return null;
   if (server.me && !server.me.alive) return h('div', { class: 'banner' }, t('s17.title'));
   if (!server.me && !server.host) return h('div', { class: 'banner' }, t('s5.spectating'));
   return null;

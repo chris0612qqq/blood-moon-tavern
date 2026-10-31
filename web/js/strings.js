@@ -94,6 +94,8 @@ const TEXT = Object.freeze({
   's6.progress': '{done}/{total} 已看過',
   's6.timeout': '時間到＝自動視為看過',
   's6.pack': '你的同伴：{names}',
+  's6.factionWolf': '暗夜陣營｜目標：存活狼人數 ≥ 存活好人數',
+  's6.factionGood': '好人陣營｜目標：讓狼全部出局',
   's6.first': '本期假扮：{name}',
   's7.title': '閉上眼睛',
   's7.current': '{step} 行動中…',
@@ -179,6 +181,13 @@ const TEXT = Object.freeze({
   's18.period': '第 {from} 回合起假扮 {name}',
   's18.fakeMsg': '訊息 #{id}：{real} 假扮 {shown}',
   's18.bets': '押注排行',
+  's18.betPicks': '押狼：{wolves}；猜千面狼：{faceless}',
+  's18.cause.wolf': '被刀',
+  's18.cause.poison': '被毒',
+  's18.cause.vote': '被放逐',
+  's18.cause.hunter': '被獵人帶走',
+  's18.cause.kick': '被踢',
+  's18.cause.manual': '主持人修正',
   's18.betRow': '第 {rank} 名 {name}：{score} 分',
   's18.closeNow': '關房',
   's19.panel': '本期假扮：{name}，剩 {n} 回合',
@@ -225,6 +234,7 @@ const TEXT = Object.freeze({
   's26.goal': '狼全死＝好人勝；存活狼 ≥ 存活好人＝狼勝。',
   's26.terms': '空刀：狼人今晚不殺人。遺言：出局者最後 60 秒發言。平票：無人出局。',
   's26.night': '夜晚順序：狼人 → 預言家 → 女巫。千面狼查驗也顯示狼人。',
+  's26.mask': '白天的公共頻道會出現匿名的「狼人」發言：那是某一隻狼，連同伴都不知道是誰，結算才揭曉。',
   's26.witch': '女巫解藥、毒藥各一次，同夜不可雙用，解藥僅首夜可救自己，不可毒自己。',
   's26.hunter': '獵人死亡可帶走一人；被毒死不能開槍。',
   's27.title': '押注：猜誰是狼',
@@ -240,6 +250,9 @@ const TEXT = Object.freeze({
   'chat.spectator': '旁觀中，只能看',
   'chat.asSelf': '我自己',
   'chat.asFake': '假扮：{name}',
+  'chat.asWolf': '狼人',
+  'chat.wolfName': '狼人',
+  'chat.wolfMark': '（你以狼人身分發言）',
   'chat.fakeMark': '（你以 {name} 身分發言）',
   'chat.host': '主持人',
   'chat.older': '載入更舊的訊息',
@@ -313,6 +326,16 @@ const ROLE_STORIES = Object.freeze({
   [ROLE.HUNTER]: '你是退隱的第一神射手。就算倒在敵人刀下，你的最後一箭仍會找到藏在人群裡的壞蛋——也可以選擇收弓。（被毒死則無法開槍）',
 });
 
+// SPEC A5.2 能力區（C5 角色卡）：寫「你能做什麼」，故事放在下面
+const ROLE_ABILITIES = Object.freeze({
+  [ROLE.WOLF]: '每晚和同伴選一個非狼人的存活者擊殺，也可以空刀。狼人頻道可以討論。白天能在公共頻道切換成匿名的「狼人」身分發言，連同伴都不知道是誰。',
+  [ROLE.FACELESS]: '和狼人一樣能擊殺、用狼人頻道、用匿名「狼人」身分。另外白天能假扮本期抽到的對象在公共頻道發言，每 3 回合換一位。被查驗或出局都只顯示「狼人」。',
+  [ROLE.VILLAGER]: '沒有技能。白天發言、投票，把狼找出來。',
+  [ROLE.SEER]: '每晚查驗一名其他存活者是狼人或好人。查驗紀錄留在這張卡上。',
+  [ROLE.WITCH]: '解藥：看到今晚被襲擊的人，可以救他；僅首夜可救自己，解藥用掉後就看不到被襲擊者。毒藥：毒一名其他存活者，不可毒自己。兩瓶各一次，同一晚只能用一瓶。',
+  [ROLE.HUNTER]: '死亡時可以帶走一人，或選擇不開槍；開槍會公開身分。被毒死不能開槍。',
+});
+
 const STEP_NAMES = Object.freeze({
   [STEP.DEAL]: '發牌',
   [STEP.NIGHT_START]: '天黑',
@@ -356,6 +379,7 @@ export function t(key, params = {}) {
 export const errorText = (code) => ERRORS[code] ?? ERRORS[ERROR.INTERNAL_ERROR];
 export const roleName = (role) => ROLE_NAMES[role] ?? '';
 export const roleStory = (role) => ROLE_STORIES[role] ?? '';
+export const roleAbility = (role) => ROLE_ABILITIES[role] ?? '';
 export const stepName = (step) => STEP_NAMES[step] ?? '';
 export const pauseReason = (reason) => t(`s16.reason.${reason}`);
 export const lineLabel = (lineId) => LINE_LABELS[lineId] ?? lineId;
