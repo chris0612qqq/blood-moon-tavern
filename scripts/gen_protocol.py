@@ -30,6 +30,8 @@ def render() -> str:
     data = {
         "PROTOCOL_VERSION": config.PROTOCOL_VERSION,
         "MESSAGES": messages,
+        "ROLE_TABLE": {str(n): list(row) for n, row in balance.ROLE_TABLE.items()},
+        "NO_HUNTER_PLAYER_COUNT": {"value": balance.NO_HUNTER_PLAYER_COUNT},
         "ACTION": {a.name: a.value for a in Action},
         "CHANNEL": {c.name: c.value for c in Channel},
         "CHAT_KIND": {k.name: k.value for k in ChatKind},

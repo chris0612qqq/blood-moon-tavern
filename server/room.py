@@ -22,7 +22,7 @@ from typing import Any, TypeVar
 from server import auth, config, media, protocol, views
 from server.clock import Clock, SystemClock
 from server.db import Database
-from server.engine import Engine
+from server.engine import STEP_LINES, Engine
 from server.enums import Action, Channel, ChatKind, Mode, PauseReason, Step
 from server.errors import ErrorCode, GameError
 from server.events import Event, EventType
@@ -124,6 +124,8 @@ class RoomService:
         self.queue: asyncio.Queue[tuple[Callable[[], Any], asyncio.Future[Any]]] | None = None
         self.tasks: list[asyncio.Task[None]] = []
         self.backup_task: asyncio.Future[None] | None = None
+        self.bot_ids: list[str] = []
+        self.bot_brain: Any = None
 
     # ---- 生命週期 ----
 
@@ -243,6 +245,8 @@ class RoomService:
         self.presence = PresenceMonitor()
         self.host_gone_since = None
         self.last_offline = frozenset()
+        self.bot_ids = []
+        self.bot_brain = None
 
     def require_room(self) -> Room:
         if self.room is None:
@@ -576,7 +580,21 @@ class RoomService:
             message = {**message, "media_url": self.media_url(message["media_id"])}
         if message.get("t") == "state":
             message["chat"] = [self._decorate(m) for m in message.get("chat", [])]
+            if "host" in message:
+                message["host"]["next_line"] = self._next_host_line()
+        if message.get("t") == "host.progress":
+            message = {**message, "next_line": self._next_host_line()}
         return message
+
+    def _next_host_line(self) -> str | None:
+        """上帝控制台要高亮的下一句（SPEC C4 S20）；下一步是自動進行時回 None。"""
+        engine = self.engine
+        if engine is None or engine.state.step is Step.END:
+            return None
+        next_step = engine.next_step()
+        if next_step is Step.END or engine.policy.should_advance(next_step):
+            return None
+        return STEP_LINES[next_step]
 
     def _broadcast_events(self, events: Iterable[Event]) -> None:
         engine = self.engine
@@ -920,11 +938,84 @@ class RoomService:
                 self._commit(engine.tick)
             except GameError:
                 log.warning("tick not persisted")
+        if self.bot_ids:
+            self._run_bots()
+        if self.room is None:
+            return
         if now >= self.next_presence:
             self.next_presence = now + config.PRESENCE_CHECK_SECONDS
             self._check_presence(now)
         if now >= self.next_backup:
             self._request_backup()
+
+    # ---- 開發工具（CODING_RULES D1、S8）：只有 DEV_MODE 的路由會呼叫 ----
+
+    def add_bots(self, count: int) -> list[str]:
+        """加入 N 個機器人。名字用「機」加一個字元，符合 2 字規則。"""
+        from server.dev.bots import BotBrain
+
+        room = self.require_room()
+        if room.state != _LOBBY:
+            raise GameError(ErrorCode.FORBIDDEN)
+        if self.bot_brain is None:
+            self.bot_brain = BotBrain(
+                GameRng(room.seed),
+                lambda: self.now,
+                self._bot_send,
+                speak_rate=0.05,
+                chat_rate=0.0005,
+            )
+        added = []
+        alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        taken = {p.name for p in self.players.values()}
+        names = (f"機{ch}" for ch in alphabet if f"機{ch}" not in taken)
+        for _ in range(count):
+            if len(self.players) >= config.ROOM_CAPACITY:
+                break
+            name = next(names)
+            player = RoomPlayer(
+                id=uuid.uuid4().hex[:12],
+                device_id=f"bot-{name}",
+                name=name,
+                pin_hash="",
+                seat=len([p for p in self.players.values() if not p.is_spectator]) + 1,
+                join_order=max((p.join_order for p in self.players.values()), default=0) + 1,
+            )
+            self.players[player.id] = player
+            self.bot_ids.append(player.id)
+            added.append(player.id)
+        self.db.write([_player_statement(room.id, self.players[p]) for p in added])
+        self.broadcast_roster()
+        return added
+
+    def _run_bots(self) -> None:
+        engine = self.engine
+        if engine is None or engine.state.pause is not None or engine.state.step is Step.END:
+            return
+        for player_id in self.bot_ids:
+            if self.engine is None or self.engine.state.step is Step.END:
+                return
+            viewer = views.Viewer(views.ViewerKind.PLAYER, player_id)
+            self.bot_brain.turn(player_id, views.build(self.engine.state, viewer))
+
+    def _bot_send(self, actor: Actor, action: Action, payload: dict[str, Any] | None) -> bool:
+        engine = self.engine
+        assert engine is not None
+        step_seq = engine.state.step_seq
+        try:
+            self._commit(lambda: engine.handle(actor, action, payload or {}, step_seq))
+        except GameError:
+            return False
+        return True
+
+    def dev_state(self) -> dict[str, Any]:
+        """狀態檢視器（CODING_RULES D4）。"""
+        engine = self.engine
+        return {
+            "room": self.room_info(),
+            "state": engine.state.model_dump(mode="json") if engine else None,
+            "events": [e.model_dump(mode="json") for e in engine.log[-50:]] if engine else [],
+        }
 
     def _offline_ids(self) -> frozenset[str]:
         now = self.now
@@ -933,7 +1024,7 @@ class RoomService:
             for conn in self.conns
             if not conn.closed and now - conn.last_seen < config.OFFLINE_AFTER_SECONDS
         }
-        return frozenset(p for p in self.players if p not in online)
+        return frozenset(p for p in self.players if p not in online and p not in self.bot_ids)
 
     def _check_presence(self, now: float) -> None:
         offline = self._offline_ids()

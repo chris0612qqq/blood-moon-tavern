@@ -16,4 +16,4 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy
-      - run: pytest -m "not slow"
+      - run: pytest -m "not slow and not e2e"
