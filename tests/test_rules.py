@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from collections import Counter
 
 import pytest
@@ -282,20 +283,33 @@ class TestCheckWin:
 
 
 class TestSpeakOrder:
-    def test_peaceful_night_from_first_alive_seat(self) -> None:
-        state = make_state(EIGHT, dead={1: DeathCause.VOTE})
-        assert rules.speak_order(state)[0] == "p2"
-        assert len(rules.speak_order(state)) == 7
-
-    def test_after_smallest_dead_seat_and_wraps(self) -> None:
+    def test_follows_seats_from_random_start(self) -> None:
         state = make_state(EIGHT, dead={3: DeathCause.WOLF, 6: DeathCause.POISON})
-        state.dawn_deaths = ["p6", "p3"]
-        assert rules.speak_order(state) == ["p4", "p5", "p7", "p8", "p1", "p2"]
+        order = rules.speak_order(state, GameRng(1))
+        assert len(order) == 6 and "p3" not in order and "p6" not in order
+        seats = [state.player(pid).seat for pid in order]
+        # 順著座位繞：只會有一次從大號回到小號
+        assert sum(a > b for a, b in itertools.pairwise(seats)) <= 1
 
-    def test_last_seat_dead_starts_from_first(self) -> None:
-        state = make_state(EIGHT, dead={8: DeathCause.WOLF})
-        state.dawn_deaths = ["p8"]
-        assert rules.speak_order(state)[0] == "p1"
+    def test_start_varies_and_does_not_depend_on_deaths(self) -> None:
+        state = make_state(EIGHT)
+        starts = {rules.speak_order(state, GameRng(seed))[0] for seed in range(80)}
+        assert starts == {f"p{i}" for i in range(1, 9)}
+
+    def test_never_same_start_two_days_in_a_row(self) -> None:
+        state = make_state(EIGHT)
+        state.last_speak_start = "p3"
+        for seed in range(80):
+            assert rules.speak_order(state, GameRng(seed))[0] != "p3"
+
+    def test_only_one_alive_may_repeat(self) -> None:
+        state = make_state([Role.WOLF, Role.SEER], dead={2: DeathCause.WOLF})
+        state.last_speak_start = "p1"
+        assert rules.speak_order(state, GameRng(1)) == ["p1"]
+
+    def test_nobody_alive_returns_empty(self) -> None:
+        state = make_state([Role.WOLF], dead={1: DeathCause.VOTE})
+        assert rules.speak_order(state, GameRng(1)) == []
 
 
 class TestLastWords:

@@ -32,7 +32,7 @@ SECRET_WORDS = ("被刀", "被毒", "千面狼")
 # SPEC A5.2：每個角色卡一定要講到的能力
 ROLE_KEYWORDS = {
     "wolf": ("擊殺", "空刀", "狼人頻道", "匿名"),
-    "faceless": ("擊殺", "匿名", "假扮", "3 回合"),
+    "faceless": ("擊殺", "匿名", "假扮", "2 回合"),
     "villager": ("投票",),
     "seer": ("查驗",),
     "witch": ("解藥", "毒藥", "首夜", "同一晚"),
@@ -245,6 +245,28 @@ def test_every_window_every_tab_and_game_log(server_url: str) -> None:  # noqa: 
                 ended=True,
             )
         shot(pages[0], "end_summary")
+        # 看真相：每夜一個標籤，內容與伺服器一致（試玩回饋）
+        names_by_id = {p["id"]: p["name"] for p in final["players"]}
+        viewer = pages[0]
+        expected_tabs = min(final["round_no"], 7)
+        assert viewer.locator('[data-testid^="truth-tab-"]').count() == expected_tabs + 1
+        for night in final["nights"][:7]:
+            number = night["round_no"]
+            press(viewer, f"truth-tab-{number}")
+            wait(viewer, f"truth-night-{number}")
+            shown = viewer.locator(f'[data-testid="truth-night-{number}"]').inner_text()
+            if night["wolf_target"]:
+                assert f"襲擊 {names_by_id[night['wolf_target']]}" in shown, shown
+            else:
+                assert "空刀" in shown, shown
+            if night["seer_target"]:
+                assert f"查驗 {names_by_id[night['seer_target']]}" in shown, shown
+            if night["witch_poison"]:
+                assert f"毒 {names_by_id[night['witch_poison']]}" in shown, shown
+            for label in ("狼人", "預言家", "女巫", "天亮結果", "白天投票"):
+                assert label in shown, shown
+            shot(viewer, f"truth_night_{number}")
+        press(viewer, "truth-tab-summary")
         assert names
         assert final["round_no"] < 3 or verified_rounds  # 中途核對真的有跑到
         browser.close()

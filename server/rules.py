@@ -240,15 +240,15 @@ def check_win(state: GameState) -> Winner | None:
     return None
 
 
-def speak_order(state: GameState) -> list[str]:
-    """發言順序（SPEC A5.4）：昨夜死者中座位最小者之後的第一位存活者起；平安夜從座位 1 起。"""
+def speak_order(state: GameState, rng: GameRng) -> list[str]:
+    """發言順序（SPEC A5.4）：隨機起點，順著座位輪；不和上一天同一個人開始（只剩一人時例外）。"""
     alive = sorted(alive_players(state), key=lambda p: p.seat)
-    if not state.dawn_deaths:
-        return [p.id for p in alive]
-    start = min(state.player(pid).seat for pid in state.dawn_deaths)
-    after = [p for p in alive if p.seat > start]
-    before = [p for p in alive if p.seat <= start]
-    return [p.id for p in after + before]
+    if not alive:
+        return []
+    fresh = [p for p in alive if p.id != state.last_speak_start]
+    start = rng.choice(fresh or alive)
+    index = alive.index(start)
+    return [p.id for p in alive[index:] + alive[:index]]
 
 
 def gets_last_words(round_no: int, context: DayContext) -> bool:

@@ -58,7 +58,7 @@ class TestBuild:
         me = views.build(game.state, player("p4"))["me"]
         assert game.state.disguise is not None
         assert me["disguise_info"]["target"] == game.state.disguise.target_id
-        assert me["disguise_info"]["rounds_left"] == 3
+        assert me["disguise_info"]["rounds_left"] == 2
 
     def test_observer_has_no_me_or_secrets(self, game: Game) -> None:
         view = views.build(game.state, OBSERVER_VIEWER)
@@ -169,6 +169,31 @@ class TestBuild:
         assert view["truth"]["death_causes"]["p1"] == "wolf"
         assert view["truth"]["bets"][0]["score"] == 3
         assert next(p for p in view["players"] if p["id"] == "p4")["role"] == "faceless"
+
+    def test_truth_limits_to_seven_nights(self, game: Game) -> None:
+        for number in range(1, 10):
+            game.state.nights.append(__import__("server.state").state.NightRecord(round_no=number))
+            game.state.votes.append(__import__("server.state").state.VoteRound(round_no=number))
+        game.state.round_no = 9
+        game.state.step = Step.END
+        truth = views.truth_block(game.state)
+        assert truth["nights_hidden"] is True and truth["max_nights"] == 7
+        assert max(n["round_no"] for n in truth["nights"]) == 7
+        assert max(v["round_no"] for v in truth["votes"]) == 7
+
+    def test_truth_has_hunter_shots_and_death_rounds_only_at_end(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p6")
+        game.wait_for(Step.HUNTER)
+        game.act("p6", Action.HUNTER_SHOOT, target="p1")
+        # 遊戲中不能外洩（死因與回合結算才公開）
+        assert "hunter_shots" not in text(views.build(game.state, player("p2")))
+        assert "death_causes" not in text(views.build(game.state, player("p2")))
+        assert views.build(game.state, HOST_VIEWER)["host"]["hunter_shots"][0]["target"] == "p1"
+        game.act(ADMIN, Action.ADMIN_END)
+        truth = views.build(game.state, player("p2"))["truth"]
+        assert truth["hunter_shots"] == [{"round_no": 1, "hunter": "p6", "target": "p1"}]
+        assert truth["death_rounds"] == {"p6": 1, "p1": 1} and truth["nights_hidden"] is False
 
     def test_paused_block(self, game: Game) -> None:
         game.engine.system_pause(PauseReason.HOST_OFFLINE)

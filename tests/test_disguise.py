@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from server import disguise
+from server import balance, disguise
 from server.enums import DeathCause, DisguiseEnd, Role, Step
 from server.rng import GameRng
 from server.state import DisguiseState
@@ -40,7 +40,7 @@ def test_L12_only_previous_left_is_allowed() -> None:
 def test_on_deal_first_period() -> None:
     result = disguise.on_deal(make_state(EIGHT), GameRng(1))
     assert result.faceless_id == "p4" and result.target_id not in (None, "p4")
-    assert result.rounds_left == 3
+    assert result.rounds_left == balance.DISGUISE_PERIOD_ROUNDS
 
 
 def test_round_start_first_round_not_counted() -> None:
@@ -53,6 +53,20 @@ def test_round_start_no_disguise_or_dead_faceless() -> None:
     assert disguise.on_round_start(state, GameRng(1)) is None
 
 
+def test_period_is_two_rounds_swaps_at_round_3() -> None:
+    state = make_state(EIGHT, round_no=1)
+    state.disguise = disguise.on_deal(state, GameRng(1))
+    assert state.disguise.rounds_left == 2
+    state.round_no = 2
+    change = disguise.on_round_start(state, GameRng(1))
+    assert change is not None and change.rounds_left == 1 and change.ended_reason is None
+    state.disguise.rounds_left = 1
+    state.round_no = 3
+    change = disguise.on_round_start(state, GameRng(1))
+    assert change is not None and change.ended_reason is DisguiseEnd.EXPIRED
+    assert change.rounds_left == 2
+
+
 def test_round_start_counts_down_then_swaps_at_round_4() -> None:
     state = with_disguise(round_no=2)
     change = disguise.on_round_start(state, GameRng(1))
@@ -62,14 +76,15 @@ def test_round_start_counts_down_then_swaps_at_round_4() -> None:
     state = with_disguise(left=1, round_no=4)
     change = disguise.on_round_start(state, GameRng(1))
     assert change is not None and change.ended_reason is DisguiseEnd.EXPIRED
-    assert change.rounds_left == 3 and change.target_id != "p1"
+    assert change.rounds_left == balance.DISGUISE_PERIOD_ROUNDS and change.target_id != "p1"
 
 
 def test_on_death_of_target_redraws_and_resets() -> None:
     state = with_disguise(left=1, dead={1: DeathCause.WOLF})
     change = disguise.on_death(state, "p1", GameRng(1))
     assert change is not None and change.ended_reason is DisguiseEnd.TARGET_DEAD
-    assert change.rounds_left == 3 and change.target_id not in ("p1", "p4")
+    assert change.rounds_left == balance.DISGUISE_PERIOD_ROUNDS
+    assert change.target_id not in ("p1", "p4")
 
 
 def test_on_death_of_faceless_ends() -> None:

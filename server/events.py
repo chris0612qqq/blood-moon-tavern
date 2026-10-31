@@ -14,6 +14,7 @@ from server.state import (
     Bet,
     DisguisePeriod,
     GameState,
+    HunterShot,
     NightRecord,
     PauseState,
     Timers,
@@ -74,6 +75,8 @@ def _step_entered(state: GameState, data: dict[str, Any]) -> None:
     state.announced = False
     state.current_speaker = data["speaker"]
     state.speak_queue = list(data["speak_queue"])
+    if data.get("speak_start") is not None:
+        state.last_speak_start = data["speak_start"]
     if data["clear_last_words"]:
         state.pending_last_words = []
 
@@ -202,6 +205,9 @@ def _player_revived(state: GameState, data: dict[str, Any]) -> None:
 def _hunter_resolved(state: GameState, data: dict[str, Any]) -> None:
     state.hunter_pending = None
     state.hunter_shot_done = True
+    state.hunter_shots.append(
+        HunterShot(round_no=state.round_no, hunter=data["hunter"], target=data["target"])
+    )
 
 
 def _disguise_changed(state: GameState, data: dict[str, Any]) -> None:

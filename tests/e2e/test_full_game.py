@@ -410,7 +410,21 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
         assert _spoken(server_url, "wolf_close") == before + 1 and step() == "WOLF_END"
         folder = os.environ.get("BMT_SHOTS")
         if folder:
-            host.screenshot(path=f"{folder}/host_after_close.png")
+            host.screenshot(path=f"{folder}/host_voice_tab.png")
+        # 三個側邊標籤一點就切；常用按鈕切到哪都在（試玩回饋）
+        press(host, "host-tab-status")
+        wait(host, "host-view-status")
+        assert has(host, "btn-host-next") and has(host, "line-current")
+        assert not has(host, "line-wolf_open")
+        if folder:
+            host.screenshot(path=f"{folder}/host_status_tab.png")
+        press(host, "host-tab-reveal")
+        wait(host, "host-view-reveal")
+        assert has(host, "btn-host-next") and has(host, "host-deaths")
+        if folder:
+            host.screenshot(path=f"{folder}/host_reveal_tab.png")
+        press(host, "host-tab-voice")
+        wait(host, "line-wolf_open")
         label = host.locator('[data-testid="btn-host-next"]').inner_text()
         assert "預言家請睜眼" in label or "女巫請睜眼" in label
         browser.close()

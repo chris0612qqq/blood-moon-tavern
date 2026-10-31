@@ -417,9 +417,11 @@ class TestDayFlow:
         game.wait_for(Step.HUNTER)
         game.act("p6", Action.HUNTER_SHOOT, target="p1")
         game.wait_for(Step.LAST_WORDS)
-        assert game.state.current_speaker == "p1"  # 第 1 天，依座位
+        assert game.state.current_speaker == "p1"  # 第 1 天，遺言依座位
         game.finish_speech_to(Step.DAY_SPEAK)
-        assert game.state.current_speaker == "p2"  # 座位最小的死者 p1 的下一位
+        # 順序在開槍後才計算（D4 #21）：被帶走的 p1、p6 都不會在發言名單裡
+        speakers = [game.state.current_speaker, *game.state.speak_queue]
+        assert "p1" not in speakers and "p6" not in speakers and len(speakers) == 6
 
     def test_L16_hunter_no_targets_auto_holster(self, game: Game) -> None:
         for pid in ("p1", "p2", "p3", "p4", "p5", "p7", "p8"):
@@ -486,6 +488,21 @@ class TestDayFlow:
         first = game.state.current_speaker
         game.run(balance.SPEAK_SECONDS_BY_PLAYERS[0][1] + 8)
         assert game.state.current_speaker != first
+
+    def test_speak_start_changes_each_day(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        first = game.state.current_speaker
+        assert game.state.last_speak_start == first
+        game.finish_speech()
+        game.vote_all(None)
+        game.wait_for(Step.WOLF)
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        assert game.state.current_speaker != first
+        # 同一天換下一位時不更新，才不會影響隔天的判斷
+        assert game.state.last_speak_start == game.state.current_speaker
 
     def test_only_current_speaker_can_end(self, game: Game) -> None:
         game.to_wolf_step()
@@ -694,6 +711,20 @@ class TestPause:
         assert game.engine.system_pause(PauseReason.ADMIN) == []
         with pytest.raises(GameError):
             game.act(ADMIN, Action.ADMIN_PAUSE)
+
+    def test_kick_speaker_while_paused_then_resume(self, game: Game) -> None:
+        # 機器人抽樣抓到：重念「請 ○○ 發言」時那個人已被踢，tick 會一直當掉
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        speaker = game.state.current_speaker
+        assert speaker is not None
+        game.act(ADMIN, Action.ADMIN_PAUSE)
+        game.act(ADMIN, Action.ADMIN_KICK, player=speaker)
+        game.act(ADMIN, Action.ADMIN_RESUME)
+        game.run(balance.RESUME_COUNTDOWN_SECONDS + 1)
+        assert game.state.pause is None
+        assert game.state.current_speaker not in (None, speaker)
 
     def test_auto_resume_renarrates(self, game: Game) -> None:
         game.to_wolf_step()
