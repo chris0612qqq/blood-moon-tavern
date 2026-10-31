@@ -433,7 +433,9 @@ class Engine:
         queue, speaker = self._speech_queue(step, same_step)
         line_id, text = self._line_for(step, speaker)
         now = self.now
-        lead = 0.0 if step is Step.DEAL else self._lead_seconds(line_id, same_step)
+        # 揭曉不等間隔：投完票當下就宣布結果（使用者試玩回饋）
+        immediate = step in (Step.DEAL, Step.REVEAL)
+        lead = 0.0 if immediate else self._lead_seconds(line_id, same_step)
         spoken = timers.narration_seconds(text) if text and speak else 0.0
         opens_at = now + lead + spoken
         deadline: float | None = opens_at + self._action_seconds(step)
@@ -505,8 +507,10 @@ class Engine:
             result = rules.tally(self.state.vote_round().ballots)
             if result.exiled is None:
                 return "tie", narration.render("tie")
-            name = self.state.player(result.exiled).name
-            return "exile", narration.render("exile", name=name)
+            exiled = self.state.player(result.exiled)
+            # 放逐到狼就大聲宣布（使用者試玩回饋）
+            exile_line = "exile_wolf" if is_wolf(exiled.role) else "exile"
+            return exile_line, narration.render(exile_line, name=exiled.name)
         line_id = STEP_LINES.get(step)
         if line_id is None:
             return None, ""
@@ -523,10 +527,10 @@ class Engine:
             return
         if line_id == "tie":
             text = narration.render("tie")
-        elif line_id == "exile":
+        elif line_id in ("exile", "exile_wolf"):
             exiled = state.vote_round().exiled
             assert exiled is not None
-            text = narration.render("exile", name=state.player(exiled).name)
+            text = narration.render(line_id, name=state.player(exiled).name)
         else:
             _, text = self._line_for(LINE_STEPS[line_id], state.current_speaker)
         self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=True)
@@ -534,28 +538,41 @@ class Engine:
     # ---- 天亮與揭曉 ----
 
     def announce_dawn(self) -> None:
-        """公布夜晚死亡（SPEC A8.3）：死亡在天亮才生效，不公布死因。"""
+        """天亮宣布（SPEC v4.13）：誰被狼人咬死、誰被女巫毒死、誰被救，念出來也寫出來。"""
         state = self.state
-        deaths = rules.resolve_night(state.night())
+        night = state.night()
+        deaths = rules.resolve_night(night)
         self.emit(EventType.DAWN_ANNOUNCED, count=len(deaths))
         for player_id, cause in sorted(deaths, key=lambda d: state.player(d[0]).seat):
             if state.player(player_id).alive:
                 self.kill(player_id, cause)
-        entries = [
-            (state.player(pid).name, rules.public_role(state.player(pid).role))
-            for pid in state.dawn_deaths
-        ]
-        if entries:
+
+        def named(cause: DeathCause) -> list[tuple[str, Role]]:
+            return [
+                (state.player(pid).name, rules.public_role(state.player(pid).role))
+                for pid in state.dawn_deaths
+                if state.player(pid).death_cause is cause
+            ]
+
+        bitten = [name for name, _ in named(DeathCause.WOLF)]
+        poisoned = named(DeathCause.POISON)
+        saved = (
+            state.player(night.wolf_target).name
+            if night.witch_saved and night.wolf_target
+            else None
+        )
+        if bitten or poisoned or saved:
             line_id = "deaths"
-            text = narration.render("deaths", names_with_roles=narration.names_with_roles(entries))
-            show = len(entries) * balance.REVEAL_DEATH_EACH_SECONDS
+            report = narration.dawn_report(bitten, poisoned, saved)
+            text = narration.render("deaths", report=report)
+            show = len(state.dawn_deaths) * balance.REVEAL_DEATH_EACH_SECONDS
         else:
             line_id = "peaceful"
             text = narration.render("peaceful")
             show = balance.PEACEFUL_NIGHT_SECONDS
-        auto = state.mode is Mode.AUTO
-        self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=auto)
-        wait = max(show, timers.narration_seconds(text)) if auto else show
+        # 主持人不用再按：天亮請睜眼念完就直接宣布（使用者試玩回饋）
+        self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=True)
+        wait = max(show, timers.narration_seconds(text))
         self.emit(EventType.TIMERS_SET, timers=Timers(deadline=self.now + wait).model_dump())
 
     def _reveal_votes(self) -> None:

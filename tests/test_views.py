@@ -123,15 +123,40 @@ class TestBuild:
     def test_eligible_targets_only_for_actor(self, game: Game) -> None:
         game.to_wolf_step()
         me = views.build(game.state, player("p4"))["me"]
-        assert "p5" not in me["eligible_targets"] and "p1" in me["eligible_targets"]
+        assert {"p1", "p4", "p5"} <= set(me["eligible_targets"])  # 狼可以選同伴或自己
         assert "eligible_targets" not in views.build(game.state, player("p1"))["me"]
 
-    def test_death_cause_not_public(self, game: Game) -> None:
+    def test_death_cause_public_after_dawn(self, game: Game) -> None:
         game.to_wolf_step()
         game.night("p1", witch={"poison": "p7"})
-        for viewer in (player("p8"), player("p1"), player("p7"), OBSERVER_VIEWER):
-            payload = text(views.build(game.state, viewer))
-            assert '"poison"' not in payload and "death_cause" not in payload
+        view = views.build(game.state, player("p8"))
+        rows = {p["id"]: p for p in view["players"]}
+        assert rows["p1"]["death_cause"] == "bite" and rows["p7"]["death_cause"] == "poison"
+        assert view["history"][0]["causes"] == {"p1": "bite", "p7": "poison"}
+        assert "death_cause" not in rows["p2"]
+
+    def test_saved_hidden_until_dawn(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.WITCH)
+        game.act("p3", Action.WITCH_ACT, save=True)
+        assert views.build(game.state, player("p8"))["history"][0]["saved"] is None  # 夜晚不能露
+        game.wait_until_announced()
+        assert views.build(game.state, player("p8"))["history"][0]["saved"] == "p1"
+
+    def test_dawn_event_carries_saved(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.WITCH)
+        game.act("p3", Action.WITCH_ACT, save=True)
+        collected = []
+        for _ in range(400):
+            game.clock.advance(0.25)
+            collected += game.engine.tick()
+            if game.state.announced:
+                break
+        dawn = next(e for e in collected if e.type is EventType.DAWN_ANNOUNCED)
+        assert views.filter_event(dawn, player("p8"), game.state) == [{"t": "dawn", "saved": "p1"}]
 
     def test_host_sees_death_cause(self, god: Game) -> None:
         god.act(HOST, Action.HOST_SET_ALIVE, player="p1", alive=False)
@@ -166,7 +191,7 @@ class TestBuild:
         game.act(ADMIN, Action.ADMIN_END)
         view = views.build(game.state, OBSERVER_VIEWER)
         assert view["truth"]["roles"]["p4"] == "faceless"
-        assert view["truth"]["death_causes"]["p1"] == "wolf"
+        assert view["truth"]["death_causes"]["p1"] == "bite"
         assert view["truth"]["bets"][0]["score"] == 3
         assert next(p for p in view["players"] if p["id"] == "p4")["role"] == "faceless"
 
@@ -198,6 +223,35 @@ class TestBuild:
     def test_paused_block(self, game: Game) -> None:
         game.engine.system_pause(PauseReason.HOST_OFFLINE)
         assert views.build(game.state, player("p1"))["paused"]["reason"] == "host_offline"
+
+
+class TestBittenIdentityHidden:
+    def test_bitten_role_hidden_until_end_poisoned_role_public(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p5", witch={"poison": "p7"})
+        view = views.build(game.state, player("p1"))
+        rows = {p["id"]: p for p in view["players"]}
+        assert rows["p5"]["death_cause"] == "bite" and "public_role" not in rows["p5"]
+        assert rows["p7"]["public_role"] == "villager"
+        assert '"wolf"' not in text(view)
+        game.act(ADMIN, Action.ADMIN_END)
+        ended = {p["id"]: p for p in views.build(game.state, player("p1"))["players"]}
+        assert ended["p5"]["role"] == "wolf"
+
+    def test_death_event_hides_role_only_for_bite(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p5")
+        collected = []
+        game.wait_for(Step.WITCH)
+        game.act("p3", Action.WITCH_ACT)
+        for _ in range(400):
+            game.clock.advance(0.25)
+            collected += game.engine.tick()
+            if game.state.announced:
+                break
+        died = next(e for e in collected if e.type is EventType.PLAYER_DIED)
+        message = views.filter_event(died, player("p1"), game.state)[0]
+        assert message["players"][0] == {"id": "p5", "public_role": None, "cause": "bite"}
 
 
 class TestChatFilter:
@@ -345,7 +399,10 @@ class TestEvents:
         events = game.act(ADMIN, Action.ADMIN_KICK, player="p4")
         died = next(e for e in events if e.type is EventType.PLAYER_DIED)
         msg = views.filter_event(died, player("p1"), game.state)[0]
-        assert msg == {"t": "death", "players": [{"id": "p4", "public_role": "wolf"}]}
+        assert msg == {
+            "t": "death",
+            "players": [{"id": "p4", "public_role": "wolf", "cause": "kick"}],
+        }
 
     def test_disguise_change_routing(self, game: Game) -> None:
         assert game.state.disguise is not None
@@ -459,10 +516,6 @@ class TestLeakScanner:
     def test_catches_role_token(self, game: Game) -> None:
         with pytest.raises(LeakFound):
             scan_for_leaks({"x": "seer"}, game.engine, player("p1"))
-
-    def test_catches_poison_token(self, game: Game) -> None:
-        with pytest.raises(LeakFound):
-            scan_for_leaks({"cause": "poison"}, game.engine, player("p1"))
 
     def test_own_role_and_dead_public_role_allowed(self, game: Game) -> None:
         scan_for_leaks({"x": "villager"}, game.engine, player("p1"))

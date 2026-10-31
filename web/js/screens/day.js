@@ -2,7 +2,7 @@
 import { h } from '../dom.js';
 import { send } from '../net.js';
 import { changed, store } from '../store.js';
-import { pauseReason, roleName, t } from '../strings.js';
+import { causePlain, pauseReason, roleName, t } from '../strings.js';
 import { actionButton, avatar, button, countdown, nameOf, pickGrid, selection } from '../ui/common.js';
 
 export function s11(server) {
@@ -15,7 +15,8 @@ export function s11(server) {
         h('p', { class: 'center' }, t('s11.deaths')),
         deaths.map((id) => deadRow(server, id)),
       ]
-      : h('p', { class: 'big center', testid: 'peaceful' }, t('s11.peaceful')),
+      : (row?.saved ? null : h('p', { class: 'big center', testid: 'peaceful' }, t('s11.peaceful'))),
+    row?.saved ? h('p', { class: 'center', testid: 'dawn-saved' }, t('s11.saved', { name: nameOf(server, row.saved) })) : null,
     betEntry(server),
   ];
 }
@@ -25,7 +26,10 @@ function deadRow(server, id) {
   return h('div', { class: 'list-row', key: id },
     avatar(server, id),
     h('span', { class: 'grow' }, player?.name ?? ''),
-    h('span', { class: 'badge' }, roleName(player?.public_role ?? player?.role)));
+    player?.death_cause ? h('span', { class: 'hint' }, causePlain(player.death_cause)) : null,
+    player?.public_role ?? player?.role
+      ? h('span', { class: 'badge' }, roleName(player?.public_role ?? player?.role))
+      : null);
 }
 
 export function s12(server) {

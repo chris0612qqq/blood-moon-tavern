@@ -250,7 +250,11 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         wait(villagers[1], "view-players")
         log = villagers[1].locator("#app").inner_text()
         assert name_of[seer] in log and name_of[villagers[2]] in log
-        assert "被毒" not in log and "被刀" not in log
+        # 死因要寫清楚（使用者試玩回饋）
+        assert f"{name_of[seer]}（被狼人咬死）" in log
+        assert f"{name_of[villagers[2]]}（被女巫毒死）" in log
+        assert f"{name_of[hunter]}（被放逐）" in log and f"{name_of[wolf]}（被獵人射死）" in log
+        assert f"被救：{name_of[victim]}" in log
         shot(villagers[1], "players_log")
         press(villagers[1], "tab-game")
 
@@ -273,10 +277,11 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         target = villagers[1]
         wait_step(target, "END")
         wait(target, "screen-s18")
-        assert text_of(target, f"end-cause-{id_of[seer]}") == "被刀"
-        assert text_of(target, f"end-cause-{id_of[villagers[2]]}") == "被毒"
-        assert text_of(target, f"end-cause-{id_of[hunter]}") == "被放逐"
-        assert text_of(target, f"end-cause-{id_of[wolf]}") == "被獵人帶走"
+        # 結算用幽默版
+        assert "咬死" in text_of(target, f"end-cause-{id_of[seer]}")
+        assert "毒死" in text_of(target, f"end-cause-{id_of[villagers[2]]}")
+        assert "放逐" in text_of(target, f"end-cause-{id_of[hunter]}")
+        assert "帥" in text_of(target, f"end-cause-{id_of[wolf]}")
         assert text_of(target, f"end-role-{id_of[faceless]}") == "千面狼"
         bet = text_of(target, f"end-bet-{id_of[hunter]}")
         assert "3 分" in bet and name_of[faceless] in bet  # 猜中狼 +1、猜中千面狼 +2

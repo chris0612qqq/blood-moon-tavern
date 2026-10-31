@@ -101,6 +101,16 @@ def test_narration_is_plain_with_role_names() -> None:
     assert LINES["witch_close"] == "女巫請閉眼" and LINES["hunter"] == "獵人請發動技能"
 
 
+def test_nag_text_tiers() -> None:
+    from server.narration import nag_text
+
+    limits = (5, 9)
+    assert nag_text("wolf_open", 4, limits) is None
+    assert nag_text("wolf_open", 5, limits) == "乾，狼人，睜眼"
+    assert nag_text("wolf_open", 9, limits) != nag_text("wolf_open", 5, limits)
+    assert nag_text("no_such", 9, limits) is None
+
+
 def test_narration_rate_is_half_of_original() -> None:
     assert balance.NARRATION_RATE == 0.45
     assert timers.narration_seconds("天黑請閉眼") == pytest.approx(5 * 0.25 / 0.45 + 1)
@@ -144,11 +154,13 @@ def test_D4_25_seer_killed_first_night_has_last_words(game: Game) -> None:
     assert game.state.current_speaker == "p2"
 
 
-def test_D4_26_poisoned_hunter_death_cause_not_public(game: Game) -> None:
+def test_D4_26_poisoned_hunter_cannot_shoot_and_cause_is_public(game: Game) -> None:
+    # v4.13 起死因公開，大家直接看得到他是被毒死才沒開槍
     game.to_wolf_step()
     game.night(None, witch={"poison": "p6"})
-    text = str(views.build(game.state, player("p1")))
-    assert "poison" not in text and game.state.hunter_pending is None
+    view = views.build(game.state, player("p1"))
+    row = next(p for p in view["players"] if p["id"] == "p6")
+    assert row["death_cause"] == "poison" and game.state.hunter_pending is None
 
 
 def test_D4_27_faceless_may_draw_wolf_ally() -> None:

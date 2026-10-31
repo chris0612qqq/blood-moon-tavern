@@ -85,6 +85,20 @@ def alive_with_role(state: GameState, role: Role) -> PlayerState | None:
     return next((p for p in state.players if p.alive and p.role is role), None)
 
 
+def role_is_public(state: GameState, player: PlayerState) -> bool:
+    """出局者的身分遊戲中公不公開（SPEC v4.13）：被狼咬死的不公開，結算才揭曉。
+
+    獵人例外：輪到他開槍時旁白就念了「獵人」，規則也是開槍即公開身分（SPEC A5.2）。
+    """
+    if player.alive:
+        return False
+    if player.death_cause is not DeathCause.WOLF:
+        return True
+    return player.role is Role.HUNTER and (
+        state.step is Step.HUNTER or any(s.hunter == player.id for s in state.hunter_shots)
+    )
+
+
 def public_role(role: Role) -> Role:
     """對外顯示的角色：千面狼 → 狼人（SPEC A6）。"""
     return role_def(role).public_role
@@ -151,9 +165,9 @@ def deal(ids: Sequence[str], history: Mapping[str, RoleRecord], rng: GameRng) ->
 
 def eligible_targets(state: GameState, actor_id: str, action: Action) -> list[str]:
     """該行動可選的目標，依座位排序（CODING_RULES G5：前端直接用這份）。"""
-    others = [p for p in state.players if p.alive and p.id != actor_id]
-    if action is Action.WOLF_PICK:
-        others = [p for p in others if not is_wolf(p.role)]
+    # 狼人可以咬同伴，也可以選自己（使用者試玩回饋，SPEC v4.13）；其他行動不能選自己
+    include_self = action is Action.WOLF_PICK
+    others = [p for p in state.players if p.alive and (include_self or p.id != actor_id)]
     return [p.id for p in sorted(others, key=lambda p: p.seat)]
 
 

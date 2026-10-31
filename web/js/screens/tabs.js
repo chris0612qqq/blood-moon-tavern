@@ -4,7 +4,7 @@ import { api, send } from '../net.js';
 import { speak } from '../narrator.js';
 import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
-import { roleName, t } from '../strings.js';
+import { causeJoke, causePlain, roleName, t } from '../strings.js';
 import { actionButton, avatar, button, nameOf } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { roleCard } from './night.js';
@@ -120,7 +120,8 @@ export function playersTab(server) {
       avatar(server, p.id),
       h('span', { class: 'grow' }, p.name),
       offline.has(p.id) ? h('span', { class: 'badge' }, t('s5.offlineTag')) : null,
-      p.alive === false ? h('span', { class: 'badge' }, `☠ ${roleName(p.public_role ?? p.role)}`) : null,
+      p.alive === false ? h('span', { class: 'hint', testid: `player-cause-${p.id}` }, causePlain(p.death_cause)) : null,
+      p.alive === false ? h('span', { class: 'badge' }, `☠ ${roleName(p.public_role ?? p.role)}`.trim()) : null,
       server.is_admin && !server.host && p.alive !== false && server.phase === 'game' && server.step !== 'END'
         ? actionButton({
           id: `kick-${p.id}`,
@@ -145,8 +146,11 @@ export function playersTab(server) {
     (server.history ?? []).map((row) => h('div', { class: 'panel', key: `round${row.round_no}` },
       h('b', {}, t('players.round', { n: row.round_no })),
       h('div', {}, t('players.deaths', {
-        names: row.deaths.length ? row.deaths.map((id) => nameOf(server, id)).join('、') : t('players.nobody'),
+        names: row.deaths.length
+          ? row.deaths.map((id) => t('players.deathRow', { name: nameOf(server, id), cause: causePlain(row.causes?.[id]) })).join('、')
+          : t('players.nobody'),
       })),
+      row.saved ? h('div', { testid: `log-saved-${row.round_no}` }, t('players.saved', { name: nameOf(server, row.saved) })) : null,
       row.ballots ? Object.entries(row.ballots).map(([from, to]) => h('div', { class: 'hint', key: from },
         t('s15.ballot', { from: nameOf(server, from), to: to ? nameOf(server, to) : t('s14.abstain') }))) : null)),
   ];
@@ -203,16 +207,19 @@ function nightPanel(server, truth, night, name) {
   const n = night.round_no;
   const dead = (causes) => Object.entries(truth.death_causes ?? {})
     .filter(([id, cause]) => truth.death_rounds?.[id] === n && causes.includes(cause));
-  const dawn = dead(['wolf', 'poison']);
+  const dawn = dead(['bite', 'poison']);
   const dayOut = dead(['vote', 'hunter', 'kick', 'manual']);
-  const label = ([id, cause]) => t('s18.deathRow', { name: name(id), cause: t(`s18.cause.${cause}`) });
+  const label = ([id, cause]) => t('s18.deathRow', { name: name(id), cause: causePlain(cause) });
   const shots = (truth.hunter_shots ?? []).filter((shot) => shot.round_no === n);
   const votes = (truth.votes ?? []).find((v) => v.round_no === n);
   return h('div', { testid: `truth-night-${n}` },
     wolfRow(server, night, name),
     seerRow(server, truth, night, name),
     witchRow(server, truth, night, name),
-    actRow('death', t('s18.actDeath'), dawn.length ? dawn.map(label).join('、') : t('s18.peaceful')),
+    actRow('death', t('s18.actDeath'), [
+      dawn.length ? dawn.map(label).join('、') : (night.witch_saved ? '' : t('s18.peaceful')),
+      night.witch_saved ? h('div', {}, t('s18.saved', { name: name(night.wolf_target) })) : null,
+    ]),
     shots.map((shot) => actRow('hunter', t('s18.actHunter'), t(shot.target ? 's18.hunterShot' : 's18.hunterHolster', {
       who: name(shot.hunter),
       target: shot.target ? name(shot.target) : '',
@@ -236,7 +243,7 @@ function truthSummary(server, truth, name) {
       h('span', { class: 'grow' }, p.name),
       // 夜晚死因結算才公開（SPEC A2）
       truth.death_causes?.[p.id]
-        ? h('span', { class: 'hint', testid: `end-cause-${p.id}` }, t(`s18.cause.${truth.death_causes[p.id]}`))
+        ? h('span', { class: 'hint end-cause', testid: `end-cause-${p.id}` }, causeJoke(truth.death_causes[p.id], p.role))
         : null,
       h('span', { class: 'badge', testid: `end-role-${p.id}` }, roleName(p.role)))),
     h('h2', {}, t('s18.disguise')),

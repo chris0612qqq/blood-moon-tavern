@@ -105,3 +105,5 @@ html[data-phase="night"] .host-pinned { background: #151515; }
 .host-tab { min-height: 64px; padding: 4px; font-size: 14px; background: #3a3a3a; color: #ddd; border: 1px solid #777; border-radius: 4px; }
 .host-tab--on { background: #665a33; border-color: #fc6; color: #fff; }
 .host-content { flex: 1; min-width: 0; }
+.host-tab__line { display: block; }
+.end-cause { text-align: right; max-width: 55%; }
