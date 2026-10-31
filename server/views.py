@@ -132,6 +132,7 @@ def public_block(state: GameState) -> Message:
         "step_seq": state.step_seq,
         "round_no": state.round_no,
         "line_id": state.line_id,
+        "announced": state.announced,
         "narrator_id": state.narrator_id,
         "speaker": state.current_speaker,
         "speak_queue": list(state.speak_queue),

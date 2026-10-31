@@ -135,6 +135,11 @@ class TestBuild:
         assert view["history"][0]["causes"] == {"p1": "bite", "p7": "poison"}
         assert "death_cause" not in rows["p2"]
 
+    def test_announced_flag_is_public(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p1")
+        assert views.build(game.state, player("p8"))["announced"] is True
+
     def test_saved_hidden_until_dawn(self, game: Game) -> None:
         game.to_wolf_step()
         game.wolves_kill("p1")

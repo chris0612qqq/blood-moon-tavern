@@ -74,6 +74,7 @@ const HANDLERS = {
     delete s.opens_at;
     delete s.deadline;
     delete s.grace_until;
+    s.announced = false;
     s.timed_out = false;
     enterStep(previous, msg.step);
   },
@@ -112,7 +113,9 @@ const HANDLERS = {
     }
   },
   dawn(msg) {
-    if (store.server) historyRow(store.server).saved = msg.saved;
+    if (!store.server) return;
+    store.server.announced = true;
+    historyRow(store.server).saved = msg.saved;
   },
   'vote.reveal'(msg) {
     store.lastReveal = msg;
