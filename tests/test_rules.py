@@ -13,7 +13,7 @@ from server.errors import ErrorCode, GameError
 from server.rng import GameRng
 from server.roles import deal_sequence, is_wolf, night_step_pairs, role_def, roles_acting_in
 from server.rules import Consensus, RoleRecord
-from server.state import Bet, NightRecord
+from server.state import Bet, HunterShot, NightRecord
 from tests.helpers import EIGHT, make_state
 
 
@@ -112,16 +112,10 @@ class TestDeal:
 
 
 class TestTargets:
-    def test_wolf_cannot_pick_pack(self) -> None:
-        state = make_state(EIGHT)
-        assert rules.eligible_targets(state, "p5", Action.WOLF_PICK) == [
-            "p1",
-            "p2",
-            "p3",
-            "p6",
-            "p7",
-            "p8",
-        ]
+    def test_wolf_may_pick_pack_or_self(self) -> None:
+        state = make_state(EIGHT, dead={1: DeathCause.WOLF})
+        targets = rules.eligible_targets(state, "p5", Action.WOLF_PICK)
+        assert targets == ["p2", "p3", "p4", "p5", "p6", "p7", "p8"]
 
     def test_others_exclude_self_and_dead(self) -> None:
         state = make_state(EIGHT, dead={1: DeathCause.WOLF})
@@ -359,6 +353,26 @@ def test_can_wolf_mask_only_alive_wolves_by_day() -> None:
     assert not rules.can_wolf_mask(day, "p5")  # 已死
     assert not rules.can_wolf_mask(day, "p1")  # 好人
     assert not rules.can_wolf_mask(make_state(EIGHT, step=Step.WOLF), "p4")  # 夜晚
+
+
+def test_role_is_public_except_bitten() -> None:
+    state = make_state(EIGHT, dead={1: DeathCause.WOLF, 2: DeathCause.POISON, 3: DeathCause.VOTE})
+    assert not rules.role_is_public(state, state.player("p1"))
+    assert rules.role_is_public(state, state.player("p2"))
+    assert rules.role_is_public(state, state.player("p3"))
+    assert not rules.role_is_public(state, state.player("p4"))  # 還活著
+
+
+def test_bitten_hunter_public_only_when_shooting() -> None:
+    state = make_state(EIGHT, dead={6: DeathCause.WOLF}, step=Step.DAWN)
+    hunter = state.player("p6")
+    assert not rules.role_is_public(state, hunter)
+    state.step = Step.HUNTER
+    assert rules.role_is_public(state, hunter)
+    state.step = Step.DAY_SPEAK
+    assert not rules.role_is_public(state, hunter)
+    state.hunter_shots.append(HunterShot(round_no=1, hunter="p6", target=None))
+    assert rules.role_is_public(state, hunter)
 
 
 class TestBets:

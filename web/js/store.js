@@ -96,9 +96,12 @@ const HANDLERS = {
       const row = s.players.find((p) => p.id === dead.id);
       if (row) {
         row.alive = false;
-        row.public_role = dead.public_role;
+        if (dead.public_role) row.public_role = dead.public_role;
+        row.death_cause = dead.cause;
       }
-      historyRow(s).deaths.push(dead.id);
+      const history = historyRow(s);
+      history.deaths.push(dead.id);
+      history.causes = { ...history.causes, [dead.id]: dead.cause };
     }
   },
   revive(msg) {
@@ -107,6 +110,9 @@ const HANDLERS = {
       row.alive = true;
       delete row.public_role;
     }
+  },
+  dawn(msg) {
+    if (store.server) historyRow(store.server).saved = msg.saved;
   },
   'vote.reveal'(msg) {
     store.lastReveal = msg;
@@ -180,7 +186,7 @@ function historyRow(s) {
   s.history = s.history ?? [];
   let row = s.history.find((h) => h.round_no === s.round_no);
   if (!row) {
-    row = { round_no: s.round_no, deaths: [] };
+    row = { round_no: s.round_no, deaths: [], causes: {}, saved: null };
     s.history.push(row);
   }
   return row;

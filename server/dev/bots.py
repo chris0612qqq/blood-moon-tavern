@@ -23,13 +23,13 @@ from server.events import Event, EventType, replay
 from server.modes import Actor
 from server.rng import GameRng
 from server.roles import is_wolf
-from server.rules import public_role
+from server.rules import public_role, role_is_public
 from server.views import HOST_VIEWER, OBSERVER_VIEWER, Viewer, ViewerKind, build, filter_event
 
 TICK_SECONDS = 0.25
 MAX_TICKS = 2_000_000
 ROUND_LIMIT = 40
-_ROLE_TOKENS = re.compile(r'"(wolf|faceless|villager|seer|witch|hunter|poison)"')
+_ROLE_TOKENS = re.compile(r'"(wolf|faceless|villager|seer|witch|hunter)"')
 ADMIN = Actor(is_admin=True)
 HOST = Actor(is_admin=True, is_host=True)
 
@@ -54,7 +54,9 @@ def allowed_tokens(engine: Engine, viewer: Viewer) -> set[str] | None:
     state = engine.state
     if viewer.kind is ViewerKind.HOST or state.step is Step.END:
         return None
-    allowed = {public_role(p.role).value for p in state.players if not p.alive}
+    allowed = {public_role(p.role).value for p in state.players if role_is_public(state, p)}
+    if state.step is Step.HUNTER or state.hunter_shots:
+        allowed.add(Role.HUNTER.value)  # 旁白念了「獵人」、開槍即公開
     if viewer.player_id is not None:
         me = state.player(viewer.player_id)
         allowed.add(me.role.value)

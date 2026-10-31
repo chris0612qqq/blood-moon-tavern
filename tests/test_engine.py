@@ -256,11 +256,24 @@ class TestWolf:
         game.act("p4", Action.WOLF_PICK, clear=True)
         assert "p4" not in game.state.night().wolf_picks
 
-    def test_D4_9_cannot_pick_pack(self, game: Game) -> None:
+    def test_wolf_can_bite_ally_and_self(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p5")  # 全部狼人一致咬同伴
+        dead = game.state.player("p5")
+        assert not dead.alive and dead.death_cause is DeathCause.WOLF
+
+    def test_wolf_cannot_pick_dead_or_stranger(self, game: Game) -> None:
         game.to_wolf_step()
         with pytest.raises(GameError) as err:
-            game.act("p4", Action.WOLF_PICK, target="p5")
+            game.act("p4", Action.WOLF_PICK, target="nope")
         assert err.value.code is ErrorCode.INVALID_TARGET
+
+    def test_last_wolf_biting_self_means_village_wins(self, game: Game) -> None:
+        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        game.to_wolf_step()
+        game.night("p4")
+        game.run(30)
+        assert game.state.winner is Winner.VILLAGE
 
     def test_L13_nobody_picked_is_empty_knife(self, game: Game) -> None:
         game.to_wolf_step()
@@ -459,6 +472,49 @@ class TestDayFlow:
         game.night("p7")
         game.run(10)
         assert game.state.step is Step.DAY_SPEAK
+
+    def test_exile_wolf_announced_loud_and_immediately(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.vote_all("p5")
+        game.run(6)
+        assert game.state.step in (Step.REVEAL, Step.LAST_WORDS)
+        said = [e.data["text"] for e in game.engine.log if e.type is EventType.NARRATE]
+        assert any(t.startswith("成功將狼人放逐") for t in said)
+
+    def test_exile_good_guy_line(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.vote_all("p1")
+        game.run(6)
+        said = [e.data["text"] for e in game.engine.log if e.type is EventType.NARRATE]
+        assert any("被自己人放逐" in t for t in said)
+
+    def test_dawn_announces_bite_poison_and_save(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p1", witch={"poison": "p7"})
+        said = [e.data for e in game.engine.log if e.type is EventType.NARRATE]
+        report = next(d for d in said if d["line_id"] == "deaths")
+        assert "P1 被狼咬死了" in report["text"] and "女巫毒死了 P7" in report["text"]
+        assert report["speak"] is True
+
+    def test_wolf_bitten_by_wolf_identity_stays_hidden(self, game: Game) -> None:
+        # 狼咬狼是戰術：只念名字，不能透露他是狼（使用者試玩回饋）
+        game.to_wolf_step()
+        game.night("p5")
+        said = [e.data for e in game.engine.log if e.type is EventType.NARRATE]
+        report = next(d for d in said if d["line_id"] == "deaths")["text"]
+        assert "P5 被狼咬死了" in report and "身分" not in report and "狼人" not in report
+
+    def test_dawn_announces_save(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p1", witch={"save": True})
+        said = [e.data["text"] for e in game.engine.log if e.type is EventType.NARRATE]
+        assert any("被女巫救回來了" in t and "P1" in t for t in said)
 
     def test_exiled_gets_last_words(self, game: Game) -> None:
         game.to_wolf_step()
@@ -972,7 +1028,7 @@ class TestGodMode:
 
     def test_rollback_restores_death_and_potions(self, god: Game) -> None:
         self._to_dawn(god)
-        god.run(10)
+        god.run(25)  # 天亮念完、宣布念完才往下
         assert not god.state.player("p1").alive
         before = god.state.step_seq
         god.act(HOST, Action.HOST_ROLLBACK)
@@ -982,7 +1038,7 @@ class TestGodMode:
 
     def test_L23_rollback_across_death_restores(self, god: Game) -> None:
         self._to_dawn(god)
-        god.run(10)
+        god.run(25)  # 天亮念完、宣布念完才往下
         god.act(HOST, Action.HOST_NEXT)
         god.act(HOST, Action.HOST_ROLLBACK)
         assert god.state.step is Step.LAST_WORDS and not god.state.player("p1").alive
@@ -1014,7 +1070,7 @@ class TestGodMode:
 
     def test_skip_and_extend_speaker(self, god: Game) -> None:
         self._to_dawn(god, target=None)
-        god.run(10)
+        god.run(25)
         god.wait_for(Step.DAY_SPEAK)
         deadline = god.state.timers.deadline
         assert deadline is not None
@@ -1083,6 +1139,30 @@ class TestGodMode:
         god.act(ADMIN, Action.ADMIN_END)
         with pytest.raises(GameError):
             god.act(HOST, Action.HOST_LINE, line_id="night_start")
+
+    def test_nag_after_four_presses(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_LINE, line_id="night_start")
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_open")  # 第 1 次
+        said = []
+        for _ in range(9):  # 第 2 到第 10 次
+            events = god.act(HOST, Action.HOST_LINE, line_id="wolf_open")
+            said.append(events[0].data["text"])
+        original = "狼人請睜眼，請選擇今晚要殺的人"
+        assert said[:3] == [original] * 3  # 第 2–4 次還是原句
+        assert said[3] == "乾，狼人，睜眼"  # 超過四次
+        assert said[7] != said[3] and "狼人" in said[7]  # 超過八次更不耐煩
+        assert god.state.step is Step.WOLF
+
+    def test_nag_counts_reset_each_step_and_night(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_LINE, line_id="night_start")
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_open")
+        for _ in range(5):
+            god.act(HOST, Action.HOST_LINE, line_id="wolf_open")
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_close")
+        events = god.act(HOST, Action.HOST_LINE, line_id="wolf_close")
+        assert events[0].data["text"] == "狼人請閉眼"
 
     def test_pause_any_time(self, god: Game) -> None:
         god.act(HOST, Action.ADMIN_PAUSE)

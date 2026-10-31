@@ -69,6 +69,9 @@ NARRATION_SECONDS_PER_CHAR: Final = 0.25
 NARRATION_RATE: Final = 0.45
 NARRATION_PADDING_SECONDS: Final = 1.0
 
+# 主持人同一句按到第幾次開始不耐煩（超過 4 次、超過 8 次）
+NAG_PRESSES: Final[tuple[int, ...]] = (5, 9)
+
 # 看真相最多列幾夜（SPEC A8.7）
 TRUTH_MAX_NIGHTS: Final = 7
 

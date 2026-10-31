@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any
 
 from server import balance, disguise, rules
-from server.enums import Action, Channel, Mode, Role, Step
+from server.enums import Action, Channel, DeathCause, Mode, Role, Step
 from server.events import Event, EventType
 from server.roles import is_wolf, night_step_pairs, roles_acting_in
 from server.state import GameState, PlayerState
@@ -68,7 +68,21 @@ def _timers(state: GameState, viewer: Viewer) -> Message:
     }
 
 
-def _public_player(player: PlayerState, reveal_all: bool) -> Message:
+def public_cause(cause: DeathCause) -> str:
+    """對外的死因代號。「咬死」不用 wolf，免得和角色代號混淆（保密掃描也靠這點）。"""
+    return "bite" if cause is DeathCause.WOLF else cause.value
+
+
+def _saved_tonight(state: GameState, round_no: int) -> str | None:
+    """誰被女巫救了（SPEC v4.13）：天亮宣布之後才公開，夜晚不能先露出來。"""
+    announced = round_no < state.round_no or state.day_context is not None or _ended(state)
+    night = next((n for n in state.nights if n.round_no == round_no), None)
+    if not announced or night is None or not night.witch_saved:
+        return None
+    return night.wolf_target
+
+
+def _public_player(state: GameState, player: PlayerState, reveal_all: bool) -> Message:
     row: Message = {
         "id": player.id,
         "name": player.name,
@@ -77,8 +91,10 @@ def _public_player(player: PlayerState, reveal_all: bool) -> Message:
     }
     if reveal_all:
         row["role"] = player.role.value
-    elif not player.alive:
+    elif rules.role_is_public(state, player):
         row["public_role"] = rules.public_role(player.role).value
+    if not player.alive and player.death_cause is not None:
+        row["death_cause"] = public_cause(player.death_cause)
     return row
 
 
@@ -123,18 +139,23 @@ def public_block(state: GameState) -> Message:
         "night_plan": night_plan(state),
         "progress": _progress(state),
         "paused": ({"reason": pause.reason.value, "resume_at": pause.resume_at} if pause else None),
-        "players": [_public_player(p, _ended(state)) for p in state.players],
+        "players": [_public_player(state, p, _ended(state)) for p in state.players],
         "history": public_history(state),
         "winner": state.winner.value if state.winner else None,
     }
 
 
 def public_history(state: GameState) -> list[Message]:
-    """玩家 → 紀錄（SPEC C3）：每回合公開的死亡名單與投票明細，不含死因。"""
+    """玩家 → 紀錄（SPEC C3）：每回合的死者與死因、誰被救、投票明細。"""
     rows = []
     for votes in state.votes:
-        deaths = [p.id for p in state.players if p.death_round == votes.round_no]
-        row: Message = {"round_no": votes.round_no, "deaths": deaths}
+        died = [p for p in state.players if p.death_round == votes.round_no]
+        row: Message = {
+            "round_no": votes.round_no,
+            "deaths": [p.id for p in died],
+            "causes": {p.id: public_cause(p.death_cause) for p in died if p.death_cause},
+            "saved": _saved_tonight(state, votes.round_no),
+        }
         if votes.revealed:
             row["ballots"] = dict(votes.ballots)
             row["exiled"] = votes.exiled
@@ -310,7 +331,7 @@ def truth_block(state: GameState, chat: Sequence[Message] = ()) -> Message:
         "hunter_shots": [s.model_dump() for s in state.hunter_shots if s.round_no <= limit],
         "roles": {pid: role.value for pid, role in roles.items()},
         "death_causes": {
-            p.id: p.death_cause.value for p in state.players if p.death_cause is not None
+            p.id: public_cause(p.death_cause) for p in state.players if p.death_cause is not None
         },
         "disguise": (
             state.disguise.model_dump(mode="json") if state.disguise is not None else None
@@ -382,11 +403,21 @@ def public_messages(event: Event, state: GameState) -> list[Message]:
         case EventType.VOTES_REVEALED:
             return [{"t": "vote.reveal", "ballots": data["ballots"], "exiled": data["exiled"]}]
         case EventType.PLAYER_DIED:
-            # 不含死因（SPEC A5.3）
             return [
                 {
                     "t": "death",
-                    "players": [{"id": data["player"], "public_role": data["public_role"]}],
+                    "players": [
+                        {
+                            "id": data["player"],
+                            # 被咬死的人不公開身分，結算才揭曉（SPEC v4.13）
+                            "public_role": (
+                                None
+                                if data["cause"] == DeathCause.WOLF.value
+                                else data["public_role"]
+                            ),
+                            "cause": public_cause(DeathCause(data["cause"])),
+                        }
+                    ],
                 }
             ]
         case EventType.PLAYER_REVIVED:
@@ -398,6 +429,8 @@ def public_messages(event: Event, state: GameState) -> list[Message]:
         case EventType.RESUME_SCHEDULED:
             assert state.pause is not None
             return [{"t": "paused", "reason": state.pause.reason.value, "resume_at": data["at"]}]
+        case EventType.DAWN_ANNOUNCED:
+            return [{"t": "dawn", "saved": _saved_tonight(state, state.round_no)}]
         case EventType.NARRATOR_SET:
             return [narrator_message(data["player"])]
         case _:

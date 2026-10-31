@@ -482,11 +482,27 @@ def _host_replay(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
 
 def _replay_line(engine: Engine, line_id: str, speak: bool = True) -> None:
     """重念（SPEC B9）：只重念最近念過的那句，文字直接取自事件紀錄。"""
+    nag = _nag_for(engine, line_id)
     for event in reversed(engine.log):
         if event.type is EventType.NARRATE and event.data["line_id"] == line_id:
-            engine.emit(EventType.NARRATE, line_id=line_id, text=event.data["text"], speak=speak)
+            engine.emit(
+                EventType.NARRATE, line_id=line_id, text=nag or event.data["text"], speak=speak
+            )
             return
     raise _fail(ErrorCode.INVALID_TARGET)
+
+
+def _nag_for(engine: Engine, line_id: str) -> str | None:
+    """同一步驟內按同一句的次數夠多就換成不耐煩的台詞（使用者試玩回饋）。"""
+    if line_id != engine.state.line_id:
+        return None
+    pressed = 0
+    for event in reversed(engine.log):
+        if event.type is EventType.STEP_ENTERED:
+            break
+        if event.type is EventType.NARRATE and event.data["line_id"] == line_id:
+            pressed += 1
+    return narration.nag_text(line_id, pressed + 1, balance.NAG_PRESSES)
 
 
 def _host_skip_speaker(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:

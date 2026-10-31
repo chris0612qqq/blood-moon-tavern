@@ -4,7 +4,7 @@ import { send, serverNow } from '../net.js';
 import { LIMITS } from '../protocol.js';
 import { unlockAudio } from '../narrator.js';
 import { changed, store } from '../store.js';
-import { LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
+import { causePlain, LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
 import { actionButton, avatar, button, countdown, nameOf } from '../ui/common.js';
 import { lobbyAdmin, lobbyMenu } from './s5_lobby.js';
 
@@ -208,7 +208,7 @@ function revealTab(server) {
   return [
     h('h2', { testid: 'host-view-reveal' }, t('s20.round', { n: server.round_no })),
     h('p', { testid: 'host-deaths' }, row?.deaths?.length
-      ? t('s20.deathsNow', { names: row.deaths.map(name).join('、') })
+      ? t('s20.deathsNow', { names: row.deaths.map((id) => t('players.deathRow', { name: name(id), cause: causePlain(row.causes?.[id]) })).join('、') })
       : t('s20.deathsNone')),
     shots.filter((s) => s.round_no === server.round_no).map((s) => h('p', { key: `shot${s.hunter}` },
       t(s.target ? 's20.shot' : 's20.holster', { who: name(s.hunter), target: s.target ? name(s.target) : '' }))),
@@ -278,7 +278,8 @@ function hostGame(server) {
         key: id,
         testid: `host-tab-${id}`,
         onclick: () => { store.ui.hostTab = id; changed(); },
-      }, t(label)))),
+      // 兩個字一行（使用者試玩回饋）
+      }, t(label).match(/.{1,2}/gu).map((part) => h('span', { class: 'host-tab__line' }, part))))),
       h('div', { class: 'host-content' }, view(server))),
   ];
 }

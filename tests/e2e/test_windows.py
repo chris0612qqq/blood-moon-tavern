@@ -27,12 +27,12 @@ from tests.e2e.test_full_game import (
 )
 
 pytestmark = pytest.mark.e2e
-GAME_LIMIT_SECONDS = 400
-SECRET_WORDS = ("被刀", "被毒", "千面狼")
+GAME_LIMIT_SECONDS = 520
+SECRET_WORDS = ("千面狼",)
 # SPEC A5.2：每個角色卡一定要講到的能力
 ROLE_KEYWORDS = {
-    "wolf": ("擊殺", "空刀", "狼人頻道", "匿名"),
-    "faceless": ("擊殺", "匿名", "假扮", "2 回合"),
+    "wolf": ("咬死", "不咬", "同伴", "狼人頻道", "匿名"),
+    "faceless": ("咬", "匿名", "假扮", "2 回合"),
     "villager": ("投票",),
     "seer": ("查驗",),
     "witch": ("解藥", "毒藥", "首夜", "同一晚"),
@@ -90,7 +90,20 @@ def verify_log(
         )
         match = re.search(r"死亡：(.*)", text)
         shown = (match.group(1) if match else "").strip()
-        shown_dead = [] if shown == "無" else sorted(shown.split("、"))
+        # 每位死者後面括號寫死因：「小美（被狼人咬死）」
+        shown_dead = [] if shown == "無" else sorted(x.split("（")[0] for x in shown.split("、"))
+        plain = {
+            "wolf": "被狼人咬死",
+            "poison": "被女巫毒死",
+            "vote": "被放逐",
+            "hunter": "被獵人射死",
+            "kick": "被踢出局",
+        }
+        for player in state["players"]:
+            if player["death_round"] == number and player["death_cause"] in plain:
+                wanted = f"{player['name']}（{plain[player['death_cause']]}）"
+                if wanted not in shown:
+                    problems.append(f"{label}: 第 {number} 回合少了「{wanted}」：{shown}")
         if shown_dead != expected_dead:
             problems.append(f"{label}: 第 {number} 回合死者 {shown_dead}，應為 {expected_dead}")
         lines = {line.strip() for line in text.splitlines() if "→" in line}
@@ -217,7 +230,16 @@ def test_every_window_every_tab_and_game_log(server_url: str) -> None:  # noqa: 
                 act(page)
                 page.wait_for_timeout(5)
         else:
-            raise AssertionError("game did not end in time")
+            final_state = dev_state(server_url)
+            summary = {
+                "step": final_state["step"],
+                "round": final_state["round_no"],
+                "pause": final_state["pause"],
+                "alive": sum(p["alive"] for p in final_state["players"]),
+                "actors": final_state["actors"],
+                "done": final_state["done"],
+            }
+            raise AssertionError(f"game did not end in time: {summary}")
 
         # 結算：每個視窗都核對最終紀錄與全部角色
         final = dev_state(server_url)
@@ -256,9 +278,9 @@ def test_every_window_every_tab_and_game_log(server_url: str) -> None:  # noqa: 
             wait(viewer, f"truth-night-{number}")
             shown = viewer.locator(f'[data-testid="truth-night-{number}"]').inner_text()
             if night["wolf_target"]:
-                assert f"襲擊 {names_by_id[night['wolf_target']]}" in shown, shown
+                assert f"咬 {names_by_id[night['wolf_target']]}" in shown, shown
             else:
-                assert "空刀" in shown, shown
+                assert "不咬" in shown, shown
             if night["seer_target"]:
                 assert f"查驗 {names_by_id[night['seer_target']]}" in shown, shown
             if night["witch_poison"]:
