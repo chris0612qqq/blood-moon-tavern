@@ -1,0 +1,22 @@
+# 私密與本機資料（repo 是公開的，SPEC A12、B8）
+data/
+local_assets/
+server/admin.local.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# 系統與編輯器
+.claude/
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

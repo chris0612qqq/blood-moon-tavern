@@ -1,0 +1,40 @@
+[project]
+name = "blood-moon-tavern"
+requires-python = ">=3.11"
+dynamic = ["version"]
+
+[tool.setuptools]
+packages = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["_archive"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+# 中文全形標點出現在註解與 docstring 是正常的
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["server"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+  "slow: 完整版統計或大量整局，CI 預設略過，階段結束時跑（-m slow）",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["server"]
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
