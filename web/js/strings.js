@@ -323,7 +323,7 @@ const TEXT = Object.freeze({
   'toast.copied': '已複製',
   'toast.copyFailed': '不能自動複製，請長按上面的網址手動複製',
   'toast.error': '發生問題，重新整理即可回到遊戲',
-  'dialog.update': '有新版本，請重新整理',
+  'dialog.update': '畫面和伺服器版本不一致。請重新整理；還是一樣就要重開電腦上的伺服器。',
   'dialog.reload': '重新整理',
   'rotate': '請轉回直式',
   'pending': '等待其他人…',
@@ -469,6 +469,10 @@ const CAUSE_JOKES = Object.freeze({
 });
 
 export const causePlain = (cause) => CAUSE_PLAIN[cause] ?? '';
+/** 「小美（被狼人咬死）」；沒有死因時只有名字，不留空括號。 */
+export const deathLabel = (name, cause) => (causePlain(cause)
+  ? t('players.deathRow', { name, cause: causePlain(cause) })
+  : name);
 export const causeJoke = (cause, role) => CAUSE_JOKES[`${cause}.${role}`] ?? CAUSE_JOKES[cause] ?? causePlain(cause);
 export const lineLabel = (lineId) => LINE_LABELS[lineId] ?? lineId;
 export const LINE_ORDER = Object.freeze(Object.keys(LINE_LABELS));

@@ -36,7 +36,7 @@ FORGE_MASK_JS = """() => new Promise((resolve) => {
   const device = new URLSearchParams(location.search).get('dev_device');
   const token = JSON.parse(localStorage.getItem(`bmt.${device}.player_token`));
   const ws = new WebSocket(location.origin.replace('http', 'ws') + '/ws');
-  ws.onopen = () => ws.send(JSON.stringify({t: 'auth', token, client_version: 1}));
+  ws.onopen = () => ws.send(JSON.stringify({t: 'auth', token, client_version: 2}));
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'state') {

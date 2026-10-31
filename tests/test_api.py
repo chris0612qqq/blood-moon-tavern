@@ -393,7 +393,9 @@ def test_reset_pin(env: Env, client: TestClient) -> None:
 
 def test_ws_unauthorized_and_version(client: TestClient) -> None:
     with client.websocket_connect("/ws") as ws:
-        ws.send_text(json.dumps({"t": "auth", "token": "x", "client_version": 1}))
+        ws.send_text(
+            json.dumps({"t": "auth", "token": "x", "client_version": config.PROTOCOL_VERSION})
+        )
         assert json.loads(ws.receive_text())["code"] == "unauthorized"
     with client.websocket_connect("/ws") as ws:
         ws.send_text(json.dumps({"t": "auth", "token": "x", "client_version": 999}))
@@ -413,7 +415,9 @@ def test_ws_origin_rejected(client: TestClient) -> None:
     with client.websocket_connect(
         "/ws", headers={"origin": "https://chris0612qqq.github.io"}
     ) as ws:
-        ws.send_text(json.dumps({"t": "auth", "token": "x", "client_version": 1}))
+        ws.send_text(
+            json.dumps({"t": "auth", "token": "x", "client_version": config.PROTOCOL_VERSION})
+        )
         ws.receive_text()
 
 

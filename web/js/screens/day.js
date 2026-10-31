@@ -8,6 +8,10 @@ import { actionButton, avatar, button, countdown, nameOf, pickGrid, selection } 
 export function s11(server) {
   const row = (server.history ?? []).find((h_) => h_.round_no === server.round_no);
   const deaths = row?.deaths ?? [];
+  // 旁白還在念「天亮請睜眼」，結果還沒公布，不能先顯示平安夜
+  if (!server.announced) {
+    return h('h1', { class: 'center', testid: 'screen-s11' }, t('s11.title'));
+  }
   return [
     h('h1', { class: 'center', testid: 'screen-s11' }, t('s11.title')),
     deaths.length

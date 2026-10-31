@@ -18,6 +18,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, sync_playwright
 
 from tests.e2e.test_full_game import (
+    FAKE_SPEECH_JS,
     MOBILE,
     admin_open_room,
     fill,
@@ -83,6 +84,7 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
     with sync_playwright() as driver:
         browser = driver.chromium.launch()
         context = browser.new_context(viewport=MOBILE)
+        context.add_init_script(FAKE_SPEECH_JS)  # 記錄旁白主機實際念了什麼
 
         def new_page(device: str) -> Page:
             page = context.new_page()
@@ -240,8 +242,22 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         wait(witch, "witch-acted")
         shot(witch, "witch_poison_done")
 
-        # ---- 紀錄：第 2 回合死者兩位，死因不公開 ----
+        # ---- 天亮：公布前不能先說平安夜（試玩回饋：有人死還顯示平安夜） ----
+        wait_step(hunter, "DAWN")
+        for _ in range(200):
+            assert not has(villagers[1], "peaceful")
+            if store(villagers[1], "s.server.step") != "DAWN":
+                break
+            villagers[1].wait_for_timeout(50)
+
+        # ---- 紀錄：第 2 回合死者兩位，死因寫清楚 ----
         wait_step(hunter, "DAY_SPEAK")
+        # 旁白主機要真的念出來（試玩回饋：白天沒有語音說誰被咬死）
+        spoken = [s["text"] for s in admin.evaluate("window.__spoken") if s["volume"] == 1]
+        assert any(f"{name_of[seer]} 被狼咬死了" in text for text in spoken), spoken
+        assert any(f"女巫毒死了 {name_of[villagers[2]]}" in text for text in spoken), spoken
+        assert any(f"{name_of[victim]}，但被女巫救回來了" in text for text in spoken), spoken
+        assert any(f"{name_of[hunter]} 被放逐" in text for text in spoken), spoken
         state = httpx.get(f"{url}/dev/state").json()["state"]
         causes = {p["id"]: p["death_cause"] for p in state["players"]}
         assert causes[id_of[seer]] == "wolf" and causes[id_of[villagers[2]]] == "poison"

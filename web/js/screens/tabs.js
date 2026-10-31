@@ -4,7 +4,7 @@ import { api, send } from '../net.js';
 import { speak } from '../narrator.js';
 import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
-import { causeJoke, causePlain, roleName, t } from '../strings.js';
+import { causeJoke, causePlain, deathLabel, roleName, t } from '../strings.js';
 import { actionButton, avatar, button, nameOf } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { roleCard } from './night.js';
@@ -147,7 +147,7 @@ export function playersTab(server) {
       h('b', {}, t('players.round', { n: row.round_no })),
       h('div', {}, t('players.deaths', {
         names: row.deaths.length
-          ? row.deaths.map((id) => t('players.deathRow', { name: nameOf(server, id), cause: causePlain(row.causes?.[id]) })).join('、')
+          ? row.deaths.map((id) => deathLabel(nameOf(server, id), row.causes?.[id])).join('、')
           : t('players.nobody'),
       })),
       row.saved ? h('div', { testid: `log-saved-${row.round_no}` }, t('players.saved', { name: nameOf(server, row.saved) })) : null,
