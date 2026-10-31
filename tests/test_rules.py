@@ -339,6 +339,14 @@ class TestPublicHelpers:
         assert witch is not None and witch.id == "p3"
 
 
+def test_can_wolf_mask_only_alive_wolves_by_day() -> None:
+    day = make_state(EIGHT, step=Step.DAY_SPEAK, dead={5: DeathCause.VOTE})
+    assert rules.can_wolf_mask(day, "p4")  # 千面狼也可以
+    assert not rules.can_wolf_mask(day, "p5")  # 已死
+    assert not rules.can_wolf_mask(day, "p1")  # 好人
+    assert not rules.can_wolf_mask(make_state(EIGHT, step=Step.WOLF), "p4")  # 夜晚
+
+
 class TestBets:
     def test_can_bet_only_dead_village_not_kicked(self) -> None:
         state = make_state(EIGHT, dead={1: DeathCause.WOLF, 4: DeathCause.VOTE, 7: DeathCause.KICK})

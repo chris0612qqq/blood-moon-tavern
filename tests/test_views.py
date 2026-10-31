@@ -89,6 +89,14 @@ class TestBuild:
         game.act(ADMIN, Action.ADMIN_KICK, player="p5")
         assert "picks" not in views.build(game.state, player("p5"))["me"]["wolf_pack"]
 
+    def test_wolf_decision_stays_visible_after_step_ends(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.WOLF_END)
+        pack = views.build(game.state, player("p5"))["me"]["wolf_pack"]
+        assert pack["decided"] is True and pack["decided_target"] == "p1"
+        assert "wolf_pack" not in views.build(game.state, player("p2"))["me"]
+
     def test_seer_result_only_to_seer(self, game: Game) -> None:
         game.to_wolf_step()
         game.wolves_kill("p1")
@@ -222,6 +230,58 @@ class TestChatFilter:
         msg = {**events[0].data, "ts": events[0].ts}
         out = views.chat_message(msg, player("p1"), game.state)
         assert out is not None and out["mine"] and "disguised_by_me" not in out
+
+
+class TestWolfMaskFilter:
+    def _masked(self, game: Game) -> dict[str, object]:
+        game.to_wolf_step()
+        game.night(None)
+        events = game.act(
+            "p5",
+            Action.CHAT_SEND,
+            channel=Channel.PUBLIC,
+            kind="text",
+            content="嗷嗚",
+            **{"as": "wolf"},
+        )
+        return {**events[0].data, "ts": events[0].ts}
+
+    def test_nobody_can_tell_who(self, game: Game) -> None:
+        msg = self._masked(game)
+        # 連狼同伴也不知道（SPEC A9）
+        for viewer in (player("p1"), player("p4"), OBSERVER_VIEWER):
+            out = views.chat_message(msg, viewer, game.state)
+            assert out is not None
+            assert out["is_wolf_mask"] is True and out["display_player_id"] is None
+            assert "p5" not in text(out) and "real_author" not in out and "mine" not in out
+
+    def test_author_marked_host_and_end_see_real(self, game: Game) -> None:
+        msg = self._masked(game)
+        own = views.chat_message(msg, player("p5"), game.state)
+        assert own is not None and own["mine"] and own["masked_by_me"]
+        host_view = views.chat_message(msg, HOST_VIEWER, game.state)
+        assert host_view is not None and host_view["real_author"] == "p5"
+        game.act(ADMIN, Action.ADMIN_END)
+        ended = views.chat_message(msg, player("p1"), game.state)
+        assert ended is not None and ended["real_author"] == "p5"
+        truth = views.build(game.state, player("p1"), [msg])["truth"]
+        assert truth["disguised_messages"][0] == {
+            "id": msg["id"],
+            "real_author": "p5",
+            "display": None,
+        }
+
+    def test_me_block_flag(self, game: Game) -> None:
+        game.to_wolf_step()
+        assert views.build(game.state, player("p5"))["me"]["can_wolf_mask"] is False
+        game.night(None)
+        assert views.build(game.state, player("p5"))["me"]["can_wolf_mask"] is True
+        assert "can_wolf_mask" not in views.build(game.state, player("p1"))["me"]
+
+    def test_lobby_message_has_flag(self) -> None:
+        row = {"id": 1, "channel": "public", "display": "a", "is_host": False, "kind": "text",
+               "content": "x", "media_id": None, "ts": 0.0, "real_author": "a"}  # fmt: skip
+        assert views.lobby_chat_message(row, player("b"))["is_wolf_mask"] is False
 
 
 class TestEvents:

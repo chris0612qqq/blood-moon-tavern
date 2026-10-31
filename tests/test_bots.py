@@ -4,8 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from server.dev.bots import Simulation, assert_replay_matches, run_game
+from server.dev.bots import (
+    LeakFound,
+    Simulation,
+    assert_replay_matches,
+    run_game,
+    scan_disguise_leak,
+)
 from server.enums import Mode, Step
+from server.events import Event, EventType
+from server.views import Viewer, ViewerKind
 
 
 def _check(players: int, mode: Mode, seed: int, chaos: bool) -> None:
@@ -26,6 +34,17 @@ def test_sample_games_end_without_leak_and_replay(players: int, mode: Mode) -> N
 @pytest.mark.parametrize("seed", [1, 2, 3])
 def test_chaos_sample(seed: int, mode: Mode) -> None:
     _check(8, mode, seed=seed, chaos=True)
+
+
+def test_T4_scanner_catches_masked_real_author() -> None:
+    event = Event(
+        type=EventType.CHAT_SENT,
+        ts=0.0,
+        data={"disguise_period": None, "is_wolf_mask": True, "real_author": "p5"},
+    )
+    with pytest.raises(LeakFound):
+        scan_disguise_leak(event, {"who": "p5"}, Viewer(ViewerKind.PLAYER, "p1"), False)
+    scan_disguise_leak(event, {"who": "p5"}, Viewer(ViewerKind.PLAYER, "p5"), False)
 
 
 def test_same_seed_same_game() -> None:

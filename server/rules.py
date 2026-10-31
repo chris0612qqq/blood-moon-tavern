@@ -274,6 +274,12 @@ def speak_seconds(n: int) -> int:
     return balance.SPEAK_SECONDS_BY_PLAYERS[-1][1]
 
 
+def can_wolf_mask(state: GameState, player_id: str) -> bool:
+    """能否以匿名「狼人」身分發言（SPEC A9、B8）：存活的狼人或千面狼、白天（含白天暫停）。"""
+    player = state.player(player_id)
+    return player.alive and is_wolf(player.role) and is_day_step(state.step)
+
+
 def can_bet(state: GameState, player_id: str) -> bool:
     """押注資格（SPEC A13）：已出局的好人陣營，被踢者不行。"""
     player = state.player(player_id)

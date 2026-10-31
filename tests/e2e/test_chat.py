@@ -6,11 +6,13 @@ store 只用來找出誰拿到什麼角色，發言與檢查都走畫面，也�
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from typing import Any
 
 import pytest
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, sync_playwright
 
 from tests.e2e.test_full_game import (
@@ -27,6 +29,27 @@ from tests.e2e.test_full_game import (
 )
 
 pytestmark = pytest.mark.e2e
+
+
+# 好人繞過畫面，直接送匿名狼人訊息
+FORGE_MASK_JS = """() => new Promise((resolve) => {
+  const device = new URLSearchParams(location.search).get('dev_device');
+  const token = JSON.parse(localStorage.getItem(`bmt.${device}.player_token`));
+  const ws = new WebSocket(location.origin.replace('http', 'ws') + '/ws');
+  ws.onopen = () => ws.send(JSON.stringify({t: 'auth', token, client_version: 1}));
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.t === 'state') {
+      ws.send(JSON.stringify({
+        t: 'chat.send', msg_id: 'forge', channel: 'public', kind: 'text', content: 'x', as: 'wolf',
+      }));
+    }
+    if (m.msg_id === 'forge') {
+      ws.close();
+      resolve(m.code ?? m.t);
+    }
+  };
+})"""
 
 
 def shot(page: Page, name: str) -> None:
@@ -92,7 +115,9 @@ def play_night_without_deaths(pages: list[Page]) -> None:
                 if not tap(page, "btn-seer-ok"):
                     cell = page.locator('[data-testid^="pick-cell-"]')
                     if cell.count():
-                        cell.first.click(timeout=800)
+                        # 點的瞬間可能剛好換步驟，格子消失，下一輪再判斷
+                        with contextlib.suppress(PlaywrightError):
+                            cell.first.click(timeout=800)
                         tap(page, "btn-seer-check")
             elif screen == "S10":
                 for testid in (
@@ -256,12 +281,54 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
         send_chat(faceless, "第二次切回")
         assert wait_message(bystander, "第二次切回")["display_player_id"] == id_of[faceless]
 
-        # 同伴不是千面狼，沒有切換器
+        # ---- 一般狼人：可以切「狼人」匿名嚇人，再切回本人裝好人（SPEC v4.9） ----
         press(ally, "tab-chat")
-        wait(ally, "chat-list-public")
-        assert not has(ally, "chat-as-fake")
+        wait(ally, "chat-as-wolf")
+        assert not has(ally, "chat-as-fake")  # 假扮是千面狼獨有
         send_chat(ally, "同伴發言")
         assert wait_message(bystander, "同伴發言")["display_player_id"] == id_of[ally]
+
+        press(ally, "chat-as-wolf")
+        ally.wait_for_function(
+            "document.querySelector('[data-testid^=\"chat-send-\"]')?.innerText.includes('狼人')"
+        )
+        send_chat(ally, "嗷嗚今晚吃誰")
+        scary = wait_message(bystander, "嗷嗚今晚吃誰")
+        assert scary["is_wolf_mask"] is True and scary["display_player_id"] is None
+        assert id_of[ally] not in json.dumps(scary) and "real_author" not in scary
+        assert bubble_who(bystander, scary).strip() == "狼人"
+        assert not bubble_is_mine(bystander, scary)
+        shot(bystander, "5_bystander_sees_masked_wolf")
+
+        # 千面狼是同伴也看不出是誰
+        peer = wait_message(faceless, "嗷嗚今晚吃誰")
+        assert id_of[ally] not in json.dumps(peer) and bubble_who(faceless, peer).strip() == "狼人"
+
+        own_scary = wait_message(ally, "嗷嗚今晚吃誰")
+        assert own_scary["masked_by_me"] is True
+        assert "你以狼人" in bubble_who(ally, own_scary)
+        shot(ally, "6_wolf_after_mask")
+
+        press(ally, "chat-as-self")
+        ally.wait_for_function(
+            "!document.querySelector('[data-testid^=\"chat-send-\"]')?.innerText.includes('狼人')"
+        )
+        send_chat(ally, "我是好人喔")
+        innocent = wait_message(bystander, "我是好人喔")
+        assert innocent["display_player_id"] == id_of[ally] and innocent["is_wolf_mask"] is False
+
+        # 千面狼也能用狼人身分
+        press(faceless, "chat-as-wolf")
+        send_chat(faceless, "千面也嗷")
+        assert wait_message(bystander, "千面也嗷")["is_wolf_mask"] is True
+        press(faceless, "chat-as-self")
+
+        # 好人沒有切換器，也不能硬送
+        assert not has(bystander, "chat-as-wolf") and not has(bystander, "chat-as-self")
+        forged = bystander.evaluate(FORGE_MASK_JS)
+        assert forged == "forbidden"
+
+        # 夜晚匿名身分關閉：切換器消失，也不會誤用舊身分（另有單元測試涵蓋夜晚拒絕）
 
         # ---- 白天狼人頻道仍是本名，好人仍收不到 ----
         press(faceless, "tab-wolf")
@@ -281,9 +348,11 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
         press(admin, "dialog-confirm")
         wait_step(bystander, "END")
         press(bystander, "tab-game")
-        wait(bystander, "screen-S18")
+        wait(bystander, "screen-s18")  # 結算標題，確定已切回遊戲分頁
         text = bystander.locator("#app").inner_text()
         assert f"{faceless_name} 假扮 {target_name}" in text  # 看真相：假扮訊息的真身
+        ally_name = name_of[id_of[ally]]
+        assert f"{ally_name} 假扮 狼人" in text  # 看真相：匿名狼人的真身
         press(bystander, "tab-chat")
         ended = wait_message(bystander, "這句是假扮")
         assert ended["real_author"] == id_of[faceless]

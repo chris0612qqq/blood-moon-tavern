@@ -76,7 +76,9 @@ def scan_for_leaks(payload: Any, engine: Engine, viewer: Viewer) -> None:
 
 def scan_disguise_leak(event: Event, payload: Any, viewer: Viewer, ended: bool) -> None:
     """假扮訊息送給他人時，資料裡不能有真實發言者（SPEC A7）。"""
-    if event.type is not EventType.CHAT_SENT or event.data["disguise_period"] is None:
+    if event.type is not EventType.CHAT_SENT:
+        return
+    if event.data["disguise_period"] is None and not event.data["is_wolf_mask"]:
         return
     if viewer.kind is ViewerKind.HOST or ended or viewer.player_id == event.data["real_author"]:
         return
@@ -201,6 +203,13 @@ class BotBrain:
                 actor,
                 Action.CHAT_SEND,
                 {"channel": Channel.PUBLIC, "as": "disguise", "kind": "text", "content": "假扮"},
+            )
+            return
+        if me.get("can_wolf_mask") and self._roll(0.3):
+            self.send(
+                actor,
+                Action.CHAT_SEND,
+                {"channel": Channel.PUBLIC, "as": "wolf", "kind": "text", "content": "嗷嗚"},
             )
             return
         channel = Channel.WOLF if "wolf_pack" in me and self._roll(0.5) else Channel.PUBLIC

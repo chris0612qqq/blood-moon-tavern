@@ -74,7 +74,7 @@ class PrepReport(ClientFrame):
 
 class ChatSend(ClientFrame):
     channel: Channel
-    as_: str = Field(default="self", alias="as", pattern="^(self|disguise)$")
+    as_: str = Field(default="self", alias="as", pattern="^(self|disguise|wolf)$")
     kind: ChatKind = ChatKind.TEXT
     content: str | None = Field(default=None, max_length=config.CHAT_MAX_CHARS * 2)
     media_id: Id | None = None

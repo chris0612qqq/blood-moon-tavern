@@ -545,7 +545,7 @@ class RoomService:
                 row = {**event.data, "ts": event.ts}
                 self.chat.append(row)
                 self.chat_seq = max(self.chat_seq, row["id"])
-                if row["disguise_period"] is not None:
+                if row["disguise_period"] is not None or row["is_wolf_mask"]:
                     self.disguised_chat.append(row)
             elif event.type is EventType.STEP_ENTERED:
                 self._room_log(f"step {event.data['step']}")
@@ -846,6 +846,7 @@ class RoomService:
             "display": author,
             "is_host": author is None,
             "disguise_period": None,
+            "is_wolf_mask": False,
             "kind": ChatKind(frame.kind).value,
             "content": frame.content,
             "media_id": frame.media_id,
@@ -1156,7 +1157,8 @@ class RoomService:
         top = self.db.rows("SELECT MAX(id) AS m FROM chat_message WHERE room_id=?", (room.id,))
         self.chat_seq = top[0]["m"] or 0
         disguised = self.db.rows(
-            "SELECT * FROM chat_message WHERE room_id=? AND disguise_period_id IS NOT NULL "
+            "SELECT * FROM chat_message WHERE room_id=? "
+            "AND (disguise_period_id IS NOT NULL OR is_wolf_mask=1) "
             "ORDER BY id",
             (room.id,),
         )
@@ -1246,8 +1248,9 @@ def _session_statement(
 def _chat_statement(room_id: str, row: ChatRow) -> tuple[str, tuple[Any, ...]]:
     return (
         "INSERT INTO chat_message(id, room_id, channel, real_author_id, is_last_words, "
-        "display_player_id, is_host, disguise_period_id, kind, content, media_id, ts) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        "display_player_id, is_host, disguise_period_id, is_wolf_mask, kind, content, media_id, "
+        "ts) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             row["id"],
             room_id,
@@ -1257,6 +1260,7 @@ def _chat_statement(room_id: str, row: ChatRow) -> tuple[str, tuple[Any, ...]]:
             row["display"],
             int(row["is_host"]),
             row["disguise_period"],
+            int(row["is_wolf_mask"]),
             row["kind"],
             row["content"],
             row["media_id"],
@@ -1273,6 +1277,7 @@ def _chat_row(row: Any) -> ChatRow:
         "display": row["display_player_id"],
         "is_host": bool(row["is_host"]),
         "disguise_period": row["disguise_period_id"],
+        "is_wolf_mask": bool(row["is_wolf_mask"]),
         "kind": row["kind"],
         "content": row["content"],
         "media_id": row["media_id"],

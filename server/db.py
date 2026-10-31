@@ -46,7 +46,8 @@ CREATE INDEX IF NOT EXISTS idx_game_room ON game(room_id);
 CREATE TABLE IF NOT EXISTS chat_message(
   id INTEGER PRIMARY KEY, room_id TEXT NOT NULL, channel TEXT NOT NULL, real_author_id TEXT,
   is_last_words INTEGER NOT NULL, display_player_id TEXT, is_host INTEGER NOT NULL,
-  disguise_period_id INTEGER, kind TEXT NOT NULL, content TEXT, media_id TEXT, ts REAL NOT NULL);
+  disguise_period_id INTEGER, is_wolf_mask INTEGER NOT NULL DEFAULT 0,
+  kind TEXT NOT NULL, content TEXT, media_id TEXT, ts REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_chat_room_ts ON chat_message(room_id, ts);
 CREATE TABLE IF NOT EXISTS media(
   id TEXT PRIMARY KEY, room_id TEXT NOT NULL, kind TEXT NOT NULL, path TEXT NOT NULL,
@@ -75,6 +76,12 @@ class Database:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.executescript(_SCHEMA)
+        # 舊資料庫檔沒有這個欄位（SPEC v4.9 新增）
+        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(chat_message)")}
+        if "is_wolf_mask" not in columns:
+            self.conn.execute(
+                "ALTER TABLE chat_message ADD COLUMN is_wolf_mask INTEGER NOT NULL DEFAULT 0"
+            )
 
     def close(self) -> None:
         self.conn.close()

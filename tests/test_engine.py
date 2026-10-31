@@ -784,6 +784,56 @@ class TestChat:
             self._chat(game, HOST, channel=Channel.WOLF)
 
 
+class TestWolfMask:
+    def _mask(self, game: Game, who: str | Actor, **kwargs: Any) -> list[Event]:
+        payload = {"channel": Channel.PUBLIC, "kind": "text", "content": "嗷", "as": "wolf"}
+        return game.act(who, Action.CHAT_SEND, **{**payload, **kwargs})
+
+    def test_wolf_and_faceless_can_mask_by_day(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        for wolf in ("p5", "p4"):
+            events = self._mask(game, wolf)
+            assert events[0].data["display"] is None
+            assert events[0].data["is_wolf_mask"] is True
+            assert events[0].data["real_author"] == wolf
+
+    def test_day_pause_allowed_night_pause_not(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.engine.system_pause(PauseReason.PRESENCE)
+        with pytest.raises(GameError):
+            self._mask(game, "p5")
+        game.engine.schedule_resume()
+        game.run(balance.RESUME_COUNTDOWN_SECONDS + 1)
+        game.night(None)
+        game.engine.system_pause(PauseReason.PRESENCE)
+        self._mask(game, "p5")
+
+    def test_good_dead_spectator_and_wolf_channel_rejected(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        with pytest.raises(GameError):
+            self._mask(game, "p1")  # 好人
+        with pytest.raises(GameError):
+            self._mask(game, "late")  # 旁觀者
+        with pytest.raises(GameError):
+            self._mask(game, "p5", channel=Channel.WOLF)  # 狼人頻道一律本名
+        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        with pytest.raises(GameError):
+            self._mask(game, "p5")  # 已死
+
+    def test_end_rejects_mask(self, game: Game) -> None:
+        game.act(ADMIN, Action.ADMIN_END)
+        with pytest.raises(GameError):
+            self._mask(game, "p5")
+
+    def test_host_cannot_mask(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        god = Game(monkeypatch, mode=Mode.GOD)
+        god.state.step = Step.DAY_SPEAK
+        with pytest.raises(GameError):
+            self._mask(god, HOST)
+
+
 class TestBets:
     def test_dead_village_can_bet_and_change(self, game: Game) -> None:
         game.to_wolf_step()
