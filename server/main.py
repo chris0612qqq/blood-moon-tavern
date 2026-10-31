@@ -147,6 +147,9 @@ def _install_no_store(app: FastAPI) -> None:
         # CODING_RULES N19：API 不得被快取；簽章媒體除外，本來就有短效網址
         if path.startswith("/api") and not path.startswith(("/api/media/", "/api/asset/")):
             response.headers["Cache-Control"] = "no-store"
+        elif not path.startswith("/api"):
+            # 畫面檔還沒有版本號（CODING_RULES N19 在 P7 補），先要求每次確認，改版才不會讀到舊檔
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
 

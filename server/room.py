@@ -1022,7 +1022,7 @@ class RoomService:
         online = {
             conn.session.player_id
             for conn in self.conns
-            if not conn.closed and now - conn.last_seen < config.OFFLINE_AFTER_SECONDS
+            if not conn.closed and now - conn.last_seen < _offline_after()
         }
         return frozenset(p for p in self.players if p not in online and p not in self.bot_ids)
 
@@ -1053,7 +1053,7 @@ class RoomService:
         host_online = any(
             conn.viewer.kind is views.ViewerKind.HOST
             and not conn.closed
-            and now - conn.last_seen < config.OFFLINE_AFTER_SECONDS
+            and now - conn.last_seen < _offline_after()
             for conn in self.conns
         )
         if host_online:
@@ -1180,6 +1180,11 @@ class RoomService:
         if new_events:
             self.db.write(Database.event_statements(room.game_id, new_events))
         self.engine = engine
+
+
+def _offline_after() -> float:
+    """離線門檻。時間加速時手機的 ping 仍是真實秒數，門檻要跟著放大（CODING_RULES D2）。"""
+    return config.OFFLINE_AFTER_SECONDS * config.TIME_SCALE
 
 
 def _room_statement(room: Room) -> tuple[str, tuple[Any, ...]]:
