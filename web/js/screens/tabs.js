@@ -149,6 +149,10 @@ export function s18(server) {
     [...server.players].sort((a, b) => a.seat - b.seat).map((p) => h('div', { class: 'list-row', key: p.id },
       avatar(server, p.id),
       h('span', { class: 'grow' }, p.name),
+      // 夜晚死因結算才公開（SPEC A2）
+      truth.death_causes?.[p.id]
+        ? h('span', { class: 'hint', testid: `end-cause-${p.id}` }, t(`s18.cause.${truth.death_causes[p.id]}`))
+        : null,
       h('span', { class: 'badge', testid: `end-role-${p.id}` }, roleName(p.role)))),
     h('h2', {}, t('s18.truth')),
     h('h2', {}, t('s18.disguise')),
@@ -172,7 +176,13 @@ export function s18(server) {
       Object.entries(v.ballots).map(([from, to]) => h('div', { class: 'hint', key: from },
         t('s15.ballot', { from: name(from), to: to ? name(to) : t('s14.abstain') }))))),
     (truth.bets ?? []).length ? h('h2', {}, t('s18.bets')) : null,
-    (truth.bets ?? []).map((b) => h('p', { key: `b${b.player_id}` }, t('s18.betRow', { rank: b.rank, name: name(b.player_id), score: b.score }))),
+    // SPEC A13：名次、分數、每人押了誰
+    (truth.bets ?? []).map((b) => h('div', { class: 'panel', key: `b${b.player_id}`, testid: `end-bet-${b.player_id}` },
+      h('div', {}, t('s18.betRow', { rank: b.rank, name: name(b.player_id), score: b.score })),
+      h('div', { class: 'hint' }, t('s18.betPicks', {
+        wolves: b.wolves.length ? b.wolves.map(name).join('、') : t('players.nobody'),
+        faceless: name(b.faceless),
+      })))),
     server.is_admin ? actionButton({
       id: 'btn-end-close',
       label: t('s18.closeNow'),

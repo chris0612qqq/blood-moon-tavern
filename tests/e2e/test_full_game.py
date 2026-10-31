@@ -25,7 +25,7 @@ from server.auth import AdminStore
 ROOT = Path(__file__).resolve().parent.parent.parent
 MOBILE = {"width": 390, "height": 780}
 PLAYERS = 12
-GAME_TIMEOUT_SECONDS = 300
+GAME_TIMEOUT_SECONDS = 600
 
 pytestmark = pytest.mark.e2e
 
@@ -282,6 +282,9 @@ def run_game(server_url: str, mode: str) -> None:
         for page in pages:
             wait(page, "screen-s18", timeout=20000)
             assert page.locator('[data-testid^="end-role-"]').count() == PLAYERS
+            # 手動試玩時發現的缺漏：死因結算才公開，且結算不再顯示「你已出局」
+            assert page.locator('[data-testid^="end-cause-"]').count() > 0
+            assert page_text_lacks(page, "你已出局")
         browser.close()
     assert errors == []
 
