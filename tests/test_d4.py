@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from server import config, disguise, rules, timers, views
+from server import balance, config, disguise, rules, timers, views
 from server.dev.bots import run_game
 from server.enums import Action, Channel, DeathCause, Mode, Role, Step, Winner
 from server.errors import ErrorCode, GameError
@@ -80,6 +80,30 @@ def test_D4_5_offline_player_still_dealt_and_auto_acked(env: Env, client: TestCl
     engine.tick()
     assert all(p.acked for p in engine.state.players)
     admin.close()
+
+
+def test_wolves_kill_at_most_one_per_night(game: Game) -> None:
+    # 狼人選不同人也只死一個；第 1 天第二具屍體只可能來自毒藥或獵人（試玩回饋）
+    game.to_wolf_step()
+    game.act("p4", Action.WOLF_PICK, target="p1")
+    game.act("p5", Action.WOLF_PICK, target="p7")
+    game.run(46)
+    game.wait_step_after_wolf()
+    dead = [p.id for p in game.state.players if not p.alive]
+    assert len(dead) == 1 and dead[0] in ("p1", "p7")
+
+
+def test_narration_is_plain_with_role_names() -> None:
+    from server.narration import LINES
+
+    assert LINES["night_start"] == "天黑請閉眼" and LINES["dawn"] == "天亮請睜眼"
+    assert LINES["wolf_close"] == "狼人請閉眼" and LINES["seer_close"] == "預言家請閉眼"
+    assert LINES["witch_close"] == "女巫請閉眼" and LINES["hunter"] == "獵人請發動技能"
+
+
+def test_narration_rate_is_half_of_original() -> None:
+    assert balance.NARRATION_RATE == 0.45
+    assert timers.narration_seconds("天黑請閉眼") == pytest.approx(5 * 0.25 / 0.45 + 1)
 
 
 def test_D4_11_seer_sees_faceless_as_wolf(game: Game) -> None:

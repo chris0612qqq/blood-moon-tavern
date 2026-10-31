@@ -304,6 +304,67 @@ def test_god_mode_full_game(server_url: str) -> None:
     run_game(server_url, "god")
 
 
+def _spoken(url: str, line: str) -> int:
+    events = httpx.get(f"{url}/dev/state").json()["events"]
+    return sum(e["type"] == "narrate" and e["data"]["line_id"] == line for e in events)
+
+
+def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
+    """試玩回饋：主持人可重複催促；按完閉眼要等主持人按才換下一個角色。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        host = browser.new_context(viewport=MOBILE).new_page()
+        host.goto(server_url)
+        admin_open_room(host, "god")
+        press(host, "btn-to-control")
+        wait(host, "screen-s20")
+        press(host, "btn-add-bots")
+        host.wait_for_function("window.__bmt.server.roster.length >= 6")
+        press(host, "btn-start")
+        press(host, "dialog-confirm")
+        wait(host, "btn-host-next")
+        step = lambda: store(host, "s.server.step")  # noqa: E731
+
+        def next_line(expected: str) -> None:
+            host.wait_for_function("(n) => window.__bmt.server.host.next_line === n", arg=expected)
+            press(host, "btn-host-next")
+            host.wait_for_timeout(250)  # 確認框要等下一次重繪才出現
+            if has(host, "dialog-confirm"):
+                press(host, "dialog-confirm")
+
+        next_line("night_start")
+        host.wait_for_function("window.__bmt.server.step === 'NIGHT_START'")
+        next_line("wolf_open")
+        host.wait_for_function("window.__bmt.server.step === 'WOLF'")
+        host.wait_for_timeout(1500)
+        before = _spoken(server_url, "wolf_open")
+        press(host, "line-current")  # 催狼人
+        host.wait_for_timeout(1400)
+        press(host, "line-current")
+        host.wait_for_timeout(300)
+        assert _spoken(server_url, "wolf_open") == before + 2 and step() == "WOLF"
+
+        host.wait_for_function(
+            "(() => { const h = window.__bmt.server.host;"
+            " return h.timed_out || h.nights.at(-1).wolf_decided; })()"
+        )
+        next_line("wolf_close")
+        host.wait_for_function("window.__bmt.server.step === 'WOLF_END'")
+        host.wait_for_timeout(4000)  # 不會自己跳走
+        assert step() == "WOLF_END"
+        assert page_text_lacks(host, "已逾時")  # 閉眼步驟沒有倒數
+        before = _spoken(server_url, "wolf_close")
+        press(host, "line-current")
+        host.wait_for_timeout(300)
+        assert _spoken(server_url, "wolf_close") == before + 1 and step() == "WOLF_END"
+        folder = os.environ.get("BMT_SHOTS")
+        if folder:
+            host.screenshot(path=f"{folder}/host_after_close.png")
+        label = host.locator('[data-testid="btn-host-next"]').inner_text()
+        assert "預言家請睜眼" in label or "女巫請睜眼" in label
+        browser.close()
+
+
 def test_join_form_rules(server_url: str) -> None:
     """UT3 灰盒版：名字、PIN 的基本防呆。"""
     with sync_playwright() as driver:

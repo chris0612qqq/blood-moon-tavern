@@ -56,9 +56,6 @@ _ACTOR_ACTIONS = frozenset(
         Action.VOTE_CAST,
     }
 )
-# 這些動作不屬於任何步驟，遊戲結束後另外判斷
-_INFO_LINES = frozenset({"peaceful", "deaths", "hunter_shot", "hunter_holster", "exile", "tie"})
-
 Handler = Callable[["Engine", Actor, dict[str, Any]], None]
 
 
@@ -199,13 +196,11 @@ def resolve_hunter(engine: Engine, hunter: str, target: str | None) -> None:
     if target is not None:
         victim = state.player(target)
         role = narration.ROLE_NAMES[rules.public_role(victim.role)]
-        text = narration.render(
-            "hunter_shot", engine.jianghu, name=name, target=victim.name, role=role
-        )
+        text = narration.render("hunter_shot", name=name, target=victim.name, role=role)
         engine.emit(EventType.NARRATE, line_id="hunter_shot", text=text, speak=True)
         engine.kill(target, DeathCause.HUNTER)
     else:
-        text = narration.render("hunter_holster", engine.jianghu, name=name)
+        text = narration.render("hunter_holster", name=name)
         engine.emit(EventType.NARRATE, line_id="hunter_holster", text=text, speak=True)
     timing = state.timers.model_copy()
     timing.min_until = engine.now + timers.narration_seconds(text)
@@ -468,12 +463,14 @@ def _host_line(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
     speak = bool(payload.get("speak", True))
     if not isinstance(line_id, str) or line_id not in narration.LINES:
         raise _fail(ErrorCode.INVALID_TARGET)
-    if line_id in _INFO_LINES or (line_id == state.line_id and line_id in LINE_STEPS):
-        _replay_line(engine, line_id)
-        return
-    if state.step is Step.END or LINE_STEPS.get(line_id) is not engine.next_step():
+    if state.step is Step.END:
         raise _fail(ErrorCode.INVALID_TARGET)
-    _force_next(engine, speak=speak)
+    # 主持人可以重複按同一句催人（狼人還沒選、還沒閉眼），不會推進（使用者試玩回饋）
+    is_current = line_id == state.line_id
+    if not is_current and LINE_STEPS.get(line_id) is engine.next_step():
+        _force_next(engine, speak=speak)
+        return
+    _replay_line(engine, line_id, speak)
 
 
 def _host_replay(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
@@ -483,11 +480,11 @@ def _host_replay(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
     _replay_line(engine, line_id)
 
 
-def _replay_line(engine: Engine, line_id: str) -> None:
+def _replay_line(engine: Engine, line_id: str, speak: bool = True) -> None:
     """重念（SPEC B9）：只重念最近念過的那句，文字直接取自事件紀錄。"""
     for event in reversed(engine.log):
         if event.type is EventType.NARRATE and event.data["line_id"] == line_id:
-            engine.emit(EventType.NARRATE, line_id=line_id, text=event.data["text"], speak=True)
+            engine.emit(EventType.NARRATE, line_id=line_id, text=event.data["text"], speak=speak)
             return
     raise _fail(ErrorCode.INVALID_TARGET)
 

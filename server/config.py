@@ -27,7 +27,6 @@ TIME_SCALE: Final = float(os.environ.get("TIME_SCALE", "1")) if DEV_MODE else 1.
 # 功能開關（CODING_RULES R6）：新功能先關著做完、試玩後再打開
 FEATURES: Final[dict[str, bool]] = {
     "bets": True,
-    "jianghu_narration": True,
     "ambient_sound": True,
 }
 

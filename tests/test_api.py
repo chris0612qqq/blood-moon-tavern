@@ -262,8 +262,8 @@ def test_admin_can_reread_password(env: Env, client: TestClient) -> None:
 
 
 def test_settings_clamped_and_unknown_rejected(env: Env, client: TestClient) -> None:
-    room = open_room(env, client, settings={"vote": 5, "speak": 999, "jianghu": 5})
-    assert room["settings"] == {"vote": 10, "speak": 300, "jianghu": 1}
+    room = open_room(env, client, settings={"vote": 5, "speak": 999})
+    assert room["settings"] == {"vote": 10, "speak": 300}
     client.delete("/api/admin/room", headers=admin_headers(env, client))
     res = client.post(
         "/api/admin/room",

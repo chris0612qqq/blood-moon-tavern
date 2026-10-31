@@ -112,14 +112,6 @@ function openForm() {
     choice('auto', t('s2.auto')),
     field('room_name', t('s2.roomName')),
     field('room_password', t('s2.roomPassword'), { inputmode: 'numeric', maxlength: LIMITS.ROOM_PASSWORD_DIGITS }),
-    h('label', { class: 'row' },
-      h('input', {
-        type: 'checkbox',
-        style: 'width:auto',
-        testid: 'input-jianghu',
-        checked: f.jianghu,
-        onchange: (e) => { f.jianghu = e.target.checked; changed(); },
-      }), t('s2.jianghu')),
     errorLine('open'),
     actionButton({
       id: 'btn-open-room',
@@ -127,7 +119,7 @@ function openForm() {
       disabled: !f.room_name ? ' ' : null,
       run: async () => {
         clearFormError('open');
-        const body = { mode, name: f.room_name, settings: { jianghu: f.jianghu ? 1 : 0 } };
+        const body = { mode, name: f.room_name, settings: {} };
         if (f.room_password) body.password = f.room_password;
         const res = await api('/api/admin/room', { method: 'POST', auth: adminToken(), body });
         if (!res.ok) {

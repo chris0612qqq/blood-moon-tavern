@@ -70,7 +70,7 @@ P0 環境與骨架
   2. 依 SPEC B2 建立目錄與空模組；`pyproject.toml`（ruff、mypy、pytest 設定）、`requirements.lock`、`.gitignore`（`data/`、`local_assets/`、`server/admin.local.json`、`.venv/`）、`VERSION`＝`0.0.1`。
   3. `server/enums.py`（角色、步驟、死因、錯誤碼代號，CODING_RULES R1）、`server/balance.py`（配角色表、倒數、輪替權重，G8）、`server/rng.py`（GameRng，L27）、`server/clock.py`（Clock／FakeClock，T7）。
   4. GitHub Actions `ci.yml`：push 時跑 ruff、mypy、pytest（先只有一個空測試）。部署用的 `pages.yml` 到 P7 才做。
-  5. `config.py` 建立 `FEATURES` 功能開關（押注、江湖口吻、環境音等，CODING_RULES R6）與 `DEV_MODE` 讀取。
+  5. `config.py` 建立 `FEATURES` 功能開關（押注、環境音等，CODING_RULES R6）與 `DEV_MODE` 讀取。
   6. 建立 `PROGRESS.md`（第 7 節範本）。
 - **交付**：可 clone、`pip install -r requirements.lock`、`pytest` 綠燈。
 - **通關條件**：CI 綠燈；`git status` 乾淨；`.gitignore` 確認擋住所有私密路徑。
@@ -157,7 +157,7 @@ P0 環境與骨架
 - **先讀**：SPEC A9、B9；CODING_RULES E11、E15–E16、V12–V17、N16–N18；ART_DIRECTION 13。
 - **任務**
   1. 照片：Web Worker 壓縮、去 EXIF、縮圖（Q2、N11）；語音 `MediaRecorder`；上傳與簽章網址、過期重取（N21）。
-  2. 旁白：`audio.js` 音訊管理器與優先序（V15）、zh-TW 語音選擇（V14）、長度估算、「標準／江湖」口吻、錄音覆蓋。
+  2. 旁白：`audio.js` 音訊管理器與優先序（V15）、zh-TW 語音選擇（V14）、長度估算、錄音覆蓋。
   3. PWA：`manifest.json`、service worker（只快取靜態檔、新版只在大廳提示）、S23 安裝引導、S24 準備檢查（聲音、靜音鍵、Wake Lock、主畫面）。
   4. 切換 App 遮住秘密（V20）、直式鎖定（V17）。
 - **測試**：B10 第 8 項 iOS 實機（需使用者協助）。
@@ -213,7 +213,7 @@ P0 環境與骨架
 | **設計變數** | 換主題、調顏色不用翻程式 | `tokens.css`（V5） |
 | **開發工具** | 一個人也能測完整一局、重現 bug | `DEV_MODE`：機器人、時間加速、固定種子、狀態檢視器（D1–D4） |
 | **素材覆蓋層** | 使用者之後換插圖、音效不必改程式 | `local_assets/`（SPEC C1、V11） |
-| **功能開關** | 新功能可以先關著上線、試玩後再開 | `config.py` 的 `FEATURES = {...}`（例如押注、江湖口吻） |
+| **功能開關** | 新功能可以先關著上線、試玩後再開 | `config.py` 的 `FEATURES = {...}`（例如押注） |
 | **觀測點** | 出問題時知道發生什麼 | 每房間 log、前端錯誤紀錄匯出（S7、E14） |
 | **時間緩衝** | 業界經驗：真人試玩後一定會有預期外的修改 | P4 與 P9 之後各保留一段修正時間，不要排滿 |
 
