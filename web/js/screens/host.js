@@ -2,6 +2,7 @@
 import { h } from '../dom.js';
 import { send, serverNow } from '../net.js';
 import { LIMITS } from '../protocol.js';
+import { unlockAudio } from '../narrator.js';
 import { changed, store } from '../store.js';
 import { LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
 import { actionButton, avatar, button, countdown, nameOf } from '../ui/common.js';
@@ -12,6 +13,24 @@ export { lobbyMenu };
 export function s20(server) {
   if (server.phase === 'lobby') return hostLobby(server);
   return hostGame(server);
+}
+
+/** 上帝手機就是旁白主機，一定要有測試聲音的入口（SPEC S24 的精簡版，完整版在 P6）。 */
+function soundPanel() {
+  const voice = store.voice;
+  if (!voice.supported) return h('p', { class: 'error-text', testid: 'sound-unsupported' }, t('voice.unsupported'));
+  return [
+    button(t('s20.soundTest'), () => {
+      unlockAudio(t('s5.soundTest'));
+      changed();
+    }, { testid: 'btn-sound-test' }),
+    h('p', { class: 'hint center' }, t('s20.soundHint')),
+    h('p', { class: 'hint center', testid: 'voice-status' }, t('voice.status', {
+      status: voice.last || t('voice.never'),
+      name: voice.name || t('voice.none'),
+      count: voice.voices,
+    })),
+  ];
 }
 
 function hostLobby(server) {
@@ -29,6 +48,7 @@ function hostLobby(server) {
         store.ui.dialog = { kind: 'lobby-player', playerId: p.id };
         changed();
       }, { small: true }))),
+    soundPanel(),
     lobbyAdmin(server, players, need),
   ];
 }
@@ -198,6 +218,7 @@ function hostGame(server) {
       })
       : actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', run: () => send('admin.pause') }),
     voiceControls(server),
+    soundPanel(),
     speaking
       ? [
         actionButton({ id: 'btn-skip-speaker', label: t('s20.skipSpeaker'), kind: 'secondary', run: () => send('host.skip_speaker') }),

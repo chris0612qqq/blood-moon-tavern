@@ -217,6 +217,11 @@ export function s21() {
       ? actionButton({ id: 'btn-takeover', label: t('s21.takeover'), run: () => send('narrator.takeover') })
       : null,
     button(t('s21.test'), () => speak(t('s5.soundTest')), { testid: 'btn-test-voice' }),
+    h('p', { class: 'hint center', testid: 'voice-status' }, t('voice.status', {
+      status: store.voice.last || t('voice.never'),
+      name: store.voice.name || t('voice.none'),
+      count: store.voice.voices,
+    })),
     button(t('s21.export'), () => {
       const text = JSON.stringify(store.errorLog ?? [], null, 1);
       store.ui.dialog = { kind: 'text', text };
