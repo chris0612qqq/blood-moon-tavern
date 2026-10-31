@@ -369,7 +369,7 @@ Cloudflare quick tunnel ──▶ 你家電腦：FastAPI（uvicorn, 127.0.0.1:87
          audio.js enums.js errors.js strings.js protocol.js（自動產生） ui/（含 layers.js） screens/（一畫面一檔）
     img/ui/  img/roles/（自繪 SVG 預設）  fonts/  audio/
   server/
-    main.py config.py balance.py enums.py errors.py protocol.py events.py rules.py engine.py modes.py
+    main.py config.py balance.py enums.py errors.py protocol.py state.py events.py rules.py engine.py actions.py modes.py
     disguise.py views.py room.py presence.py db.py auth.py media.py narration.py timers.py rng.py clock.py
     setup_admin.py  roles/（每個角色一檔：wolf faceless villager seer witch hunter）  migrations/  dev/（僅 DEV_MODE：bots.py 等）
   scripts/ setup.bat start.bat preflight.bat publish_url.py keep_awake.py gen_protocol.py
@@ -392,7 +392,9 @@ Cloudflare quick tunnel ──▶ 你家電腦：FastAPI（uvicorn, 127.0.0.1:87
 
 | 模組 | 主要函式／類別 |
 |---|---|
-| rules | `role_counts(n)`、`deal(ids, history, rng) -> roles`（含 1 千面狼，依 A5.7 權重）、`wolf_consensus(picks, alive_wolves)`、`resolve_night(state)`、`can_shoot(cause)`、`tally(votes)`、`check_win(state)`、`speak_order(state)`、`last_words_queue(state)`、`speak_seconds(n)`（依人數）、`score_bets(bets, roles)`（押注計分）、`public_role(role)`（千面狼→狼人） |
+| state | `GameState` 與子結構（只有 `events.apply` 能改） |
+| actions | 各意圖的處理函式，由 `Engine.handle` 依轉移表呼叫 |
+| rules | `role_counts(n)`、`deal(ids, history, rng) -> roles`（含 1 千面狼，依 A5.7 權重）、`eligible_targets(state, actor, action)`、`wolf_consensus(picks, alive_wolves)`、`wolf_timeout_choice(picks, alive_wolves, rng)`、`witch_options`、`validate_witch_act`、`can_bet`、`validate_bet`、`gets_last_words`、`resolve_night(night)`、`can_shoot(cause)`、`tally(votes)`、`check_win(state)`、`speak_order(state)`、`last_words_queue(state)`、`speak_seconds(n)`（依人數）、`score_bets(bets, roles)`（押注計分）、`public_role(role)`（千面狼→狼人） |
 | disguise | `pick_target(state, rng)`（排除自己、死者、上一期對象）、`on_deal(state)`（抽第 1 期）、`on_round_start(state)`（剩餘回合減 1，歸零重抽）、`on_death(state, pid)`（對象死亡重抽並重置計數）、`can_disguise(state, pid)` |
 | engine | `Engine.handle(actor, intent) -> [Event]`、`Engine.tick(now)`、`snapshot()`／`restore()` |
 | modes | `GodMode`／`AutoMode`：`can(actor, action, state)`、`should_advance(step, state)`、`can_pause(actor, step)` |

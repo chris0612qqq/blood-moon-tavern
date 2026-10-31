@@ -1,0 +1,1098 @@
+"""引擎情境（SPEC B5、D4、CODING_RULES L1–L24、不變式）。名稱含規則編號（T3）。"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from server import balance
+from server.clock import FakeClock
+from server.engine import ACTION_STEPS, TRANSITIONS, Engine, night_sequence
+from server.enums import Action, Channel, DeathCause, Mode, PauseReason, Role, Step, Winner
+from server.errors import ErrorCode, GameError, IllegalTransition, InvariantBroken
+from server.events import Event, EventType, replay
+from server.modes import Actor
+from server.rng import GameRng
+from server.state import GameState
+
+ADMIN = Actor(is_admin=True)
+HOST = Actor(is_admin=True, is_host=True)
+ROLES_8 = {
+    "p1": Role.VILLAGER,
+    "p2": Role.SEER,
+    "p3": Role.WITCH,
+    "p4": Role.FACELESS,
+    "p5": Role.WOLF,
+    "p6": Role.HUNTER,
+    "p7": Role.VILLAGER,
+    "p8": Role.VILLAGER,
+}
+
+
+class Game:
+    """固定角色的測試局。以 monkeypatch 式替換 deal，讓情境可讀。"""
+
+    def __init__(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        roles: dict[str, Role] | None = None,
+        mode: Mode = Mode.AUTO,
+        seed: int = 1,
+    ) -> None:
+        roles = roles or ROLES_8
+        monkeypatch.setattr("server.rules.deal", lambda ids, history, rng: dict(roles))
+        self.clock = FakeClock()
+        players = [(pid, pid.upper()) for pid in roles]
+        narrator = None if mode is Mode.GOD else "p1"
+        self.engine = Engine.create(
+            players, mode, {}, self.clock, GameRng(seed), narrator_id=narrator
+        )
+
+    @property
+    def state(self) -> GameState:
+        return self.engine.state
+
+    def act(self, who: str | Actor, action: Action, /, **payload: Any) -> list[Event]:
+        actor = who if isinstance(who, Actor) else Actor(player_id=who)
+        return self.engine.handle(actor, action, payload, self.state.step_seq)
+
+    def run(self, seconds: float) -> None:
+        """讓時間前進並持續 tick。"""
+        end = self.clock.now() + seconds
+        while self.clock.now() < end:
+            self.clock.advance(0.25)
+            self.engine.tick()
+
+    def wait_for(self, step: Step, limit: float = 600) -> None:
+        """等到進入某步驟且已開放操作。"""
+        end = self.clock.now() + limit
+        while self.state.step is not step or (step in ACTION_STEPS and self._not_open()):
+            if self.clock.now() > end:
+                raise AssertionError(f"stuck at {self.state.step}, wanted {step}")
+            self.clock.advance(0.25)
+            self.engine.tick()
+
+    def _not_open(self) -> bool:
+        opens = self.state.timers.opens_at
+        return opens is not None and self.clock.now() < opens
+
+    def ack_all(self) -> None:
+        for player in list(self.state.actors):
+            self.act(player, Action.DEAL_ACK)
+
+    def to_wolf_step(self) -> None:
+        self.ack_all()
+        self.wait_for(Step.WOLF)
+
+    def wolves_kill(self, target: str | None) -> None:
+        for wolf in list(self.state.actors):
+            self.act(wolf, Action.WOLF_PICK, target=target)
+        self.run(balance.WOLF_CONFIRM_SECONDS + 0.5)
+
+    def night(self, target: str | None, witch: dict[str, Any] | None = None) -> None:
+        """從狼人步驟走到天亮公布之後。"""
+        self.wolves_kill(target)
+        self.wait_step_after_wolf(witch)
+
+    def wait_step_after_wolf(self, witch: dict[str, Any] | None = None) -> None:
+        if any(p.alive and p.role is Role.SEER for p in self.state.players):
+            self.wait_for(Step.SEER)
+            seer = self.state.actors[0]
+            target = next(p.id for p in self.state.players if p.alive and p.id != seer)
+            self.act(seer, Action.SEER_CHECK, target=target)
+            self.act(seer, Action.SEER_OK)
+        if any(p.alive and p.role is Role.WITCH for p in self.state.players):
+            self.wait_for(Step.WITCH)
+            self.act(self.state.actors[0], Action.WITCH_ACT, **(witch or {}))
+        self.wait_until_announced()
+
+    def wait_until_announced(self) -> None:
+        for _ in range(4000):
+            if self.state.step is Step.DAWN and self.state.announced:
+                return
+            self.clock.advance(0.25)
+            self.engine.tick()
+        raise AssertionError(f"never announced, at {self.state.step}")
+
+    def finish_speech(self) -> None:
+        while self.state.step in (Step.DAY_SPEAK, Step.LAST_WORDS):
+            if not self._not_open() and self.state.current_speaker:
+                self.act(self.state.current_speaker, Action.SPEAK_END)
+            self.clock.advance(0.25)
+            self.engine.tick()
+
+    def vote_all(self, target: str | None, skip: tuple[str, ...] = ()) -> None:
+        self.wait_for(Step.VOTE)
+        for voter in list(self.state.actors):
+            if voter in skip:
+                continue
+            aimed = target if target != voter else None
+            self.act(voter, Action.VOTE_CAST, target=aimed)
+
+
+@pytest.fixture
+def game(monkeypatch: pytest.MonkeyPatch) -> Game:
+    return Game(monkeypatch)
+
+
+class TestDeal:
+    def test_D4_6_deal_auto_after_60_seconds(self, game: Game) -> None:
+        assert game.state.step is Step.DEAL
+        game.run(balance.DEAL_SECONDS + 1)
+        assert game.state.step is not Step.DEAL
+        assert all(p.acked for p in game.state.players)
+
+    def test_all_acked_moves_on(self, game: Game) -> None:
+        game.ack_all()
+        game.wait_for(Step.NIGHT_START)
+        assert game.state.round_no == 1
+
+    def test_faceless_first_period_at_deal(self, game: Game) -> None:
+        disguise = game.state.disguise
+        assert disguise is not None and disguise.target_id not in (None, "p4")
+        assert disguise.periods[0].from_round == 1
+
+
+class TestStepSeq:
+    def test_L2_stale_step_rejected(self, game: Game) -> None:
+        with pytest.raises(GameError) as err:
+            game.engine.handle(Actor(player_id="p1"), Action.DEAL_ACK, {}, game.state.step_seq - 1)
+        assert err.value.code is ErrorCode.STALE_STEP
+
+    def test_L2_other_players_action_does_not_expire_mine(self, game: Game) -> None:
+        seq = game.state.step_seq
+        game.engine.handle(Actor(player_id="p1"), Action.DEAL_ACK, {}, seq)
+        game.engine.handle(Actor(player_id="p2"), Action.DEAL_ACK, {}, seq)
+        assert game.state.step_seq == seq
+
+    def test_L2_chat_is_not_step_bound(self, game: Game) -> None:
+        game.engine.handle(
+            Actor(player_id="p1"),
+            Action.CHAT_SEND,
+            {"channel": Channel.PUBLIC, "content": "hi"},
+            None,
+        )
+
+    def test_step_seq_monotonic_over_game(self, game: Game) -> None:
+        seen = [game.state.step_seq]
+        game.ack_all()
+        for _ in range(200):
+            game.clock.advance(0.25)
+            game.engine.tick()
+            seen.append(game.state.step_seq)
+        assert seen == sorted(seen) and seen[-1] > seen[0]
+
+
+class TestTransitions:
+    def test_L6_illegal_transition_raises(self, game: Game) -> None:
+        with pytest.raises(IllegalTransition):
+            game.engine.go(Step.VOTE)
+
+    def test_L6_table_covers_all_steps(self) -> None:
+        assert set(TRANSITIONS) == set(Step)
+
+    def test_night_sequence_from_registry(self) -> None:
+        assert night_sequence()[:3] == [Step.NIGHT_START, Step.WOLF, Step.WOLF_END]
+        assert night_sequence()[-1] is Step.DAWN
+
+    def test_action_outside_step_forbidden(self, game: Game) -> None:
+        with pytest.raises(GameError) as err:
+            game.act("p5", Action.WOLF_PICK, target="p1")
+        assert err.value.code is ErrorCode.FORBIDDEN
+
+    def test_step_not_open_during_narration(self, game: Game) -> None:
+        game.ack_all()
+        while game.state.step is not Step.WOLF:
+            game.clock.advance(0.25)
+            game.engine.tick()
+        with pytest.raises(GameError) as err:
+            game.act("p5", Action.WOLF_PICK, target="p1")
+        assert err.value.code is ErrorCode.STEP_NOT_OPEN
+
+    def test_L4_grace_then_deadline_passed(self, game: Game) -> None:
+        game.to_wolf_step()
+        deadline = game.state.timers.deadline
+        assert deadline is not None
+        game.clock.advance(deadline - game.clock.now() + 0.2)
+        game.act("p5", Action.WOLF_PICK, target="p1")  # 300 ms 寬限內有效
+        game.clock.advance(0.2)
+        with pytest.raises(GameError) as err:
+            game.act("p4", Action.WOLF_PICK, target="p1")
+        assert err.value.code is ErrorCode.DEADLINE_PASSED
+
+    def test_narration_time_not_counted_in_countdown(self, game: Game) -> None:
+        game.to_wolf_step()
+        timing = game.state.timers
+        assert timing.opens_at is not None and timing.deadline is not None
+        assert timing.deadline - timing.opens_at == pytest.approx(balance.NIGHT_STEP_SECONDS)
+
+
+class TestWolf:
+    def test_D4_7_confirm_after_3_seconds(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act("p4", Action.WOLF_PICK, target="p1")
+        assert game.state.timers.confirm_until is None
+        game.act("p5", Action.WOLF_PICK, target="p1")
+        assert game.state.timers.confirm_until is not None
+        game.run(2)
+        assert not game.state.night().wolf_decided
+        game.run(1.5)
+        assert game.state.night().wolf_target == "p1"
+
+    def test_D4_7_change_cancels_confirm(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act("p4", Action.WOLF_PICK, target="p1")
+        game.act("p5", Action.WOLF_PICK, target="p1")
+        game.run(1)
+        game.act("p5", Action.WOLF_PICK, target="p2")
+        assert game.state.timers.confirm_until is None
+        game.run(5)
+        assert not game.state.night().wolf_decided
+
+    def test_clear_pick(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act("p4", Action.WOLF_PICK, target="p1")
+        game.act("p4", Action.WOLF_PICK, clear=True)
+        assert "p4" not in game.state.night().wolf_picks
+
+    def test_D4_9_cannot_pick_pack(self, game: Game) -> None:
+        game.to_wolf_step()
+        with pytest.raises(GameError) as err:
+            game.act("p4", Action.WOLF_PICK, target="p5")
+        assert err.value.code is ErrorCode.INVALID_TARGET
+
+    def test_L13_nobody_picked_is_empty_knife(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.run(balance.NIGHT_STEP_SECONDS + 1)
+        night = game.state.night()
+        assert night.wolf_decided and night.wolf_target is None
+
+    def test_cannot_change_after_decided(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        assert game.state.step in (Step.WOLF, Step.WOLF_END)
+        if game.state.step is Step.WOLF:
+            with pytest.raises(GameError):
+                game.act("p4", Action.WOLF_PICK, target="p2")
+
+    def test_D4_8_timeout_disagree_picks_from_top(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act("p4", Action.WOLF_PICK, target="p1")
+        game.act("p5", Action.WOLF_PICK, target=None)
+        game.run(balance.NIGHT_STEP_SECONDS + 1)
+        assert game.state.night().wolf_target in ("p1", None)
+        assert game.state.night().wolf_decided
+
+    def test_L20_kicked_wolf_rechecks_consensus(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act("p4", Action.WOLF_PICK, target="p1")
+        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        assert game.state.timers.confirm_until is not None
+
+    def test_L20_kicked_target_clears_pick(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act("p4", Action.WOLF_PICK, target="p1")
+        game.act(ADMIN, Action.ADMIN_KICK, player="p1")
+        assert "p4" not in game.state.night().wolf_picks
+
+
+class TestNightResolution:
+    def test_D4_10_killed_seer_acts_tonight(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p2")
+        game.wait_for(Step.SEER)
+        assert game.state.player("p2").alive
+        game.act("p2", Action.SEER_CHECK, target="p4")
+        assert game.state.night().seer_is_wolf is True  # D4 #11 千面狼也顯示狼人
+
+    def test_D4_12_dead_seer_skipped(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p2")
+        assert not game.state.player("p2").alive
+        game.finish_speech_or_to_vote()
+
+    def test_D4_13_first_night_self_save(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p3", witch={"save": True})
+        assert game.state.player("p3").alive and game.state.witch_antidote_used
+
+    def test_peaceful_night(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        assert all(p.alive for p in game.state.players)
+
+    def test_D4_16_witch_without_potions_step_still_runs(self, game: Game) -> None:
+        game.state.witch_antidote_used = True
+        game.state.witch_poison_used = True
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.WITCH)
+        timing = game.state.timers
+        assert timing.deadline == timing.min_until
+        assert timing.opens_at is not None and timing.min_until is not None
+        wait = timing.min_until - timing.opens_at
+        assert balance.WITCH_MIN_SECONDS_LOW <= wait <= balance.WITCH_MIN_SECONDS_HIGH
+        game.wait_for(Step.WITCH_END)
+
+    def test_witch_min_time_applies_when_quick(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.WITCH)
+        game.act("p3", Action.WITCH_ACT)
+        game.run(3)
+        assert game.state.step is Step.WITCH
+
+    def test_D4_17_no_double_use(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.WITCH)
+        with pytest.raises(GameError):
+            game.act("p3", Action.WITCH_ACT, save=True, poison="p7")
+
+    def test_witch_cannot_act_twice(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.WITCH)
+        game.act("p3", Action.WITCH_ACT)
+        with pytest.raises(GameError):
+            game.act("p3", Action.WITCH_ACT)
+
+    def test_seer_cannot_check_twice_or_ok_first(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.SEER)
+        with pytest.raises(GameError):
+            game.act("p2", Action.SEER_OK)
+        with pytest.raises(GameError):
+            game.act("p2", Action.SEER_CHECK, target="p2")
+        game.act("p2", Action.SEER_CHECK, target="p1")
+        with pytest.raises(GameError):
+            game.act("p2", Action.SEER_CHECK, target="p7")
+
+    def test_L19_D4_18_knifed_and_poisoned_hunter_cannot_shoot(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p6", witch={"poison": "p6"})
+        hunter = game.state.player("p6")
+        assert hunter.death_cause is DeathCause.POISON and game.state.hunter_pending is None
+
+    def test_witch_timeout_no_potion_used(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.wolves_kill("p1")
+        game.wait_for(Step.WITCH)
+        game.run(balance.NIGHT_STEP_SECONDS + 1)
+        assert game.state.night().witch_acted and not game.state.witch_antidote_used
+
+
+class TestDayFlow:
+    def test_D4_19_hunter_shoots_before_win_check(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 2 狼 3 好人（含獵人）；獵人被刀後 2 狼對 2 好人已壓制，但要先開槍
+        game = Game(monkeypatch, {
+            "p1": Role.HUNTER, "p2": Role.WITCH, "p3": Role.SEER,
+            "p4": Role.FACELESS, "p5": Role.WOLF, "p6": Role.VILLAGER, "p7": Role.VILLAGER,
+        })  # fmt: skip
+        game.state.player("p7").alive = False
+        game.state.player("p7").death_cause = DeathCause.VOTE
+        game.state.player("p6").alive = False
+        game.state.player("p6").death_cause = DeathCause.VOTE
+        game.to_wolf_step()
+        game.night("p1")
+        assert game.state.hunter_pending == "p1"
+        game.wait_for(Step.HUNTER)
+        game.act("p1", Action.HUNTER_SHOOT, target="p5")
+        assert not game.state.player("p5").alive
+
+    def test_wolves_dead_at_dawn_skips_hunter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch)
+        game.state.player("p5").alive = False
+        game.state.player("p5").death_cause = DeathCause.VOTE
+        game.to_wolf_step()
+        game.night("p6", witch={"poison": "p4"})
+        game.run(30)
+        assert game.state.step is Step.END and game.state.winner is Winner.VILLAGE
+
+    def test_D4_21_speak_order_after_hunter_shot(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p6")
+        game.wait_for(Step.HUNTER)
+        game.act("p6", Action.HUNTER_SHOOT, target="p1")
+        game.wait_for(Step.LAST_WORDS)
+        assert game.state.current_speaker == "p1"  # 第 1 天，依座位
+        game.finish_speech_to(Step.DAY_SPEAK)
+        assert game.state.current_speaker == "p2"  # 座位最小的死者 p1 的下一位
+
+    def test_L16_hunter_no_targets_auto_holster(self, game: Game) -> None:
+        for pid in ("p1", "p2", "p3", "p4", "p5", "p7", "p8"):
+            game.state.player(pid).alive = False
+        game.state.player("p6").alive = False
+        game.state.hunter_pending = "p6"
+        game.engine.strict = False
+        game.engine._enter(Step.HUNTER)
+        assert game.state.hunter_shot_done and game.state.hunter_pending is None
+
+    def test_D4_20_hunter_may_holster_and_timeout(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p6")
+        game.wait_for(Step.HUNTER)
+        game.run(balance.HUNTER_SECONDS + 1)
+        assert game.state.hunter_pending is None
+        assert sum(not p.alive for p in game.state.players) == 1
+
+    def test_hunter_invalid_target(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p6")
+        game.wait_for(Step.HUNTER)
+        with pytest.raises(GameError):
+            game.act("p6", Action.HUNTER_SHOOT, target="p6")
+
+    def test_first_day_last_words_later_days_none(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p1")
+        game.wait_for(Step.LAST_WORDS)
+        assert game.state.current_speaker == "p1"
+        game.finish_speech_to(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.vote_all(None)
+        game.wait_for(Step.WOLF)
+        game.night("p7")
+        game.run(10)
+        assert game.state.step is Step.DAY_SPEAK
+
+    def test_exiled_gets_last_words(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.vote_all("p1")
+        game.wait_for(Step.LAST_WORDS)
+        assert game.state.current_speaker == "p1"
+
+    def test_no_last_words_when_game_decided(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch)
+        game.state.player("p4").alive = False
+        game.state.player("p4").death_cause = DeathCause.VOTE
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.vote_all("p5")
+        game.run(30)
+        assert game.state.step is Step.END and game.state.winner is Winner.VILLAGE
+
+    def test_speak_timeout_moves_to_next(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        first = game.state.current_speaker
+        game.run(balance.SPEAK_SECONDS_BY_PLAYERS[0][1] + 8)
+        assert game.state.current_speaker != first
+
+    def test_only_current_speaker_can_end(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        with pytest.raises(GameError):
+            game.act("p8", Action.SPEAK_END)
+
+
+class TestVote:
+    def _at_vote(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.wait_for(Step.VOTE)
+
+    def test_change_once_only(self, game: Game) -> None:
+        self._at_vote(game)
+        game.act("p1", Action.VOTE_CAST, target="p2")
+        game.act("p1", Action.VOTE_CAST, target="p3")
+        assert game.state.vote_round().ballots["p1"] == "p3"
+        with pytest.raises(GameError):
+            game.act("p1", Action.VOTE_CAST, target="p4")
+
+    def test_cannot_vote_self(self, game: Game) -> None:
+        self._at_vote(game)
+        with pytest.raises(GameError):
+            game.act("p1", Action.VOTE_CAST, target="p1")
+
+    def test_all_cast_waits_5_seconds_and_allows_change(self, game: Game) -> None:
+        self._at_vote(game)
+        game.vote_all("p1")
+        assert game.state.timers.grace_until is not None
+        game.run(balance.VOTE_ALL_CAST_GRACE_SECONDS - 1)
+        assert game.state.step is Step.VOTE
+        game.act("p2", Action.VOTE_CAST, target="p3")
+        game.run(2)
+        assert game.state.step is Step.REVEAL
+        assert game.state.vote_round().ballots["p2"] == "p3"
+
+    def test_grace_never_exceeds_deadline(self, game: Game) -> None:
+        self._at_vote(game)
+        deadline = game.state.timers.deadline
+        assert deadline is not None
+        game.clock.advance(deadline - game.clock.now() - 1)
+        game.vote_all("p1")
+        assert game.state.timers.grace_until == deadline
+
+    def test_timeout_is_abstain(self, game: Game) -> None:
+        self._at_vote(game)
+        game.act("p1", Action.VOTE_CAST, target="p2")
+        game.run(balance.VOTE_SECONDS + 1)
+        votes = game.state.vote_round()
+        assert votes.ballots["p3"] is None and votes.exiled == "p2"
+
+    def test_D4_23_tie_no_exile(self, game: Game) -> None:
+        self._at_vote(game)
+        game.act("p1", Action.VOTE_CAST, target="p2")
+        game.act("p2", Action.VOTE_CAST, target="p1")
+        game.run(balance.VOTE_SECONDS + 1)
+        assert game.state.vote_round().exiled is None
+        assert all(p.alive for p in game.state.players)
+
+    def test_D4_24_kick_voids_votes(self, game: Game) -> None:
+        self._at_vote(game)
+        game.act("p1", Action.VOTE_CAST, target="p2")
+        game.act("p2", Action.VOTE_CAST, target="p1")
+        game.act(ADMIN, Action.ADMIN_KICK, player="p2")
+        ballots = game.state.vote_round().ballots
+        assert "p2" not in ballots and ballots["p1"] is None
+
+    def test_kick_last_missing_voter_starts_grace(self, game: Game) -> None:
+        self._at_vote(game)
+        game.vote_all("p2", skip=("p8",))
+        game.act(ADMIN, Action.ADMIN_KICK, player="p8")
+        assert game.state.timers.grace_until is not None
+
+
+class TestKickAndWin:
+    def test_D4_45_kick_reveals_and_checks_win(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch)
+        game.act(ADMIN, Action.ADMIN_KICK, player="p4")
+        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        assert game.state.step is Step.END and game.state.winner is Winner.VILLAGE
+
+    def test_kicked_hunter_cannot_shoot(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act(ADMIN, Action.ADMIN_KICK, player="p6")
+        assert game.state.hunter_pending is None
+
+    def test_kick_speaker_moves_on(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        speaker = game.state.current_speaker
+        assert speaker is not None
+        game.act(ADMIN, Action.ADMIN_KICK, player=speaker)
+        game.run(1)
+        assert game.state.current_speaker != speaker
+
+    def test_kick_narrator_falls_back_to_admin(self, game: Game) -> None:
+        game.act(ADMIN, Action.ADMIN_KICK, player="p1")
+        assert game.state.narrator_id is None
+
+    def test_kick_disguise_target_redraws(self, game: Game) -> None:
+        disguise = game.state.disguise
+        assert disguise is not None
+        target = disguise.target_id
+        assert target is not None
+        game.act(ADMIN, Action.ADMIN_KICK, player=target)
+        assert game.state.disguise is not None
+        assert game.state.disguise.target_id != target
+        assert game.state.disguise.periods[0].to_round is not None
+
+    def test_kick_rules(self, game: Game) -> None:
+        with pytest.raises(GameError):
+            game.act(ADMIN, Action.ADMIN_KICK, player="nope")
+        with pytest.raises(GameError):
+            game.act("p1", Action.ADMIN_KICK, player="p2")
+
+    @pytest.mark.parametrize("step", [Step.WOLF, Step.SEER, Step.WITCH])
+    def test_L20_kick_actor_mid_step_still_closes(self, game: Game, step: Step) -> None:
+        # 壓力測試抓到的 bug：行動者被踢後不能跳過閉眼
+        game.ack_all()
+        if step is not Step.WOLF:
+            game.wait_for(Step.WOLF)
+            game.wolves_kill("p1")
+        game.wait_for(step)
+        if step is Step.WOLF:
+            game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+            game.act("p4", Action.WOLF_PICK, target="p1")
+        else:
+            game.act(ADMIN, Action.ADMIN_KICK, player=game.state.actors[0])
+        closing = {Step.WOLF: Step.WOLF_END, Step.SEER: Step.SEER_END, Step.WITCH: Step.WITCH_END}
+        game.wait_for(closing[step], limit=120)
+
+    def test_kick_during_deal_then_acks(self, game: Game) -> None:
+        game.act(ADMIN, Action.ADMIN_KICK, player="p8")
+        assert "p8" not in game.state.actors
+        game.ack_all()
+        game.wait_for(Step.NIGHT_START)
+
+    def test_admin_end(self, game: Game) -> None:
+        game.act(ADMIN, Action.ADMIN_END)
+        assert game.state.winner is Winner.NONE
+        with pytest.raises(GameError):
+            game.act(ADMIN, Action.ADMIN_END)
+
+    def test_tick_after_end_is_noop(self, game: Game) -> None:
+        game.act(ADMIN, Action.ADMIN_END)
+        assert game.engine.tick() == []
+
+
+class TestPause:
+    def test_auto_admin_cannot_pause_at_night(self, game: Game) -> None:
+        game.to_wolf_step()
+        with pytest.raises(GameError):
+            game.act(ADMIN, Action.ADMIN_PAUSE)
+
+    def test_auto_admin_pause_by_day_freezes_and_resumes(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.act(ADMIN, Action.ADMIN_PAUSE)
+        assert game.state.pause is not None
+        step = game.state.step
+        game.run(300)
+        assert game.state.step is step
+        game.act(ADMIN, Action.ADMIN_RESUME)
+        assert game.state.pause is not None
+        game.run(balance.RESUME_COUNTDOWN_SECONDS + 1)
+        assert game.state.pause is None
+
+    def test_countdown_remaining_survives_pause(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        deadline = game.state.timers.deadline
+        assert deadline is not None
+        left = deadline - game.clock.now()
+        game.act(ADMIN, Action.ADMIN_PAUSE)
+        game.clock.advance(1000)
+        game.act(ADMIN, Action.ADMIN_RESUME)
+        game.clock.advance(balance.RESUME_COUNTDOWN_SECONDS)
+        game.engine.tick()
+        new_deadline = game.state.timers.deadline
+        assert new_deadline is not None
+        assert new_deadline - game.clock.now() == pytest.approx(left)
+
+    def test_actions_rejected_while_paused(self, game: Game) -> None:
+        game.engine.system_pause(PauseReason.PRESENCE)
+        with pytest.raises(GameError):
+            game.act("p1", Action.DEAL_ACK)
+
+    def test_system_pause_resume_allowed_at_night(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.engine.system_pause(PauseReason.SYSTEM)
+        game.act(ADMIN, Action.ADMIN_RESUME)
+        game.run(balance.RESUME_COUNTDOWN_SECONDS + 1)
+        assert game.state.pause is None
+
+    def test_double_pause_and_bad_resume(self, game: Game) -> None:
+        with pytest.raises(GameError):
+            game.act(ADMIN, Action.ADMIN_RESUME)
+        game.engine.system_pause(PauseReason.SYSTEM)
+        assert game.engine.system_pause(PauseReason.ADMIN) == []
+        with pytest.raises(GameError):
+            game.act(ADMIN, Action.ADMIN_PAUSE)
+
+    def test_auto_resume_renarrates(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.engine.system_pause(PauseReason.PRESENCE)
+        game.engine.schedule_resume()
+        game.clock.advance(balance.RESUME_COUNTDOWN_SECONDS + 1)
+        events = game.engine.tick()
+        assert any(e.type is EventType.NARRATE for e in events)
+
+
+class TestChat:
+    def _chat(self, game: Game, who: str | Actor, **kwargs: Any) -> list[Event]:
+        payload = {"channel": Channel.PUBLIC, "kind": "text", "content": "x", **kwargs}
+        return game.act(who, Action.CHAT_SEND, **payload)
+
+    def test_night_public_read_only_host_excepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch, mode=Mode.GOD)
+        game.state.step = Step.WOLF
+        with pytest.raises(GameError):
+            self._chat(game, "p1")
+        self._chat(game, HOST)
+
+    def test_night_wolf_channel_works(self, game: Game) -> None:
+        game.to_wolf_step()
+        self._chat(game, "p4", channel=Channel.WOLF)
+        with pytest.raises(GameError):
+            self._chat(game, "p1", channel=Channel.WOLF)
+
+    def test_night_pause_still_read_only(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.engine.system_pause(PauseReason.PRESENCE)
+        with pytest.raises(GameError):
+            self._chat(game, "p1")
+        with pytest.raises(GameError):
+            self._chat(game, "p4", **{"as": "disguise"})
+
+    def test_day_pause_allows_chat_and_disguise(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.engine.system_pause(PauseReason.PRESENCE)
+        self._chat(game, "p1")
+        self._chat(game, "p4", **{"as": "disguise"})
+
+    def test_disguise_rules(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        with pytest.raises(GameError):
+            self._chat(game, "p5", **{"as": "disguise"})
+        with pytest.raises(GameError):
+            self._chat(game, "p4", channel=Channel.WOLF, **{"as": "disguise"})
+        events = self._chat(game, "p4", **{"as": "disguise"})
+        assert game.state.disguise is not None
+        assert events[0].data["display"] == game.state.disguise.target_id
+
+    def test_dead_read_only_except_one_last_word(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p1")
+        game.wait_for(Step.LAST_WORDS)
+        self._chat(game, "p1")
+        with pytest.raises(GameError):
+            self._chat(game, "p1")
+        game.finish_speech_to(Step.DAY_SPEAK)
+        with pytest.raises(GameError):
+            self._chat(game, "p1")
+
+    def test_last_word_text_only(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p1")
+        game.wait_for(Step.LAST_WORDS)
+        with pytest.raises(GameError):
+            self._chat(game, "p1", kind="photo")
+
+    def test_dead_wolf_channel_read_only(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        with pytest.raises(GameError):
+            self._chat(game, "p5", channel=Channel.WOLF)
+
+    def test_spectator_read_only_until_end(self, game: Game) -> None:
+        with pytest.raises(GameError):
+            self._chat(game, "late")
+        game.act(ADMIN, Action.ADMIN_END)
+        self._chat(game, "late")
+
+    def test_host_cannot_post_to_wolf_channel(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch, mode=Mode.GOD)
+        with pytest.raises(GameError):
+            self._chat(game, HOST, channel=Channel.WOLF)
+
+
+class TestBets:
+    def test_dead_village_can_bet_and_change(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p1")
+        game.act("p1", Action.BET_SET, wolves=["p4"], faceless="p4")
+        game.act("p1", Action.BET_SET, wolves=["p5"], faceless=None)
+        assert game.state.bets["p1"].wolves == ["p5"]
+
+    def test_alive_wolf_kicked_cannot_bet(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act(ADMIN, Action.ADMIN_KICK, player="p1")
+        for who in ("p2", "p1", "late"):
+            with pytest.raises(GameError):
+                game.act(who, Action.BET_SET, wolves=[], faceless=None)
+
+    def test_dead_wolf_cannot_bet(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch)
+        game.ack_all()
+        game.wait_for(Step.WOLF)
+        game.night(None, witch={"poison": "p5"})
+        with pytest.raises(GameError):
+            game.act("p5", Action.BET_SET, wolves=[], faceless=None)
+
+    def test_feature_flag(self, game: Game, monkeypatch: pytest.MonkeyPatch) -> None:
+        game.to_wolf_step()
+        game.night("p1")
+        monkeypatch.setitem(__import__("server.config").config.FEATURES, "bets", False)
+        with pytest.raises(GameError):
+            game.act("p1", Action.BET_SET, wolves=[], faceless=None)
+
+
+class TestNarrator:
+    def test_takeover(self, game: Game) -> None:
+        game.act("p3", Action.NARRATOR_TAKEOVER)
+        assert game.state.narrator_id == "p3"
+        with pytest.raises(GameError):
+            game.act(ADMIN, Action.NARRATOR_TAKEOVER)
+
+    def test_admin_sets(self, game: Game) -> None:
+        game.act(ADMIN, Action.ADMIN_NARRATOR, player="p2")
+        assert game.state.narrator_id == "p2"
+        with pytest.raises(GameError):
+            game.act(ADMIN, Action.ADMIN_NARRATOR, player="nope")
+        with pytest.raises(GameError):
+            game.act("p2", Action.ADMIN_NARRATOR, player="p1")
+
+
+class TestGodMode:
+    @pytest.fixture
+    def god(self, monkeypatch: pytest.MonkeyPatch) -> Game:
+        return Game(monkeypatch, mode=Mode.GOD)
+
+    def test_waits_for_host_after_deal(self, god: Game) -> None:
+        god.ack_all()
+        god.run(100)
+        assert god.state.step is Step.DEAL
+        god.act(HOST, Action.HOST_LINE, line_id="night_start")
+        assert god.state.step is Step.NIGHT_START
+
+    def test_wrong_line_rejected(self, god: Game) -> None:
+        for line in ("wolf_open", "nope"):
+            with pytest.raises(GameError):
+                god.act(HOST, Action.HOST_LINE, line_id=line)
+
+    def test_speak_false_opens_step_immediately(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_LINE, line_id="night_start", speak=False)
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_open", speak=False)
+        timing = god.state.timers
+        assert timing.opens_at is not None
+        assert timing.opens_at - god.clock.now() == pytest.approx(balance.SFX_SECONDS["wolf_open"])
+
+    def test_timeout_applies_default_but_waits(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_NEXT)
+        god.act(HOST, Action.HOST_NEXT)
+        god.run(100)
+        assert god.state.step is Step.WOLF and god.state.timed_out
+
+    def test_next_with_unfinished_applies_default(self, god: Game) -> None:
+        god.act(HOST, Action.HOST_NEXT)
+        assert god.state.step is Step.NIGHT_START
+        assert all(p.acked for p in god.state.players)
+
+    def test_only_host_can_use(self, god: Game) -> None:
+        with pytest.raises(GameError):
+            god.act("p1", Action.HOST_NEXT)
+        with pytest.raises(GameError):
+            god.act(ADMIN, Action.HOST_NEXT)
+
+    def test_auto_mode_rejects_host_commands(self, game: Game) -> None:
+        with pytest.raises(GameError):
+            game.act(HOST, Action.HOST_NEXT)
+
+    def _to_dawn(self, god: Game, target: str | None = "p1") -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_NEXT)  # NIGHT_START
+        god.act(HOST, Action.HOST_NEXT)  # WOLF
+        god.run(8)
+        for wolf in list(god.state.actors):
+            god.act(wolf, Action.WOLF_PICK, target=target)
+        god.run(4)
+        for _ in range(6):  # WOLF_END SEER SEER_END WITCH WITCH_END DAWN
+            god.act(HOST, Action.HOST_NEXT)
+
+    def test_rollback_restores_death_and_potions(self, god: Game) -> None:
+        self._to_dawn(god)
+        god.run(10)
+        assert not god.state.player("p1").alive
+        before = god.state.step_seq
+        god.act(HOST, Action.HOST_ROLLBACK)
+        assert god.state.step_seq == before + 1
+        assert god.state.step is Step.DAWN
+        assert god.state.player("p1").alive and not god.state.announced
+
+    def test_L23_rollback_across_death_restores(self, god: Game) -> None:
+        self._to_dawn(god)
+        god.run(10)
+        god.act(HOST, Action.HOST_NEXT)
+        god.act(HOST, Action.HOST_ROLLBACK)
+        assert god.state.step is Step.LAST_WORDS and not god.state.player("p1").alive
+        god.act(HOST, Action.HOST_ROLLBACK)
+        assert god.state.step is Step.DAWN and god.state.player("p1").alive
+
+    def test_rollback_at_start_forbidden(self, god: Game) -> None:
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_ROLLBACK)
+
+    def test_set_alive(self, god: Game) -> None:
+        god.act(HOST, Action.HOST_SET_ALIVE, player="p1", alive=False)
+        assert god.state.player("p1").death_cause is DeathCause.MANUAL
+        god.act(HOST, Action.HOST_SET_ALIVE, player="p1", alive=True)
+        assert god.state.player("p1").alive
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_SET_ALIVE, player="p1", alive=True)
+
+    def test_set_alive_can_end_game(self, god: Game) -> None:
+        god.act(HOST, Action.HOST_SET_ALIVE, player="p4", alive=False)
+        god.act(HOST, Action.HOST_SET_ALIVE, player="p5", alive=False)
+        assert god.state.step is Step.END
+
+    def test_reshow_card(self, god: Game) -> None:
+        events = god.act(HOST, Action.HOST_RESHOW_CARD, player="p1")
+        assert events[0].type is EventType.CARD_RESHOWN
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_RESHOW_CARD, player="nope")
+
+    def test_skip_and_extend_speaker(self, god: Game) -> None:
+        self._to_dawn(god, target=None)
+        god.run(10)
+        god.wait_for(Step.DAY_SPEAK)
+        deadline = god.state.timers.deadline
+        assert deadline is not None
+        god.act(HOST, Action.HOST_EXTEND, s=30)
+        assert god.state.timers.deadline == deadline + 30
+        first = god.state.current_speaker
+        god.act(HOST, Action.HOST_SKIP_SPEAKER)
+        god.run(1)
+        assert god.state.current_speaker != first
+
+    def test_skip_without_speaker_forbidden(self, god: Game) -> None:
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_SKIP_SPEAKER)
+
+    def test_extend_invalid(self, god: Game) -> None:
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_EXTEND, s=-1)
+
+    def test_replay_line(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_NEXT)
+        events = god.act(HOST, Action.HOST_REPLAY, line_id="night_start")
+        assert events[0].type is EventType.NARRATE
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_REPLAY, line_id="dawn")
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_REPLAY, line_id="nope")
+
+    def test_host_line_same_as_current_is_replay(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_NEXT)
+        seq = god.state.step_seq
+        god.act(HOST, Action.HOST_LINE, line_id="night_start")
+        assert god.state.step_seq == seq
+
+    def test_pause_any_time(self, god: Game) -> None:
+        god.act(HOST, Action.ADMIN_PAUSE)
+        assert god.state.pause is not None
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_NEXT)
+
+
+class TestReplayAndRestore:
+    def test_T9_replay_matches(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night("p1", witch={"poison": "p7"})
+        game.act(ADMIN, Action.ADMIN_END)
+        rebuilt = replay(game.engine.log)
+        assert rebuilt.model_dump(mode="json") == game.state.model_dump(mode="json")
+
+    def test_replay_requires_created_first(self) -> None:
+        with pytest.raises(ValueError):
+            replay([Event(type=EventType.NARRATE, ts=0.0)])
+
+    def test_restart_restores_into_system_pause(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.act("p4", Action.WOLF_PICK, target="p1")
+        deadline = game.state.timers.deadline
+        assert deadline is not None
+        left = deadline - game.engine.log[-1].ts
+        new_clock = FakeClock(5.0)
+        engine = Engine.restore(game.engine.log, new_clock, GameRng(2))
+        assert engine.state.pause is not None
+        assert engine.state.pause.reason is PauseReason.SYSTEM
+        assert engine.state.night().wolf_picks == {"p4": "p1"}
+        engine.handle(ADMIN, Action.ADMIN_RESUME)
+        new_clock.advance(balance.RESUME_COUNTDOWN_SECONDS)
+        engine.tick()
+        assert engine.state.timers.deadline == pytest.approx(new_clock.now() + left)
+
+    def test_L24_restore_with_expired_timer_fires_after_resume(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.clock.advance(balance.NIGHT_STEP_SECONDS + 100)
+        game.engine.emit(EventType.BET_SET, player="p1", wolves=[], faceless=None)
+        game.engine.flush()
+        clock = FakeClock(5.0)
+        engine = Engine.restore(game.engine.log, clock, GameRng(2))
+        engine.schedule_resume()
+        clock.advance(balance.RESUME_COUNTDOWN_SECONDS + 1)
+        engine.tick()
+        clock.advance(1)
+        engine.tick()
+        assert engine.state.night().wolf_decided
+
+    def test_restore_ended_game_stays_ended(self, game: Game) -> None:
+        game.act(ADMIN, Action.ADMIN_END)
+        engine = Engine.restore(game.engine.log, FakeClock(), GameRng(2))
+        assert engine.state.step is Step.END and engine.state.pause is None
+
+    def test_E4_checkpoint_revert(self, game: Game) -> None:
+        point = game.engine.checkpoint()
+        length = len(game.engine.log)
+        game.act("p1", Action.DEAL_ACK)
+        game.engine.revert(point)
+        assert not game.state.player("p1").acked and len(game.engine.log) == length
+
+
+class TestInvariants:
+    def test_strict_raises(self, game: Game) -> None:
+        game.state.players[3].role = Role.VILLAGER
+        with pytest.raises(InvariantBroken):
+            game.engine.tick()
+
+    def test_non_strict_pauses(self, game: Game) -> None:
+        game.engine.strict = False
+        game.state.players[3].role = Role.VILLAGER
+        game.engine.tick()
+        assert game.state.pause is not None
+        assert game.engine.invariant_error == "faceless_count"
+
+    @pytest.mark.parametrize("problem", ["side_empty", "disguise_target", "witch_double_use"])
+    def test_each_problem_detected(self, game: Game, problem: str) -> None:
+        state = game.state
+        if problem == "side_empty":
+            state.step = Step.WOLF
+            state.player("p4").alive = False
+            state.player("p5").alive = False
+        elif problem == "disguise_target":
+            assert state.disguise is not None
+            state.disguise.target_id = "p4"
+        else:
+            state.nights.append(
+                __import__("server.state").state.NightRecord(
+                    round_no=1, witch_saved=True, witch_poison="p1"
+                )
+            )
+        with pytest.raises(InvariantBroken) as err:
+            game.engine.check_invariants()
+        assert str(err.value) == problem
+
+    def test_L18_speak_order_empty_raises(self, game: Game) -> None:
+        for player in game.state.players:
+            player.alive = False
+        game.state.step = Step.DAWN
+        game.state.announced = True
+        with pytest.raises(InvariantBroken):
+            game.engine._enter(Step.DAY_SPEAK)
+
+
+def _attach_helpers() -> None:
+    def finish_speech_to(self: Game, step: Step) -> None:
+        for _ in range(4000):
+            if self.state.step is step and not self._not_open():
+                return
+            if (
+                self.state.step in (Step.DAY_SPEAK, Step.LAST_WORDS)
+                and not self._not_open()
+                and self.state.current_speaker
+            ):
+                self.act(self.state.current_speaker, Action.SPEAK_END)
+            self.clock.advance(0.25)
+            self.engine.tick()
+        raise AssertionError(f"never reached {step}")
+
+    def finish_speech_or_to_vote(self: Game) -> None:
+        finish_speech_to(self, Step.VOTE)
+
+    Game.finish_speech_to = finish_speech_to  # type: ignore[attr-defined]
+    Game.finish_speech_or_to_vote = finish_speech_or_to_vote  # type: ignore[attr-defined]
+
+
+_attach_helpers()
