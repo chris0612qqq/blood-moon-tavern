@@ -458,6 +458,7 @@ class Engine:
             speaker=speaker,
             speak_queue=queue,
             clear_last_words=step is Step.LAST_WORDS,
+            speak_start=speaker if step is Step.DAY_SPEAK and not same_step else None,
         )
         if text:
             self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=speak)
@@ -493,7 +494,7 @@ class Engine:
         elif step is Step.LAST_WORDS:
             queue = rules.last_words_queue(state)
         else:
-            queue = rules.speak_order(state)
+            queue = rules.speak_order(state, self.rng)
             if not queue:
                 # L18：不該發生，寧可暫停也不要猜（總則 5）
                 raise InvariantBroken("speak_order_empty")
@@ -517,6 +518,9 @@ class Engine:
         state = self.state
         line_id = state.line_id
         assert line_id is not None
+        # 暫停時發言者被踢：沒有人可念，繼續後步驟會自己換下一位
+        if line_id in ("speak", "last_words") and state.current_speaker is None:
+            return
         if line_id == "tie":
             text = narration.render("tie")
         elif line_id == "exile":

@@ -6,6 +6,7 @@ import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
 import { roleName, t } from '../strings.js';
 import { actionButton, avatar, button, nameOf } from '../ui/common.js';
+import { ROLE } from '../protocol.js';
 import { roleCard } from './night.js';
 
 const NIGHT_STEPS = new Set(['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END']);
@@ -151,15 +152,84 @@ export function playersTab(server) {
   ];
 }
 
-export function s18(server) {
-  const truth = server.truth ?? {};
-  const name = (id) => (id ? nameOf(server, id) : t('s20.nobody'));
-  const title = { village: 's18.village', wolf: 's18.wolf', none: 's18.none' }[server.winner] ?? 's18.none';
+function roleHolder(server, truth, role) {
+  // 千面狼與狼人各自分開；女巫、預言家、獵人每局最多一人
+  return Object.entries(truth.roles ?? {}).find(([, r]) => r === role)?.[0] ?? null;
+}
+
+function actRow(kind, label, ...content) {
+  return h('div', { class: `act act--${kind}`, testid: `act-${kind}` },
+    h('b', { class: 'act__label' }, label),
+    h('div', {}, content));
+}
+
+function wolfRow(server, night, name) {
+  const picks = Object.entries(night.wolf_picks ?? {});
+  const detail = picks.map(([wolf, target]) => t('s18.wolfPick', {
+    who: name(wolf),
+    target: target ? name(target) : t('s8.empty'),
+  })).join('、');
+  const result = night.wolf_target ? t('s18.wolfKill', { target: name(night.wolf_target) }) : t('s18.wolfEmpty');
+  return actRow('wolf', t('s18.actWolf'), detail || t('s18.wolfNone'), ' ', result);
+}
+
+function outBefore(truth, playerId, n) {
+  const died = truth.death_rounds?.[playerId];
+  return died !== undefined && died < n;
+}
+
+function seerRow(server, truth, night, name) {
+  const seer = roleHolder(server, truth, ROLE.SEER);
+  if (!seer) return actRow('seer', t('s18.actSeer'), t('s18.noRole'));
+  if (outBefore(truth, seer, night.round_no)) return actRow('seer', t('s18.actSeer'), t('s18.outAlready', { who: name(seer) }));
+  if (!night.seer_target) return actRow('seer', t('s18.actSeer'), t('s18.seerNone', { who: name(seer) }));
+  return actRow('seer', t('s18.actSeer'), t('s18.seerAct', {
+    who: name(seer),
+    target: name(night.seer_target),
+    result: t(night.seer_is_wolf ? 'role.wolfResult' : 'role.goodResult'),
+  }));
+}
+
+function witchRow(server, truth, night, name) {
+  const witch = roleHolder(server, truth, ROLE.WITCH);
+  if (!witch) return actRow('witch', t('s18.actWitch'), t('s18.noRole'));
+  if (outBefore(truth, witch, night.round_no)) return actRow('witch', t('s18.actWitch'), t('s18.outAlready', { who: name(witch) }));
+  if (night.witch_saved) return actRow('witch', t('s18.actWitch'), t('s18.witchSave', { who: name(witch), target: name(night.wolf_target) }));
+  if (night.witch_poison) return actRow('witch', t('s18.actWitch'), t('s18.witchPoison', { who: name(witch), target: name(night.witch_poison) }));
+  return actRow('witch', t('s18.actWitch'), t('s18.witchNone', { who: name(witch) }));
+}
+
+function nightPanel(server, truth, night, name) {
+  const n = night.round_no;
+  const dead = (causes) => Object.entries(truth.death_causes ?? {})
+    .filter(([id, cause]) => truth.death_rounds?.[id] === n && causes.includes(cause));
+  const dawn = dead(['wolf', 'poison']);
+  const dayOut = dead(['vote', 'hunter', 'kick', 'manual']);
+  const label = ([id, cause]) => t('s18.deathRow', { name: name(id), cause: t(`s18.cause.${cause}`) });
+  const shots = (truth.hunter_shots ?? []).filter((shot) => shot.round_no === n);
+  const votes = (truth.votes ?? []).find((v) => v.round_no === n);
+  return h('div', { testid: `truth-night-${n}` },
+    wolfRow(server, night, name),
+    seerRow(server, truth, night, name),
+    witchRow(server, truth, night, name),
+    actRow('death', t('s18.actDeath'), dawn.length ? dawn.map(label).join('、') : t('s18.peaceful')),
+    shots.map((shot) => actRow('hunter', t('s18.actHunter'), t(shot.target ? 's18.hunterShot' : 's18.hunterHolster', {
+      who: name(shot.hunter),
+      target: shot.target ? name(shot.target) : '',
+    }))),
+    actRow('vote', t('s18.actVote'), votes?.revealed
+      ? [
+        h('div', {}, votes.exiled ? t('s18.exiled', { name: name(votes.exiled) }) : t('s18.tie')),
+        Object.entries(votes.ballots).map(([from, to]) => h('div', { class: 'hint', key: from },
+          t('s15.ballot', { from: name(from), to: to ? name(to) : t('s14.abstain') }))),
+      ]
+      : t('s18.noVote')),
+    dayOut.length ? h('p', { class: 'hint' }, t('s18.dayDeath', { names: dayOut.map(label).join('、') })) : null);
+}
+
+function truthSummary(server, truth, name) {
   const periods = truth.disguise?.periods ?? [];
   return [
-    h('h1', { class: 'center', testid: 'screen-s18' }, t(title)),
-    store.closesAt ? h('p', { class: 'center hint' }, t('s18.closing'),
-      h('div', { class: 'count', 'data-deadline': store.closesAt, 'data-clock': 'mmss' }, '')) : null,
     h('h2', {}, t('s18.roles')),
     [...server.players].sort((a, b) => a.seat - b.seat).map((p) => h('div', { class: 'list-row', key: p.id },
       avatar(server, p.id),
@@ -169,7 +239,6 @@ export function s18(server) {
         ? h('span', { class: 'hint', testid: `end-cause-${p.id}` }, t(`s18.cause.${truth.death_causes[p.id]}`))
         : null,
       h('span', { class: 'badge', testid: `end-role-${p.id}` }, roleName(p.role)))),
-    h('h2', {}, t('s18.truth')),
     h('h2', {}, t('s18.disguise')),
     periods.map((period, i) => h('p', { key: `p${i}` }, t('s18.period', { from: period.from_round, name: name(period.target_id) }))),
     (truth.disguised_messages ?? []).map((m) => h('p', { key: `f${m.id}` }, t('s18.fakeMsg', {
@@ -177,19 +246,6 @@ export function s18(server) {
       real: name(m.real_author),
       shown: m.display ? name(m.display) : t('chat.wolfName'),
     }))),
-    h('h2', {}, t('s18.nights')),
-    (truth.nights ?? []).map((n) => h('p', { key: `n${n.round_no}` }, t('s18.night', {
-      n: n.round_no,
-      wolf: name(n.wolf_target),
-      seer: name(n.seer_target),
-      saved: n.witch_saved ? '✔' : t('s20.nobody'),
-      poison: name(n.witch_poison),
-    }))),
-    h('h2', {}, t('s18.votes')),
-    (truth.votes ?? []).filter((v) => v.revealed).map((v) => h('div', { class: 'panel', key: `v${v.round_no}` },
-      h('b', {}, t('players.round', { n: v.round_no })),
-      Object.entries(v.ballots).map(([from, to]) => h('div', { class: 'hint', key: from },
-        t('s15.ballot', { from: name(from), to: to ? name(to) : t('s14.abstain') }))))),
     (truth.bets ?? []).length ? h('h2', {}, t('s18.bets')) : null,
     // SPEC A13：名次、分數、每人押了誰
     (truth.bets ?? []).map((b) => h('div', { class: 'panel', key: `b${b.player_id}`, testid: `end-bet-${b.player_id}` },
@@ -198,6 +254,32 @@ export function s18(server) {
         wolves: b.wolves.length ? b.wolves.map(name).join('、') : t('players.nobody'),
         faceless: name(b.faceless),
       })))),
+  ];
+}
+
+export function s18(server) {
+  const truth = server.truth ?? {};
+  const name = (id) => (id ? nameOf(server, id) : t('s20.nobody'));
+  const title = { village: 's18.village', wolf: 's18.wolf', none: 's18.none' }[server.winner] ?? 's18.none';
+  const nights = truth.nights ?? [];
+  const current = store.ui.truthTab ?? 'summary';
+  const tab = (id, label) => h('button', {
+    class: `tab tab--small ${current === id ? 'tab--on' : ''}`,
+    key: `truth-${id}`,
+    testid: `truth-tab-${id}`,
+    onclick: () => { store.ui.truthTab = id; changed(); },
+  }, label);
+  const night = nights.find((n) => String(n.round_no) === current);
+  return [
+    h('h1', { class: 'center', testid: 'screen-s18' }, t(title)),
+    store.closesAt ? h('p', { class: 'center hint' }, t('s18.closing'),
+      h('div', { class: 'count', 'data-deadline': store.closesAt, 'data-clock': 'mmss' }, '')) : null,
+    h('h2', {}, t('s18.truth')),
+    h('div', { class: 'truth-tabs', testid: 'truth-tabs' },
+      tab('summary', t('s18.tabSummary')),
+      nights.map((n) => tab(String(n.round_no), t('s18.tabNight', { n: n.round_no })))),
+    truth.nights_hidden ? h('p', { class: 'hint center', testid: 'truth-hidden' }, t('s18.hidden', { n: truth.max_nights })) : null,
+    night ? nightPanel(server, truth, night, name) : truthSummary(server, truth, name),
     server.is_admin ? actionButton({
       id: 'btn-end-close',
       label: t('s18.closeNow'),

@@ -66,6 +66,12 @@ class VoteRound(BaseModel):
     revealed: bool = False
 
 
+class HunterShot(BaseModel):
+    round_no: int
+    hunter: str
+    target: str | None = None
+
+
 class Bet(BaseModel):
     wolves: list[str] = Field(default_factory=list)
     faceless: str | None = None
@@ -116,6 +122,8 @@ class GameState(BaseModel):
     dawn_deaths: list[str] = Field(default_factory=list)
     hunter_pending: str | None = None
     hunter_shot_done: bool = False
+    hunter_shots: list[HunterShot] = Field(default_factory=list)
+    last_speak_start: str | None = None
     pending_last_words: list[str] = Field(default_factory=list)
     last_words_sent: list[str] = Field(default_factory=list)
     speak_queue: list[str] = Field(default_factory=list)

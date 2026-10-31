@@ -104,7 +104,6 @@ function voiceControls(server) {
       kind: 'secondary',
       run: () => send('host.line', { line_id: line, speak }),
     }) : null,
-    line ? h('p', { class: 'hint center' }, t('s20.againHint')) : null,
     nextLine
       ? actionButton({
         id: 'btn-host-next',
@@ -126,7 +125,6 @@ function lineButtons(server) {
   const suggested = nextIsReady(server) ? server.host.next_line : null;
   const speak = store.ui.speakAloud;
   return [
-    h('h2', {}, t('s20.lines')),
     button(speak ? t('s20.speakPhone') : t('s20.speakSelf'), () => {
       store.ui.speakAloud = !speak;
       changed();
@@ -203,32 +201,84 @@ function moreMenu(server) {
     button(t('common.close'), () => { store.ui.hostMoreOpen = false; changed(); }));
 }
 
-function hostGame(server) {
+function revealTab(server) {
+  const row = (server.history ?? []).find((r) => r.round_no === server.round_no);
+  const shots = server.host.hunter_shots ?? [];
+  const name = (id) => nameOf(server, id);
+  return [
+    h('h2', { testid: 'host-view-reveal' }, t('s20.round', { n: server.round_no })),
+    h('p', { testid: 'host-deaths' }, row?.deaths?.length
+      ? t('s20.deathsNow', { names: row.deaths.map(name).join('、') })
+      : t('s20.deathsNone')),
+    shots.filter((s) => s.round_no === server.round_no).map((s) => h('p', { key: `shot${s.hunter}` },
+      t(s.target ? 's20.shot' : 's20.holster', { who: name(s.hunter), target: s.target ? name(s.target) : '' }))),
+    h('h2', {}, t('s20.ballots')),
+    row?.ballots
+      ? [
+        h('p', { testid: 'host-exile' }, row.exiled ? t('s20.exiled', { name: name(row.exiled) }) : t('s20.tie')),
+        Object.entries(row.ballots).map(([from, to]) => h('div', { class: 'list-row', key: from },
+          t('s15.ballot', { from: name(from), to: to ? name(to) : t('s14.abstain') }))),
+      ]
+      : h('p', { class: 'hint' }, t('s20.noBallots')),
+  ];
+}
+
+function statusTab(server) {
   const speaking = server.step === 'DAY_SPEAK' || server.step === 'LAST_WORDS';
   return [
-    h('h1', { testid: 'screen-s20-game' }, stepName(server.step)),
-    // 天黑、閉眼這類步驟沒有人要行動，不顯示倒數，免得看起來像逾時
-    server.host.actors.length ? countdown(server, overdue(server) ? t('s20.overdue') : null) : null,
-    server.paused
-      ? actionButton({
-        id: 'btn-resume',
-        label: t('s16.resume'),
-        disabled: server.paused.resume_at ? t('s16.resuming') : null,
-        run: () => send('admin.resume'),
-      })
-      : actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', run: () => send('admin.pause') }),
-    voiceControls(server),
-    soundPanel(),
+    h('h2', { testid: 'host-view-status' }, t('s20.status')),
+    nightSummary(server),
+    server.host.players.map((row) => playerRow(server, row)),
     speaking
       ? [
         actionButton({ id: 'btn-skip-speaker', label: t('s20.skipSpeaker'), kind: 'secondary', run: () => send('host.skip_speaker') }),
         actionButton({ id: 'btn-extend', label: t('s20.extend'), kind: 'secondary', run: () => send('host.extend', { s: 30 }) }),
       ]
       : null,
-    nightSummary(server),
-    h('h2', {}, t('s20.status')),
-    server.host.players.map((row) => playerRow(server, row)),
-    lineButtons(server),
     moreMenu(server),
+  ];
+}
+
+function voiceTab(server) {
+  return [
+    h('p', { class: 'hint', testid: 'host-view-voice' }, t('s20.againHint')),
+    lineButtons(server),
+    soundPanel(),
+  ];
+}
+
+const HOST_TABS = [
+  ['reveal', 's20.tabReveal', revealTab],
+  ['status', 's20.tabStatus', statusTab],
+  ['voice', 's20.tabVoice', voiceTab],
+];
+
+function hostGame(server) {
+  const current = store.ui.hostTab ?? 'voice';
+  const view = HOST_TABS.find(([id]) => id === current)[2];
+  return [
+    // 常用操作固定在上方，切到哪個標籤都按得到
+    h('div', { class: 'host-pinned' },
+      h('div', { class: 'row' },
+        h('h1', { class: 'grow', testid: 'screen-s20-game' }, stepName(server.step)),
+        // 天黑、閉眼這類步驟沒有人要行動，不顯示倒數，免得看起來像逾時
+        server.host.actors.length ? countdown(server, overdue(server) ? t('s20.overdue') : null) : null),
+      voiceControls(server),
+      server.paused
+        ? actionButton({
+          id: 'btn-resume',
+          label: t('s16.resume'),
+          disabled: server.paused.resume_at ? t('s16.resuming') : null,
+          run: () => send('admin.resume'),
+        })
+        : actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', run: () => send('admin.pause') })),
+    h('div', { class: 'host-layout' },
+      h('div', { class: 'host-rail' }, HOST_TABS.map(([id, label]) => h('button', {
+        class: `host-tab ${current === id ? 'host-tab--on' : ''}`,
+        key: id,
+        testid: `host-tab-${id}`,
+        onclick: () => { store.ui.hostTab = id; changed(); },
+      }, t(label)))),
+      h('div', { class: 'host-content' }, view(server))),
   ];
 }

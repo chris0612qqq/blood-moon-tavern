@@ -81,3 +81,27 @@ input, select, textarea { font-size: 16px; width: 100%; padding: 10px; border-ra
 @media (orientation: landscape) and (max-height: 480px) {
   .rotate { display: flex; position: fixed; inset: 0; background: #111; z-index: 50; align-items: center; justify-content: center; }
 }
+
+/* 看真相：每夜標籤可左右滑；行動以顏色分類，一定同時有文字（UI_RULES F13） */
+.truth-tabs { display: flex; overflow-x: auto; gap: 4px; margin: 8px 0; -webkit-overflow-scrolling: touch; }
+.tab--small { flex: none; min-height: 44px; padding: 0 12px; background: #3a3a3a; border-radius: 4px; }
+.act { border-left: 5px solid #888; background: #383838; padding: 8px 10px; margin: 6px 0; border-radius: 3px; }
+.act__label { display: block; font-size: 14px; }
+.act--wolf { border-color: #d9534f; } .act--wolf .act__label { color: #f08a86; }
+.act--seer { border-color: #8d78d6; } .act--seer .act__label { color: #b6a7ee; }
+.act--witch { border-color: #3f8f5a; } .act--witch .act__label { color: #7fcf9b; }
+.act--hunter { border-color: #b98a55; } .act--hunter .act__label { color: #e0b98a; }
+.act--death { border-color: #aaa; } .act--death .act__label { color: #ddd; }
+.act--vote { border-color: #c9a24a; } .act--vote .act__label { color: #e8c872; }
+
+/* 上帝控制台：常用按鈕固定在上方，下面三個側邊標籤，不用一直往下滑 */
+.host-pinned { position: sticky; top: -12px; z-index: 5; background: #2a2a2a; padding-bottom: 6px; }
+html[data-phase="night"] .host-pinned { background: #151515; }
+.host-pinned h1 { margin: 2px 0; }
+.host-pinned button.btn { min-height: 44px; margin: 3px 0; }
+.host-pinned .count { font-size: 24px; }
+.host-layout { display: flex; gap: 8px; align-items: flex-start; }
+.host-rail { position: sticky; top: 190px; flex: none; width: 62px; display: flex; flex-direction: column; gap: 6px; }
+.host-tab { min-height: 64px; padding: 4px; font-size: 14px; background: #3a3a3a; color: #ddd; border: 1px solid #777; border-radius: 4px; }
+.host-tab--on { background: #665a33; border-color: #fc6; color: #fff; }
+.host-content { flex: 1; min-width: 0; }

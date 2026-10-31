@@ -130,9 +130,11 @@ def test_D4_15_witch_cannot_poison_self() -> None:
     assert error.value.code is ErrorCode.INVALID_TARGET
 
 
-def test_D4_22_peaceful_night_seat_1_dead_starts_at_first_alive() -> None:
+def test_D4_22_dead_seat_never_starts_speaking() -> None:
+    # v4.12 起點改為隨機；座位 1 已死時當然不會輪到他
     state = make_state(EIGHT, dead={1: DeathCause.VOTE})
-    assert rules.speak_order(state)[0] == "p2"
+    for seed in range(40):
+        assert "p1" not in rules.speak_order(state, GameRng(seed))
 
 
 def test_D4_25_seer_killed_first_night_has_last_words(game: Game) -> None:
@@ -163,7 +165,7 @@ def test_D4_28_target_dies_at_night_redraw_at_dawn(game: Game) -> None:
     game.to_wolf_step()
     game.night(good_target)
     assert game.state.disguise.target_id not in (good_target, "p4")
-    assert game.state.disguise.rounds_left == 3
+    assert game.state.disguise.rounds_left == balance.DISGUISE_PERIOD_ROUNDS
 
 
 def test_D4_29_swap_excludes_previous_target() -> None:

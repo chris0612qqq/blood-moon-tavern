@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from server import disguise, rules
+from server import balance, disguise, rules
 from server.enums import Action, Channel, Mode, Role, Step
 from server.events import Event, EventType
 from server.roles import is_wolf, night_step_pairs, roles_acting_in
@@ -254,6 +254,7 @@ def host_block(state: GameState) -> Message:
         "disguise": (
             state.disguise.model_dump(mode="json") if state.disguise is not None else None
         ),
+        "hunter_shots": [s.model_dump() for s in state.hunter_shots],
         "timers": state.timers.model_dump(),
     }
     if state.step is Step.WOLF:
@@ -300,7 +301,13 @@ def chat_message(msg: Message, viewer: Viewer, state: GameState) -> Message | No
 def truth_block(state: GameState, chat: Sequence[Message] = ()) -> Message:
     """結算的看真相（SPEC A8.7）。只在 END 之後才會被呼叫。"""
     roles = {p.id: p.role for p in state.players}
+    limit = balance.TRUTH_MAX_NIGHTS
     return {
+        "max_nights": limit,
+        "nights_hidden": state.round_no > limit,
+        # 死在第幾回合、怎麼死的，每夜標籤用（結算才公開，SPEC A2）
+        "death_rounds": {p.id: p.death_round for p in state.players if p.death_round is not None},
+        "hunter_shots": [s.model_dump() for s in state.hunter_shots if s.round_no <= limit],
         "roles": {pid: role.value for pid, role in roles.items()},
         "death_causes": {
             p.id: p.death_cause.value for p in state.players if p.death_cause is not None
@@ -308,8 +315,8 @@ def truth_block(state: GameState, chat: Sequence[Message] = ()) -> Message:
         "disguise": (
             state.disguise.model_dump(mode="json") if state.disguise is not None else None
         ),
-        "nights": [n.model_dump() for n in state.nights],
-        "votes": [v.model_dump() for v in state.votes],
+        "nights": [n.model_dump() for n in state.nights if n.round_no <= limit],
+        "votes": [v.model_dump() for v in state.votes if v.round_no <= limit],
         "disguised_messages": [
             {"id": m["id"], "real_author": m["real_author"], "display": m["display"]}
             for m in chat
