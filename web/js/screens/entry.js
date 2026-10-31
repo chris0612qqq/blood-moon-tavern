@@ -10,7 +10,8 @@ import { changed, store } from '../store.js';
 import { deviceId } from '../storage.js';
 import { t } from '../strings.js';
 import {
-  actionButton, button, clearFormError, copyText, errorLine, field, setFormError, toast,
+  actionButton, button, cleanName, clearFormError, copyText, errorLine, field, graphemeCount,
+  nameIsValid, setFormError, toast,
 } from '../ui/common.js';
 
 const form = () => store.ui.form;
@@ -52,6 +53,29 @@ export function s1() {
     }),
     button(t('common.back'), () => { store.ui.overlay = null; changed(); }),
   ];
+}
+
+/** 關房或開新房後，這支手機不再屬於上一間房：清掉結束畫面、舊連線與舊玩家身分。 */
+function resetForNewRoom() {
+  clearPlayerToken();
+  connect(null);
+  store.activeToken = null;
+  store.server = null;
+  store.ended = null;
+  store.closesAt = null;
+  store.subtitle = '';
+}
+
+/** 無管理員模式的管理員也是玩家：一定要走加入，才有座位、角色，也才當得了旁白主機。 */
+export function joinAsPlayerButton(room) {
+  return button(t('s3.toJoin'), () => {
+    store.ui.overlay = null;
+    form().join_password = room.password;
+    connect(null);
+    store.activeToken = null;
+    store.server = null;
+    changed();
+  }, { kind: 'suggest', testid: 'btn-to-join' });
 }
 
 export async function refreshAdminRoom() {
@@ -127,6 +151,7 @@ function openForm() {
           setFormError('open', res.code);
           return res;
         }
+        resetForNewRoom();
         await refreshAdminRoom();
         // 不等下一次 5 秒輪詢，否則按「去加入」會短暫退回等待頁
         await store.refreshHealth();
@@ -138,6 +163,20 @@ function openForm() {
   ];
 }
 
+function currentRoomEntry(room) {
+  const goToControl = () => {
+    store.ui.overlay = null;
+    connect(adminToken());
+    changed();
+  };
+  if (room.mode === 'god') return button(t('s3.toHost'), goToControl, { testid: 'btn-to-control' });
+  if (loadTokens().player) return null;
+  // 大廳時要加入當玩家；遊戲已開始時（手機不在）才以操作身分進去按繼續（SPEC A11）
+  return room.state === 'lobby'
+    ? joinAsPlayerButton(room)
+    : button(t('s3.toOperate'), goToControl, { testid: 'btn-to-control' });
+}
+
 function currentRoom(room) {
   return [
     h('h2', {}, t('s2.current')),
@@ -146,13 +185,7 @@ function currentRoom(room) {
       h('div', {}, `${t('s3.password')}：`, h('b', { testid: 'room-password' }, room.password)),
       h('div', { class: 'hint' }, t('s5.count', { n: room.roster?.length ?? 0, cap: room.capacity }))),
     button(t('s3.title'), () => { store.ui.overlay = 'S3'; changed(); }),
-    room.mode === 'god' || !loadTokens().player
-      ? button(t('s3.toHost'), () => {
-        store.ui.overlay = null;
-        connect(adminToken());
-        changed();
-      }, { testid: 'btn-to-control' })
-      : null,
+    currentRoomEntry(room),
     actionButton({
       id: 'btn-reopen',
       label: t('s2.reopen'),
@@ -161,6 +194,7 @@ function currentRoom(room) {
       run: async () => {
         const res = await api('/api/admin/room/reopen', { method: 'POST', auth: adminToken() });
         if (res.ok) {
+          resetForNewRoom();
           await refreshAdminRoom();
           await store.refreshHealth();
         }
@@ -176,7 +210,7 @@ function currentRoom(room) {
         const res = await api('/api/admin/room', { method: 'DELETE', auth: adminToken() });
         if (res.ok) {
           store.adminRoom = null;
-          clearPlayerToken();
+          resetForNewRoom();
           await store.refreshHealth();
           changed();
         }
@@ -211,11 +245,7 @@ export function s3() {
         connect(adminToken());
         changed();
       }, { kind: 'suggest', testid: 'btn-to-control' })
-      : button(t('s3.toJoin'), () => {
-        store.ui.overlay = null;
-        form().join_password = room.password;
-        changed();
-      }, { kind: 'suggest', testid: 'btn-to-join' }),
+      : joinAsPlayerButton(room),
   ];
 }
 
@@ -235,21 +265,30 @@ function afterJoin(data, name) {
   changed();
 }
 
+const nameField = (o = {}) => field('join_name', t('s4.name'), {
+  ...o,
+  clean: (raw) => cleanName(raw, LIMITS.NAME_GRAPHEMES),
+});
+
 function joinForm() {
   const f = form();
-  const name = (f.join_name ?? '').trim();
-  const left = LIMITS.NAME_GRAPHEMES - [...name].length;
+  const name = f.join_name ?? '';
+  const left = LIMITS.NAME_GRAPHEMES - graphemeCount(name);
+  const nameOk = nameIsValid(name);
   const pinOk = /^\d{4}$/.test(f.join_pin ?? '');
   return [
     h('h1', { testid: 'screen-s4' }, t('s4.title')),
     field('join_password', t('s4.password'), { inputmode: 'numeric', maxlength: LIMITS.ROOM_PASSWORD_DIGITS }),
-    field('join_name', t('s4.name'), { hint: left > 0 ? t('s4.nameLeft', { n: left }) : null }),
+    nameField({
+      hint: left > 0 && nameOk ? t('s4.nameLeft', { n: left }) : null,
+      error: nameOk ? null : t('s4.nameChars'),
+    }),
     field('join_pin', t('s4.pin'), { inputmode: 'numeric', maxlength: LIMITS.PIN_DIGITS, type: 'password', hint: t('s4.pinHint') }),
     errorLine('join'),
     actionButton({
       id: 'btn-join',
       label: t('s4.join'),
-      disabled: !f.join_password || !name || !pinOk ? ' ' : null,
+      disabled: !f.join_password || left > 0 || !nameOk || !pinOk ? ' ' : null,
       run: async () => {
         clearFormError('join');
         const res = await api('/api/join', {
@@ -271,10 +310,10 @@ function joinForm() {
 
 function rejoinForm() {
   const f = form();
-  const name = (f.join_name ?? '').trim();
+  const name = f.join_name ?? '';
   return [
     h('h1', { testid: 'screen-s4-rejoin' }, t('s4.rejoinTitle')),
-    field('join_name', t('s4.name')),
+    nameField(),
     field('join_pin', t('s4.pin'), { inputmode: 'numeric', maxlength: LIMITS.PIN_DIGITS, type: 'password' }),
     errorLine('rejoin'),
     actionButton({

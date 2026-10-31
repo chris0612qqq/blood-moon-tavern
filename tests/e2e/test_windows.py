@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -21,13 +22,13 @@ from tests.e2e.test_full_game import (
     has,
     join_form,
     press,
-    server_url,  # noqa: F401
+    running_server,
     store,
     wait,
 )
 
 pytestmark = pytest.mark.e2e
-GAME_LIMIT_SECONDS = 520
+GAME_LIMIT_SECONDS = 1100
 SECRET_WORDS = ("千面狼",)
 # SPEC A5.2：每個角色卡一定要講到的能力
 ROLE_KEYWORDS = {
@@ -38,6 +39,13 @@ ROLE_KEYWORDS = {
     "witch": ("解藥", "毒藥", "首夜", "同一晚"),
     "hunter": ("帶走", "不開槍", "毒死"),
 }
+
+
+@pytest.fixture
+def server_url() -> Iterator[str]:
+    # 8 個視窗都要操作又要核對，時間加速 6 倍會來不及，大家逾時就沒人死，遊戲打不完
+    with running_server(3) as url:
+        yield url
 
 
 def shot(page: Page, name: str) -> None:
@@ -167,7 +175,7 @@ def check_tabs(
         shot(page, f"{label}_game")
 
 
-def test_every_window_every_tab_and_game_log(server_url: str) -> None:  # noqa: F811
+def test_every_window_every_tab_and_game_log(server_url: str) -> None:
     errors: list[str] = []
     problems: list[str] = []
     with sync_playwright() as driver:
@@ -217,7 +225,10 @@ def test_every_window_every_tab_and_game_log(server_url: str) -> None:  # noqa: 
                 checked_rounds.add(state["round_no"])
                 if state["round_no"] >= 2:
                     verified_rounds.add(state["round_no"])
-                    for page in pages:
+                    # 核對很花時間，8 個視窗每回合都核對會讓大家逾時、遊戲永遠打不完；
+                    # 第 2 回合全部核對，之後抽第 1 個視窗，結算時每個視窗再完整核對一次
+                    checking = pages if state["round_no"] == 2 else pages[:1]
+                    for page in checking:
                         snap = f"log_round{state['round_no']}" if page is pages[0] else None
                         verify_log(page, server_url, labels[page], problems, snap)
                     if not reloaded:

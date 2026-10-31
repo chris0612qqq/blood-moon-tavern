@@ -80,12 +80,17 @@ export function s5(server) {
       h('span', { class: 'grow', testid: 'lobby-count' },
         t('s5.count', { n: players.length, cap: server.room?.capacity ?? LIMITS.MAX_PLAYERS })),
       mine ? h('b', { testid: 'my-seat' }, t('s5.you', { seat: mine.seat })) : null),
-    h('div', {}, players.map((p) => row(server, p, isAdmin))),
     button(store.audioUnlocked ? t('s5.soundOn') : t('s5.sound'), () => {
       unlockAudio(t('s5.soundTest'));
       changed();
     }, { testid: 'btn-sound' }),
-    isAdmin ? lobbyAdmin(server, players, need) : null,
+    // 無管理員模式的管理員要先加入才能開始，否則自己會變旁觀者、也沒有旁白主機
+    isAdmin && !server.me && server.room?.mode === 'auto'
+      ? h('p', { class: 'hint center', testid: 'lobby-need-join' }, t('s5.joinFirst'))
+      : null,
+    isAdmin && (server.me || server.room?.mode !== 'auto') ? lobbyAdmin(server, players, need) : null,
+    // 名單放最後：20 人時按鈕才不會被擠到要滑很遠
+    h('div', {}, players.map((p) => row(server, p, isAdmin))),
   ];
 }
 

@@ -288,6 +288,7 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
 
         # ---- 結算：死因與押注都公開 ----
         press(admin, "tab-players")
+        press(admin, "btn-players-manage")  # 危險操作收在管理裡（UI_RULES K6）
         press(admin, "btn-admin-end")
         press(admin, "dialog-confirm")
         target = villagers[1]

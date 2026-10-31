@@ -623,6 +623,17 @@ def test_start_needs_six(env: Env, client: TestClient) -> None:
     admin.close()
 
 
+def test_auto_room_always_has_a_narrator(env: Env, client: TestClient) -> None:
+    # 管理員沒加入就開始（舊流程的破口）：也要有人當旁白主機，不能整局沒聲音
+    open_room(env, client)
+    tokens = player_tokens(client, 6)
+    admin = Ws(client, env.admin_token)
+    assert admin.reply("admin.start")["t"] == "ack"
+    engine = env.service.engine
+    assert engine is not None and engine.state.narrator_id == tokens[0][1]
+    admin.close()
+
+
 def test_only_admin_starts(env: Env, client: TestClient) -> None:
     open_room(env, client)
     ws = Ws(client, player_tokens(client, 6)[0][0])

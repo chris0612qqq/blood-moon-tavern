@@ -39,6 +39,9 @@ function hostLobby(server) {
   return [
     h('h1', { testid: 'screen-s20' }, t('s20.title')),
     h('p', { testid: 'lobby-count' }, t('s5.count', { n: players.length, cap: server.room?.capacity })),
+    soundPanel(),
+    lobbyAdmin(server, players, need),
+    // 名單放最後：20 人時按鈕才不會被擠到要滑很遠
     players.map((p) => h('div', { class: 'list-row', key: p.id },
       h('span', {}, `#${p.seat}`),
       avatar(server, p.id),
@@ -48,8 +51,6 @@ function hostLobby(server) {
         store.ui.dialog = { kind: 'lobby-player', playerId: p.id };
         changed();
       }, { small: true }))),
-    soundPanel(),
-    lobbyAdmin(server, players, need),
   ];
 }
 
@@ -84,12 +85,30 @@ function playerRow(server, row) {
     h('span', { class: 'hint' }, row.alive ? playerStatus(server, row.id) : '☠'));
 }
 
+/** 女巫沒事可做時還要裝作在等，回傳建議等到的時間；不用等就回 null。 */
+export function witchWaitUntil(server, now) {
+  const host = server.host;
+  if (server.step !== 'WITCH') return null;
+  const nothingToDo = !host.actors.length || (host.witch.antidote_used && host.witch.poison_used);
+  const until = host.timers?.min_until;
+  return nothingToDo && until && now < until ? until : null;
+}
+
 /** 下一句要等目前這句念完、該做的人都做完才高亮，免得金框一按就跳走（使用者試玩回饋）。 */
 function nextIsReady(server) {
   const host = server.host;
   const opened = !server.opens_at || serverNow() >= server.opens_at;
   const done = host.timed_out || host.actors.every((id) => host.done.includes(id));
-  return opened && done;
+  return opened && done && !witchWaitUntil(server, serverNow());
+}
+
+function witchWaitHint(server) {
+  const until = witchWaitUntil(server, serverNow());
+  if (!until) return null;
+  return h('p', { class: 'hint center', testid: 'witch-wait' },
+    t('s20.witchWait'), ' ',
+    h('span', { 'data-deadline': until }, String(Math.ceil(until - serverNow()))),
+    ' ', t('s20.witchWaitUnit'));
 }
 
 function voiceControls(server) {
@@ -256,13 +275,17 @@ const HOST_TABS = [
 function hostGame(server) {
   const current = store.ui.hostTab ?? 'voice';
   const view = HOST_TABS.find(([id]) => id === current)[2];
-  return [
+  return h('div', { class: 'host-screen' },
     // 常用操作固定在上方，切到哪個標籤都按得到
     h('div', { class: 'host-pinned' },
       h('div', { class: 'row' },
         h('h1', { class: 'grow', testid: 'screen-s20-game' }, stepName(server.step)),
         // 天黑、閉眼這類步驟沒有人要行動，不顯示倒數，免得看起來像逾時
-        server.host.actors.length ? countdown(server, overdue(server) ? t('s20.overdue') : null) : null),
+        server.host.actors.length ? countdown(server, overdue(server) ? t('s20.overdue') : null) : null,
+        server.paused
+          ? null
+          : actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', small: true, run: () => send('admin.pause') })),
+      witchWaitHint(server),
       voiceControls(server),
       server.paused
         ? actionButton({
@@ -271,7 +294,7 @@ function hostGame(server) {
           disabled: server.paused.resume_at ? t('s16.resuming') : null,
           run: () => send('admin.resume'),
         })
-        : actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', run: () => send('admin.pause') })),
+        : null),
     h('div', { class: 'host-layout' },
       h('div', { class: 'host-rail' }, HOST_TABS.map(([id, label]) => h('button', {
         class: `host-tab ${current === id ? 'host-tab--on' : ''}`,
@@ -280,6 +303,5 @@ function hostGame(server) {
         onclick: () => { store.ui.hostTab = id; changed(); },
       // 兩個字一行（使用者試玩回饋）
       }, t(label).match(/.{1,2}/gu).map((part) => h('span', { class: 'host-tab__line' }, part))))),
-      h('div', { class: 'host-content' }, view(server))),
-  ];
+      h('div', { class: 'host-content' }, view(server))));
 }

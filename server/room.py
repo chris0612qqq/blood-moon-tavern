@@ -775,6 +775,11 @@ class RoomService:
         self.db.write([_player_statement(self.require_room().id, player)])
         self.broadcast_roster()
 
+    def _pick_narrator(self, room: Room, seated: list[RoomPlayer]) -> str | None:
+        """旁白主機：指定的 → 管理員 → 第一位真人。夜晚大家閉眼只能靠聲音，不能沒有人念。"""
+        humans = [p.id for p in seated if p.id not in self.bot_ids]
+        return room.narrator_id or room.admin_player_id or (humans[0] if humans else None)
+
     def _admin_start(self, conn: Connection) -> None:
         """開始遊戲（SPEC A8.1）：依當下人數發牌，人數鎖定；發牌即記入輪替（A5.7）。"""
         self._require_admin(conn.session)
@@ -788,7 +793,7 @@ class RoomService:
             raise GameError(ErrorCode.FORBIDDEN)
         wall = self.wall()
         history = self.db.load_role_history(((p.id, p.device_id, p.name) for p in seated), wall)
-        narrator = None if room.mode is Mode.GOD else (room.narrator_id or room.admin_player_id)
+        narrator = None if room.mode is Mode.GOD else self._pick_narrator(room, seated)
         engine = Engine.create(
             [(p.id, p.name) for p in seated],
             room.mode,

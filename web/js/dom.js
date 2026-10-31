@@ -29,8 +29,7 @@ function append(el, children) {
 }
 
 const EVENT_NAMES = ['onclick', 'oninput', 'onchange', 'onpointerdown', 'onpointerup',
-  'onpointercancel', 'onpointerleave', 'oncontextmenu', 'onkeydown', 'oncompositionstart',
-  'oncompositionend'];
+  'onpointercancel', 'onpointerleave', 'oncontextmenu', 'onkeydown'];
 
 function syncNode(oldNode, newNode) {
   if (oldNode.nodeType !== newNode.nodeType || oldNode.nodeName !== newNode.nodeName) {
