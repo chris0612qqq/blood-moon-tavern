@@ -51,6 +51,7 @@ def render() -> str:
             "MAX_PLAYERS": balance.MAX_PLAYERS,
             "COUNTDOWN_MIN_SECONDS": balance.COUNTDOWN_MIN_SECONDS,
             "COUNTDOWN_MAX_SECONDS": balance.COUNTDOWN_MAX_SECONDS,
+            "NARRATION_RATE": balance.NARRATION_RATE,
         },
     }
     lines = ["// 由 scripts/gen_protocol.py 產生，不要手改（CODING_RULES R5）。"]

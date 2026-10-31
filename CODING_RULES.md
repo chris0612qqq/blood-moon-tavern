@@ -87,7 +87,7 @@
 - **E12 本機資料可能消失**：裝置 ID、上次名字、聊天草稿讀不到時一律當成新使用者處理，不拋錯。
 - **E13 送出中的按鈕**：一律使用 `ActionButton` 元件，行為依 UI_RULES K1–K2（點下即鎖、收到回應或 8 秒逾時必解鎖）；錯誤碼一律對照 `strings.js` 顯示中文（SPEC C8.7）。
 - **E14 全域錯誤攔截**：`window.onerror` 與 `unhandledrejection` 記錄到記憶體中的最近 50 筆紀錄（設定頁可匯出給管理員看），畫面顯示「發生問題，重新整理即可回到遊戲」。
-- **E15 旁白不依賴完成事件**：iOS 的 `speechSynthesis` 常不觸發 `onend`；每句旁白的長度以「字數 × 0.25 秒 ÷ 語速＋1 秒」估算（ART_DIRECTION 13.1 語速 0.9；有錄音檔時用檔案實際長度），逾時或發聲失敗都視為念完，流程不得卡在等旁白。**行動倒數從估算的念完時間才開始**（SPEC A8.2）；伺服器依同一公式計算，不等手機回報。
+- **E15 旁白不依賴完成事件**：iOS 的 `speechSynthesis` 常不觸發 `onend`；每句旁白的長度以「字數 × 0.25 秒 ÷ 語速＋1 秒」估算（ART_DIRECTION 13.1 語速 0.45；有錄音檔時用檔案實際長度），逾時或發聲失敗都視為念完，流程不得卡在等旁白。**行動倒數從估算的念完時間才開始**（SPEC A8.2）；伺服器依同一公式計算，不等手機回報。
 - **E16 媒體播放失敗**：語音訊息無法播放時顯示「點一下重新播放」，不自動重試迴圈。
 
 ### 3.3 錯誤碼（伺服器與前端共用，集中定義於 `server/errors.py` 與 `web/js/errors.js`）
@@ -149,7 +149,7 @@
 - **R3 單一職責**：一個模組只做 SPEC B4 表列的事；單檔建議 ≤ 400 行、單一函式建議 ≤ 40 行，超過就拆。
 - **R4 不重複**：同樣的判斷出現第二次就抽成函式。常見要共用的有：`alive_players(state)`、`alive_wolves(state)`、`is_day_step(step)`、`eligible_targets(state, actor, action)`、`format_names(players)`。
 - **R5 協定只定義一次**：`server/protocol.py` 是訊息格式的唯一來源；`web/js/protocol.js` 由腳本 `scripts/gen_protocol.py` 產生，不手改；測試會比對兩邊一致。
-- **R6 設定集中**：所有可調數值（倒數秒數、上限、間隔）放在 `config.py`，並可被房間設定覆蓋；程式中不得出現魔術數字。功能開關集中在 `config.FEATURES`（例：`bets`、`jianghu_narration`、`ambient_sound`），新功能先關著做完、試玩後再打開；程式以 `if FEATURES[...]` 判斷，不得散落其他旗標。
+- **R6 設定集中**：所有可調數值（倒數秒數、上限、間隔）放在 `config.py`，並可被房間設定覆蓋；程式中不得出現魔術數字。功能開關集中在 `config.FEATURES`（例：`bets`、`ambient_sound`），新功能先關著做完、試玩後再打開；程式以 `if FEATURES[...]` 判斷，不得散落其他旗標。
 - **R7 前端畫面一檔一畫面**：`web/js/screens/` 內每個 S 編號一個檔案（例如 `s14_vote.js`），共用元件放 `web/js/ui/`（倒數環、選擇格、頭像、卷軸對話框）。
 
 ### 5.3 註解與文件

@@ -1,9 +1,9 @@
 // 旁白發聲。夜晚大家閉眼要靠聲音，灰盒試玩就需要，所以先做最小版；完整版在 P6。
 // 不等 onend：iOS 常不觸發，流程也不依賴它（CODING_RULES E15）。
 
+import { LIMITS } from './protocol.js';
 import { store } from './store.js';
 
-const RATE = 0.9;
 const PITCH = 0.9;
 let unlocked = false;
 
@@ -22,7 +22,7 @@ export function speak(text) {
     if (!window.speechSynthesis) return false;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-TW';
-    utterance.rate = RATE;
+    utterance.rate = LIMITS.NARRATION_RATE;
     utterance.pitch = PITCH;
     const voice = zhVoice();
     if (voice) utterance.voice = voice;

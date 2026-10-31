@@ -932,7 +932,7 @@ class TestGodMode:
         god.ack_all()
         god.act(HOST, Action.HOST_NEXT)  # NIGHT_START
         god.act(HOST, Action.HOST_NEXT)  # WOLF
-        god.run(8)
+        god.run(15)  # 語速變慢，要等旁白念完才開放
         for wolf in list(god.state.actors):
             god.act(wolf, Action.WOLF_PICK, target=target)
         god.run(4)
@@ -1018,6 +1018,40 @@ class TestGodMode:
         seq = god.state.step_seq
         god.act(HOST, Action.HOST_LINE, line_id="night_start")
         assert god.state.step_seq == seq
+
+    def test_current_line_repeats_without_advancing(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_LINE, line_id="night_start")
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_open")
+        seq = god.state.step_seq
+        for _ in range(3):  # 催狼人快一點
+            events = god.act(HOST, Action.HOST_LINE, line_id="wolf_open")
+            assert [e.type for e in events if e.type is EventType.NARRATE]
+        assert god.state.step is Step.WOLF and god.state.step_seq == seq
+
+    def test_close_line_waits_for_host_and_can_repeat(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_LINE, line_id="night_start")
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_open")
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_close")
+        god.run(120)  # 按完閉眼不會自動跳到下一個角色
+        assert god.state.step is Step.WOLF_END
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_close")
+        assert god.state.step is Step.WOLF_END
+        god.act(HOST, Action.HOST_LINE, line_id="seer_open")
+        assert god.state.step is Step.SEER
+
+    def test_replay_earlier_line_and_self_read(self, god: Game) -> None:
+        god.ack_all()
+        god.act(HOST, Action.HOST_LINE, line_id="night_start")
+        god.act(HOST, Action.HOST_LINE, line_id="wolf_open")
+        events = god.act(HOST, Action.HOST_LINE, line_id="night_start", speak=False)
+        assert events[0].data["speak"] is False and god.state.step is Step.WOLF
+
+    def test_host_line_after_end_rejected(self, god: Game) -> None:
+        god.act(ADMIN, Action.ADMIN_END)
+        with pytest.raises(GameError):
+            god.act(HOST, Action.HOST_LINE, line_id="night_start")
 
     def test_pause_any_time(self, god: Game) -> None:
         god.act(HOST, Action.ADMIN_PAUSE)

@@ -196,10 +196,6 @@ class Engine:
         """開房設定可覆蓋的倒數秒數（SPEC A2）。"""
         return self.state.settings.get(key, default)
 
-    @property
-    def jianghu(self) -> bool:
-        return bool(self.state.settings.get("jianghu", 0)) and config.FEATURES["jianghu_narration"]
-
     def forget_chat(self, count: int) -> None:
         """資料庫寫入成功後，把最近 count 個事件中的聊天移出記憶體（CODING_RULES P11）。
 
@@ -396,10 +392,10 @@ class Engine:
             actions.end_disguise(self)
         self.emit(EventType.GAME_ENDED, winner=winner.value)
         if winner is Winner.NONE:
-            line_id, text = "aborted", narration.render("aborted", self.jianghu)
+            line_id, text = "aborted", narration.render("aborted")
         else:
             line_id = "win"
-            text = narration.render("win", self.jianghu, side=narration.SIDE_NAMES[winner])
+            text = narration.render("win", side=narration.SIDE_NAMES[winner])
         self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=True)
 
     def _plan_actors(self, step: Step) -> list[str]:
@@ -507,14 +503,14 @@ class Engine:
         if step is Step.REVEAL:
             result = rules.tally(self.state.vote_round().ballots)
             if result.exiled is None:
-                return "tie", narration.render("tie", self.jianghu)
+                return "tie", narration.render("tie")
             name = self.state.player(result.exiled).name
-            return "exile", narration.render("exile", self.jianghu, name=name)
+            return "exile", narration.render("exile", name=name)
         line_id = STEP_LINES.get(step)
         if line_id is None:
             return None, ""
         params = {"name": self.state.player(speaker).name} if speaker else {}
-        return line_id, narration.render(line_id, self.jianghu, **params)
+        return line_id, narration.render(line_id, **params)
 
     def narrate_current(self) -> None:
         """重念目前這句。"""
@@ -522,11 +518,11 @@ class Engine:
         line_id = state.line_id
         assert line_id is not None
         if line_id == "tie":
-            text = narration.render("tie", self.jianghu)
+            text = narration.render("tie")
         elif line_id == "exile":
             exiled = state.vote_round().exiled
             assert exiled is not None
-            text = narration.render("exile", self.jianghu, name=state.player(exiled).name)
+            text = narration.render("exile", name=state.player(exiled).name)
         else:
             _, text = self._line_for(LINE_STEPS[line_id], state.current_speaker)
         self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=True)
@@ -547,13 +543,11 @@ class Engine:
         ]
         if entries:
             line_id = "deaths"
-            text = narration.render(
-                "deaths", self.jianghu, names_with_roles=narration.names_with_roles(entries)
-            )
+            text = narration.render("deaths", names_with_roles=narration.names_with_roles(entries))
             show = len(entries) * balance.REVEAL_DEATH_EACH_SECONDS
         else:
             line_id = "peaceful"
-            text = narration.render("peaceful", self.jianghu)
+            text = narration.render("peaceful")
             show = balance.PEACEFUL_NIGHT_SECONDS
         auto = state.mode is Mode.AUTO
         self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=auto)

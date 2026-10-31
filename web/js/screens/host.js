@@ -64,8 +64,46 @@ function playerRow(server, row) {
     h('span', { class: 'hint' }, row.alive ? playerStatus(server, row.id) : '☠'));
 }
 
+/** 下一句要等目前這句念完、該做的人都做完才高亮，免得金框一按就跳走（使用者試玩回饋）。 */
+function nextIsReady(server) {
+  const host = server.host;
+  const opened = !server.opens_at || serverNow() >= server.opens_at;
+  const done = host.timed_out || host.actors.every((id) => host.done.includes(id));
+  return opened && done;
+}
+
+function voiceControls(server) {
+  const line = server.line_id;
+  const nextLine = server.host.next_line;
+  const speak = store.ui.speakAloud;
+  const label = LINE_ORDER.includes(line) ? t('s20.again', { line: lineLabel(line) }) : t('s20.againPlain');
+  return [
+    line ? actionButton({
+      id: 'line-current',
+      label,
+      kind: 'secondary',
+      run: () => send('host.line', { line_id: line, speak }),
+    }) : null,
+    line ? h('p', { class: 'hint center' }, t('s20.againHint')) : null,
+    nextLine
+      ? actionButton({
+        id: 'btn-host-next',
+        label: t('s20.nextLine', { line: lineLabel(nextLine) }),
+        kind: nextIsReady(server) ? 'suggest' : 'secondary',
+        confirm: unfinishedWarning(server),
+        run: () => send('host.line', { line_id: nextLine, speak }),
+      })
+      : actionButton({
+        id: 'btn-host-skip',
+        label: t('s20.next'),
+        kind: 'secondary',
+        run: () => send('host.next'),
+      }),
+  ];
+}
+
 function lineButtons(server) {
-  const suggested = server.host.next_line;
+  const suggested = nextIsReady(server) ? server.host.next_line : null;
   const speak = store.ui.speakAloud;
   return [
     h('h2', {}, t('s20.lines')),
@@ -80,7 +118,7 @@ function lineButtons(server) {
           id: `line-${line}`,
           label: lineLabel(line),
           kind: isNext ? 'suggest' : 'secondary',
-          confirm: isNext ? unfinishedWarning(server) : null,
+          confirm: line === server.host.next_line ? unfinishedWarning(server) : null,
           run: () => send('host.line', { line_id: line, speak }),
         }));
     })),
@@ -149,7 +187,8 @@ function hostGame(server) {
   const speaking = server.step === 'DAY_SPEAK' || server.step === 'LAST_WORDS';
   return [
     h('h1', { testid: 'screen-s20-game' }, stepName(server.step)),
-    countdown(server, overdue(server) ? t('s20.overdue') : null),
+    // 天黑、閉眼這類步驟沒有人要行動，不顯示倒數，免得看起來像逾時
+    server.host.actors.length ? countdown(server, overdue(server) ? t('s20.overdue') : null) : null,
     server.paused
       ? actionButton({
         id: 'btn-resume',
@@ -158,13 +197,7 @@ function hostGame(server) {
         run: () => send('admin.resume'),
       })
       : actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', run: () => send('admin.pause') }),
-    actionButton({
-      id: 'btn-host-next',
-      label: t('s20.next'),
-      kind: server.host.next_line ? 'suggest' : 'secondary',
-      confirm: unfinishedWarning(server),
-      run: () => send('host.next'),
-    }),
+    voiceControls(server),
     speaking
       ? [
         actionButton({ id: 'btn-skip-speaker', label: t('s20.skipSpeaker'), kind: 'secondary', run: () => send('host.skip_speaker') }),

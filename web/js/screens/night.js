@@ -133,6 +133,7 @@ export function s8(server) {
   return [
     h('h1', { testid: 'screen-s8' }, t('s8.title')),
     countdown(server, t('s8.timeout')),
+    h('p', { class: 'center', testid: 'wolf-one-kill' }, t('s8.oneKill')),
     allies ? h('p', {}, t('s8.allies', { names: allies })) : null,
     pickGrid({
       ids: me.eligible_targets ?? [],

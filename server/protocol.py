@@ -224,13 +224,11 @@ class OpenRoom(_Strict):
     @field_validator("settings")
     @classmethod
     def _clamp(cls, value: dict[str, int]) -> dict[str, int]:
-        # UI_RULES 2.2：每項 10–300 秒；jianghu 是開關，不是秒數
+        # UI_RULES 2.2：每項 10–300 秒
         allowed = {"night", "speak", "vote", "hunter", "last_words", "deal"}
         out: dict[str, int] = {}
         for key, seconds in value.items():
-            if key == "jianghu":
-                out[key] = 1 if seconds else 0
-            elif key in allowed:
+            if key in allowed:
                 low, high = balance.COUNTDOWN_MIN_SECONDS, balance.COUNTDOWN_MAX_SECONDS
                 out[key] = max(low, min(high, seconds))
             else:

@@ -16,41 +16,37 @@ ROLE_NAMES: Final[dict[Role, str]] = {
 }
 SIDE_NAMES: Final[dict[Winner, str]] = {
     Winner.VILLAGE: "好人陣營",
-    Winner.WOLF: "暗夜陣營",
+    Winner.WOLF: "狼人陣營",
 }
 
-# line_id → (標準, 江湖)
-LINES: Final[dict[str, tuple[str, str]]] = {
-    "night_start": ("天黑請閉眼", "血月東升，諸位閉目歇息"),
-    "wolf_open": ("狼人請睜眼，請選擇今晚要殺的人", "噬月狼群，現身吧——今夜，取誰性命？"),
-    "wolf_close": ("狼人請閉眼", "狼群隱入黑暗"),
-    "seer_open": ("預言家請睜眼，請選擇要查驗的人", "觀星者，睜開你的慧眼"),
-    "seer_close": ("預言家請閉眼", "天機已現，閉眼"),
-    "witch_open": ("女巫請睜眼", "毒谷傳人，你的藥箱在此"),
-    "witch_close": ("女巫請閉眼", "藥香散去"),
-    "dawn": ("天亮請睜眼", "雞鳴破曉，眾人醒來"),
-    "peaceful": ("昨晚是平安夜", "昨夜風平浪靜，無人遇害"),
-    "deaths": ("昨晚死亡的是 {names_with_roles}", "昨夜，{names_with_roles} 永遠閉上了眼"),
-    "hunter": ("獵人請發動技能", "神射手，拉開你最後一弓"),
-    "hunter_shot": (
-        "獵人 {name} 帶走了 {target}（{role}）",
-        "神射手 {name} 一箭帶走了 {target}（{role}）",
-    ),
-    "hunter_holster": ("獵人 {name} 選擇不開槍", "神射手 {name} 收起了弓"),
-    "last_words": ("請 {name} 發表遺言", "{name}，留下你最後的話吧"),
-    "speak": ("請 {name} 發言", "{name}，請說"),
-    "vote": ("請開始投票", "擊鼓！眾人投票"),
-    "exile": ("{name} 被放逐", "{name} 被逐出酒館"),
-    "tie": ("平票，無人出局", "眾說紛紜，無人出局"),
-    "win": ("遊戲結束，{side}獲勝", "塵埃落定——{side}笑到最後"),
-    "aborted": ("遊戲中途結束", "散場——今夜到此為止"),
+# 白話，角色一律叫本名，閉著眼也聽得懂（使用者試玩回饋，SPEC v4.10）
+LINES: Final[dict[str, str]] = {
+    "night_start": "天黑請閉眼",
+    "wolf_open": "狼人請睜眼，請選擇今晚要殺的人",
+    "wolf_close": "狼人請閉眼",
+    "seer_open": "預言家請睜眼，請選擇要查驗的人",
+    "seer_close": "預言家請閉眼",
+    "witch_open": "女巫請睜眼",
+    "witch_close": "女巫請閉眼",
+    "dawn": "天亮請睜眼",
+    "peaceful": "昨晚是平安夜",
+    "deaths": "昨晚死亡的是 {names_with_roles}",
+    "hunter": "獵人請發動技能",
+    "hunter_shot": "獵人 {name} 帶走了 {target}（{role}）",
+    "hunter_holster": "獵人 {name} 選擇不開槍",
+    "last_words": "請 {name} 發表遺言",
+    "speak": "請 {name} 發言",
+    "vote": "請開始投票",
+    "exile": "{name} 被放逐",
+    "tie": "平票，無人出局",
+    "win": "遊戲結束，{side}獲勝",
+    "aborted": "遊戲中途結束",
 }
 
 
-def render(line_id: str, jianghu: bool = False, **params: str) -> str:
+def render(line_id: str, **params: str) -> str:
     """回傳台詞文字。未知 line_id 拋 KeyError。"""
-    standard, flavored = LINES[line_id]
-    return (flavored if jianghu else standard).format(**params)
+    return LINES[line_id].format(**params)
 
 
 def names_with_roles(entries: list[tuple[str, Role]]) -> str:

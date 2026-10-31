@@ -158,8 +158,15 @@ function draw() {
 }
 
 // 單一時鐘（UI_RULES Q5、U6）：每影格以 deadline − 校正後的伺服器時間重算，不用計數器
+let lastHostRedraw = 0;
+
 function clockFrame() {
   const now = serverNow();
+  // 上帝控制台的「下一句可以按了」會隨時間變，每秒重畫一次
+  if (store.server?.host && performance.now() - lastHostRedraw > 1000) {
+    lastHostRedraw = performance.now();
+    changed();
+  }
   for (const el of document.querySelectorAll('[data-deadline]')) {
     const opens = Number(el.dataset.opens);
     let text;
