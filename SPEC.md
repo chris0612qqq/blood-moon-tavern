@@ -370,7 +370,7 @@ Cloudflare quick tunnel ──▶ 你家電腦：FastAPI（uvicorn, 127.0.0.1:87
     img/ui/  img/roles/（自繪 SVG 預設）  fonts/  audio/
   server/
     main.py config.py balance.py enums.py errors.py protocol.py state.py events.py rules.py engine.py actions.py modes.py
-    disguise.py views.py room.py presence.py db.py auth.py media.py narration.py timers.py rng.py clock.py
+    disguise.py views.py room.py hub.py presence.py db.py auth.py media.py narration.py timers.py rng.py clock.py
     setup_admin.py  roles/（每個角色一檔：wolf faceless villager seer witch hunter）  migrations/  dev/（僅 DEV_MODE：bots.py 等）
   scripts/ setup.bat start.bat preflight.bat publish_url.py keep_awake.py gen_protocol.py
   VERSION  requirements.lock

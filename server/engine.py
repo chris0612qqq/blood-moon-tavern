@@ -167,6 +167,11 @@ class Engine:
         engine.flush()
         return engine
 
+    def load_history(self, snapshots: Sequence[tuple[float, dict[str, Any]]]) -> None:
+        """重啟後把快照放回，回上一步才接得上（CODING_RULES G3）。"""
+        if self.state.mode is Mode.GOD:
+            self._history.extend(snapshots)
+
     # ---- 共用工具 ----
 
     @property
@@ -194,6 +199,14 @@ class Engine:
     @property
     def jianghu(self) -> bool:
         return bool(self.state.settings.get("jianghu", 0)) and config.FEATURES["jianghu_narration"]
+
+    def forget_chat(self, count: int) -> None:
+        """資料庫寫入成功後，把最近 count 個事件中的聊天移出記憶體（CODING_RULES P11）。
+
+        聊天不影響重播以外的邏輯，留著只會讓記憶體隨訊息數無限成長。
+        """
+        cut = len(self.log) - count
+        self.log[cut:] = [e for e in self.log[cut:] if e.type is not EventType.CHAT_SENT]
 
     def checkpoint(self) -> tuple[GameState, int, int]:
         """處理意圖前的保存點；寫入失敗時用 revert 復原（CODING_RULES E4）。"""

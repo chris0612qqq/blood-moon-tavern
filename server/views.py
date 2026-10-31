@@ -321,8 +321,16 @@ def truth_block(state: GameState, chat: Sequence[Message] = ()) -> Message:
     }
 
 
-def build(state: GameState, viewer: Viewer, chat: Sequence[Message] = ()) -> Message:
-    """該觀看者的完整可見狀態（SPEC B4）：連線、重連、回上一步時送。"""
+def build(
+    state: GameState,
+    viewer: Viewer,
+    chat: Sequence[Message] = (),
+    truth_chat: Sequence[Message] | None = None,
+) -> Message:
+    """該觀看者的完整可見狀態（SPEC B4）：連線、重連、回上一步時送。
+
+    `chat` 是最近的聊天；`truth_chat` 是全部假扮訊息（看真相用，可能比 chat 舊）。
+    """
     out: Message = {"t": "state", **public_block(state), **_timers(state, viewer)}
     me = _me(state, viewer)
     if me is not None:
@@ -330,7 +338,7 @@ def build(state: GameState, viewer: Viewer, chat: Sequence[Message] = ()) -> Mes
     if viewer.kind is ViewerKind.HOST:
         out["host"] = host_block(state)
     if _ended(state):
-        out["truth"] = truth_block(state, chat)
+        out["truth"] = truth_block(state, chat if truth_chat is None else truth_chat)
     out["chat"] = [m for m in (chat_message(c, viewer, state) for c in chat) if m is not None]
     return out
 
@@ -378,7 +386,7 @@ def public_messages(event: Event, state: GameState) -> list[Message]:
             assert state.pause is not None
             return [{"t": "paused", "reason": state.pause.reason.value, "resume_at": data["at"]}]
         case EventType.NARRATOR_SET:
-            return [{"t": "roster.narrator", "player": data["player"]}]
+            return [narrator_message(data["player"])]
         case _:
             return []
 
@@ -447,6 +455,52 @@ def filter_event(
     if _full_state_event(event):
         return private_messages(event, viewer, state, chat)
     return public_messages(event, state) + private_messages(event, viewer, state, chat)
+
+
+def lobby_chat_message(msg: Message, viewer: Viewer) -> Message:
+    """大廳聊天：沒有秘密，也不會有假扮訊息（SPEC A9）。"""
+    out: Message = {
+        "t": "chat.msg",
+        "id": msg["id"],
+        "channel": msg["channel"],
+        "display_player_id": msg["display"],
+        "is_host_msg": msg["is_host"],
+        "kind": msg["kind"],
+        "content": msg["content"],
+        "media_id": msg["media_id"],
+        "ts": msg["ts"],
+    }
+    if viewer.player_id is not None and msg["real_author"] == viewer.player_id:
+        out["mine"] = True
+    return out
+
+
+def lobby_state(
+    room: Message | None,
+    roster: Sequence[Message],
+    viewer: Viewer,
+    chat: Sequence[Message],
+    is_admin: bool,
+) -> Message:
+    """大廳或無房間時的完整狀態（SPEC A4）。"""
+    return {
+        "t": "state",
+        "phase": "lobby",
+        "room": room,
+        "roster": list(roster),
+        "me": {"id": viewer.player_id} if viewer.player_id else None,
+        "is_admin": is_admin,
+        "chat": [lobby_chat_message(m, viewer) for m in chat],
+    }
+
+
+def roster_message(rows: Sequence[Message]) -> Message:
+    """玩家名單更新。名單不含角色，只有公開資訊（SPEC C3）。"""
+    return {"t": "roster", "players": list(rows)}
+
+
+def narrator_message(player_id: str | None) -> Message:
+    return {"t": "roster.narrator", "player": player_id}
 
 
 def viewer_for_mode(mode: Mode, player_id: str | None, is_host: bool) -> Viewer:
