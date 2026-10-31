@@ -304,6 +304,58 @@ def test_god_mode_full_game(server_url: str) -> None:
     run_game(server_url, "god")
 
 
+# 無頭瀏覽器沒有語音引擎：換成記錄呼叫的假物件，驗證「該念的時候有叫它念」
+FAKE_SPEECH_JS = """
+window.__spoken = [];
+Object.defineProperty(window, 'speechSynthesis', { value: {
+  speaking: false, pending: false,
+  getVoices: () => [],
+  resume() {},
+  cancel() {},
+  addEventListener() {},
+  speak(u) {
+    window.__spoken.push({ text: u.text, rate: u.rate, volume: u.volume });
+    if (u.onstart) u.onstart();
+  },
+} });
+"""
+
+
+def test_narrator_speaks_on_host_phone_after_first_tap(server_url: str) -> None:
+    """試玩回饋：iPhone 上點語音沒聲音。第一次點擊要解鎖，之後伺服器叫念才念得出來。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        context = browser.new_context(viewport=MOBILE)
+        context.add_init_script(FAKE_SPEECH_JS)
+        host = context.new_page()
+        host.goto(server_url)
+        spoken = lambda: host.evaluate("window.__spoken")  # noqa: E731
+        admin_open_room(host, "god")
+        # 第一次點擊就解鎖：無聲（音量 0），不必等使用者找到測試鈕
+        first = spoken()[0]
+        assert first["volume"] == 0
+        press(host, "btn-to-control")
+        wait(host, "screen-s20")
+        wait(host, "btn-sound-test")  # 控制台一定有測試聲音的入口
+        press(host, "btn-sound-test")
+        host.wait_for_function("window.__spoken.some((s) => s.volume === 1)")
+        assert "voice-status" in host.content()
+        press(host, "btn-add-bots")
+        host.wait_for_function("window.__bmt.server.roster.length >= 6")
+        press(host, "btn-start")
+        press(host, "dialog-confirm")
+        wait(host, "btn-host-next")
+        host.wait_for_function("window.__bmt.server.host.next_line === 'night_start'")
+        press(host, "btn-host-next")
+        host.wait_for_timeout(250)
+        if has(host, "dialog-confirm"):
+            press(host, "dialog-confirm")
+        host.wait_for_function("window.__spoken.some((s) => s.text === '天黑請閉眼')")
+        said = next(s for s in spoken() if s["text"] == "天黑請閉眼")
+        assert said["rate"] == pytest.approx(0.45) and said["volume"] == 1
+        browser.close()
+
+
 def _spoken(url: str, line: str) -> int:
     events = httpx.get(f"{url}/dev/state").json()["events"]
     return sum(e["type"] == "narrate" and e["data"]["line_id"] == line for e in events)
