@@ -395,8 +395,12 @@ class Engine:
         if state.disguise is not None and state.disguise.target_id is not None:
             actions.end_disguise(self)
         self.emit(EventType.GAME_ENDED, winner=winner.value)
-        text = narration.render("win", self.jianghu, side=narration.SIDE_NAMES[winner])
-        self.emit(EventType.NARRATE, line_id="win", text=text, speak=True)
+        if winner is Winner.NONE:
+            line_id, text = "aborted", narration.render("aborted", self.jianghu)
+        else:
+            line_id = "win"
+            text = narration.render("win", self.jianghu, side=narration.SIDE_NAMES[winner])
+        self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=True)
 
     def _plan_actors(self, step: Step) -> list[str]:
         state = self.state

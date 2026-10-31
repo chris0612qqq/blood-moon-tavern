@@ -50,7 +50,7 @@ def build_default_service() -> RoomService:
     return RoomService(Database(), store)
 
 
-def create_app(service: RoomService | None = None) -> FastAPI:
+def create_app(service: RoomService | None = None, dev: bool = config.DEV_MODE) -> FastAPI:
     """建立 FastAPI app。測試可注入 service（假時鐘、暫存資料夾）。"""
 
     @asynccontextmanager
@@ -64,6 +64,7 @@ def create_app(service: RoomService | None = None) -> FastAPI:
             await svc.stop()
 
     app = FastAPI(title="血月酒館", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app.state.dev = dev
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(config.ALLOWED_ORIGINS),
@@ -75,9 +76,24 @@ def create_app(service: RoomService | None = None) -> FastAPI:
     _install_no_store(app)
     _install_routes(app)
     _install_socket(app)
+    if dev:
+        _install_dev_routes(app)  # CODING_RULES S8：正式環境沒有這些路由
     if config.WEB_DIR.is_dir():
         app.mount("/", StaticFiles(directory=config.WEB_DIR, html=True), name="web")
     return app
+
+
+def _install_dev_routes(app: FastAPI) -> None:
+    @app.post("/dev/bots")
+    async def add_bots(request: Request, count: int) -> dict[str, list[str]]:
+        _require_admin(request)
+        service = _service(request)
+        return {"added": await service.submit(lambda: service.add_bots(count))}
+
+    @app.get("/dev/state")
+    async def dev_state(request: Request) -> dict[str, Any]:
+        service = _service(request)
+        return await service.submit(service.dev_state)
 
 
 def _service(request: Request) -> RoomService:
@@ -131,6 +147,9 @@ def _install_no_store(app: FastAPI) -> None:
         # CODING_RULES N19：API 不得被快取；簽章媒體除外，本來就有短效網址
         if path.startswith("/api") and not path.startswith(("/api/media/", "/api/asset/")):
             response.headers["Cache-Control"] = "no-store"
+        elif not path.startswith("/api"):
+            # 畫面檔還沒有版本號（CODING_RULES N19 在 P7 補），先要求每次確認，改版才不會讀到舊檔
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
 
@@ -150,6 +169,7 @@ def _install_public_routes(app: FastAPI) -> None:
             "ok": True,
             "version": config.VERSION,
             "protocol": config.PROTOCOL_VERSION,
+            "dev": request.app.state.dev,
             "room": (
                 {"state": room.state, "name": room.name, "mode": room.mode.value} if room else None
             ),

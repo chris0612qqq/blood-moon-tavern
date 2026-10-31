@@ -1,0 +1,225 @@
+// S6 發牌、S7 夜晚旁觀、S8 狼人、S9 預言家、S10 女巫、S19 千面狼面板。
+import { h } from '../dom.js';
+import { send } from '../net.js';
+import { store, changed } from '../store.js';
+import { errorText, roleName, roleStory, stepName, t } from '../strings.js';
+import { actionButton, countdown, nameOf, pickGrid, selection, toast } from '../ui/common.js';
+
+/** 角色卡：長按才顯示，放開蓋回；秘密只在顯示時才進 DOM（CODING_RULES V18、V19）。 */
+export function roleCard(server, extra = null) {
+  const me = server.me;
+  const release = () => { store.ui.cardHeld = false; changed(); };
+  const held = store.ui.cardHeld;
+  return h('div', {
+    class: 'card',
+    testid: 'role-card',
+    onpointerdown: (e) => {
+      e.preventDefault();
+      store.ui.cardHeld = true;
+      changed();
+    },
+    onpointerup: release,
+    onpointercancel: release,
+    onpointerleave: release,
+    oncontextmenu: (e) => e.preventDefault(),
+  }, held
+    ? [
+      h('div', { class: 'big', testid: 'role-name' }, roleName(me.role)),
+      h('p', {}, roleStory(me.role)),
+      extra,
+    ]
+    : t('s6.hold'));
+}
+
+function packLine(server) {
+  const pack = server.me.wolf_pack?.pack;
+  if (!pack) return null;
+  const names = pack.filter((id) => id !== server.me.id).map((id) => nameOf(server, id)).join('、');
+  return h('p', {}, t('s6.pack', { names }));
+}
+
+export function s6(server) {
+  const me = server.me;
+  const { done = 0, total = 0 } = server.progress ?? {};
+  const extra = [
+    packLine(server),
+    me.disguise_info ? h('p', {}, t('s6.first', { name: nameOf(server, me.disguise_info.target) })) : null,
+  ];
+  return [
+    h('h1', { testid: 'screen-s6' }, t('s6.title')),
+    countdown(server, t('s6.timeout')),
+    roleCard(server, extra),
+    h('p', { class: 'center', testid: 'deal-progress' }, t('s6.progress', { done, total })),
+    me.done
+      ? h('p', { class: 'center' }, t('pending'))
+      : actionButton({ id: 'btn-seen', label: t('s6.seen'), run: () => send('deal.ack') }),
+  ];
+}
+
+export function s7(server) {
+  const plan = server.night_plan ?? [];
+  const current = plan.includes(server.step) ? stepName(server.step) : null;
+  return h('div', { class: 'center' },
+    h('h1', { testid: 'screen-s7' }, t('s7.title')),
+    current ? h('p', { testid: 'night-current' }, t('s7.current', { step: current })) : null,
+    h('p', { class: 'hint' }, plan.map(stepName).join(' → ')));
+}
+
+function wolfStatus(server, info) {
+  const me = server.me;
+  const picks = info.picks ?? {};
+  if (info.decided) {
+    return info.decided_target
+      ? t('s8.confirmed', { target: nameOf(server, info.decided_target) })
+      : t('s8.confirmedEmpty');
+  }
+  if (info.confirming_until) {
+    const target = picks[me.id];
+    return t('s8.confirming', { target: target ? nameOf(server, target) : t('s8.empty') });
+  }
+  const parts = Object.entries(picks).map(([wolf, target]) => t('s8.picked', {
+    who: nameOf(server, wolf),
+    target: target ? nameOf(server, target) : t('s8.empty'),
+  }));
+  return parts.length ? t('s8.disagree', { detail: parts.join('、') }) : t('s8.title');
+}
+
+export function s8(server) {
+  const me = server.me;
+  const info = me.wolf_pack;
+  const picks = info.picks ?? {};
+  const allies = info.pack.filter((id) => id !== me.id).map((id) => nameOf(server, id)).join('、');
+  const marks = {};
+  for (const [wolf, target] of Object.entries(picks)) {
+    if (wolf === me.id) continue;
+    const key = target ?? 'none';
+    marks[key] = [marks[key], nameOf(server, wolf)].filter(Boolean).join(' ');
+  }
+  const mine = me.id in picks ? (picks[me.id] ?? 'none') : undefined;
+  // 狼人例外：不用按確認，全員一致滿 3 秒自動確認（SPEC C8.1）
+  const pick = (value) => {
+    if (info.decided) return;
+    const fields = value === mine ? { clear: true } : { target: value === 'none' ? null : value };
+    // 狼人沒有送出鈕，失敗要另外告訴他，否則會以為沒按到（UI_RULES F6）
+    send('wolf.pick', fields).then((result) => {
+      if (!result.ok) toast('error.raw', { text: errorText(result.code) });
+    });
+  };
+  return [
+    h('h1', { testid: 'screen-s8' }, t('s8.title')),
+    countdown(server, t('s8.timeout')),
+    allies ? h('p', {}, t('s8.allies', { names: allies })) : null,
+    pickGrid({
+      ids: me.eligible_targets ?? [],
+      server,
+      selected: mine,
+      marks,
+      onPick: pick,
+      extra: [{ value: 'none', label: t('s8.empty') }],
+    }),
+    h('div', { class: 'panel', testid: 'wolf-status' }, wolfStatus(server, info)),
+  ];
+}
+
+export function s9(server) {
+  const me = server.me;
+  const checks = me.seer_info.checks;
+  const today = checks.find((c) => c.round_no === server.round_no);
+  if (today) {
+    const key = today.is_wolf ? 's9.wolf' : 's9.good';
+    return [
+      h('h1', { class: 'center', testid: 'seer-result' }, t(key, { name: nameOf(server, today.target) })),
+      me.done
+        ? h('p', { class: 'center' }, t('pending'))
+        : actionButton({ id: 'btn-seer-ok', label: t('s9.ok'), run: () => send('seer.ok') }),
+    ];
+  }
+  const sel = selection('seer');
+  return [
+    h('h1', { testid: 'screen-s9' }, t('s9.title')),
+    countdown(server, t('s9.timeout')),
+    pickGrid({ ids: me.eligible_targets ?? [], server, selected: sel.value, onPick: sel.set }),
+    sel.value
+      ? actionButton({
+        id: 'btn-seer-check',
+        label: t('s9.check', { name: nameOf(server, sel.value) }),
+        run: () => send('seer.check', { target: sel.value }),
+      })
+      : null,
+  ];
+}
+
+export function s10(server) {
+  const me = server.me;
+  const info = me.witch_info;
+  const potionState = (used) => t(used ? 's10.used' : 's10.left');
+  const head = [
+    h('h1', { testid: 'screen-s10' }, stepName(server.step)),
+    countdown(server, t('s10.timeout')),
+    h('p', { class: 'center' }, t('s10.potions', {
+      antidote: potionState(info.antidote_used),
+      poison: potionState(info.poison_used),
+    })),
+  ];
+  if (info.acted || me.done) return [...head, h('p', { class: 'center', testid: 'witch-acted' }, t('s10.acted'))];
+  if (info.antidote_used && info.poison_used) {
+    return [...head, h('p', { class: 'big center', testid: 'witch-none' }, t('s10.none'))];
+  }
+  const stageKey = `stage@${server.step_seq}`;
+  const stage = store.ui.witchStage[stageKey] ?? (info.antidote_used ? 'poison' : 'save');
+  if (stage === 'save') return [...head, witchSave(server, info, stageKey)];
+  return [...head, witchPoison(server, me, info)];
+}
+
+function witchSave(server, info, stageKey) {
+  const toPoison = () => { store.ui.witchStage[stageKey] = 'poison'; changed(); };
+  const skip = () => (info.can_poison
+    ? (toPoison(), Promise.resolve({ ok: true }))
+    : send('witch.act', {}));
+  if (!info.attacked) {
+    return [
+      h('p', { class: 'big center', testid: 'witch-safe' }, t('s10.safe')),
+      actionButton({ id: 'btn-witch-next', label: t('s10.next'), run: skip }),
+    ];
+  }
+  const name = nameOf(server, info.attacked);
+  return [
+    h('p', { class: 'big center', testid: 'witch-attacked' }, t('s10.attacked', { name })),
+    info.can_save
+      ? actionButton({ id: 'btn-witch-save', label: t('s10.save', { name }), run: () => send('witch.act', { save: true }) })
+      : h('p', { class: 'center hint' }, t('s10.noSelf')),
+    actionButton({ id: 'btn-witch-nosave', label: t('s10.noSave'), kind: 'secondary', run: skip }),
+  ];
+}
+
+function witchPoison(server, me, info) {
+  if (!info.can_poison) {
+    return actionButton({ id: 'btn-witch-done', label: t('s10.next'), run: () => send('witch.act', {}) });
+  }
+  const sel = selection('poison');
+  return [
+    h('p', { class: 'center' }, t('s10.poisonTitle')),
+    pickGrid({ ids: me.eligible_targets ?? [], server, selected: sel.value, onPick: sel.set }),
+    sel.value
+      ? actionButton({
+        id: 'btn-witch-poison',
+        label: t('s10.poison', { name: nameOf(server, sel.value) }),
+        kind: 'danger',
+        run: () => send('witch.act', { poison: sel.value }),
+      })
+      : null,
+    actionButton({ id: 'btn-witch-nopoison', label: t('s10.noPoison'), kind: 'secondary', run: () => send('witch.act', {}) }),
+  ];
+}
+
+/** S19 千面狼面板：遊戲分頁頂端小卡。狼人步驟不顯示，避免被旁邊的狼瞄到（SPEC C8.3）。 */
+export function s19(server) {
+  const info = server.me?.disguise_info;
+  // 發牌時對象只在按住卡片時顯示；狼人步驟隱藏，避免被旁邊的狼瞄到（SPEC C8.3）
+  if (!info || !server.me.alive || server.step === 'WOLF' || server.step === 'DEAL') return null;
+  const text = info.target
+    ? t('s19.panel', { name: nameOf(server, info.target), n: info.rounds_left })
+    : t('s19.none');
+  return h('div', { class: 'panel', testid: 'disguise-panel' }, text);
+}
+

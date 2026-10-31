@@ -17,7 +17,6 @@ ROLE_NAMES: Final[dict[Role, str]] = {
 SIDE_NAMES: Final[dict[Winner, str]] = {
     Winner.VILLAGE: "好人陣營",
     Winner.WOLF: "暗夜陣營",
-    Winner.NONE: "無人",
 }
 
 # line_id → (標準, 江湖)
@@ -44,6 +43,7 @@ LINES: Final[dict[str, tuple[str, str]]] = {
     "exile": ("{name} 被放逐", "{name} 被逐出酒館"),
     "tie": ("平票，無人出局", "眾說紛紜，無人出局"),
     "win": ("遊戲結束，{side}獲勝", "塵埃落定——{side}笑到最後"),
+    "aborted": ("遊戲中途結束", "散場——今夜到此為止"),
 }
 
 

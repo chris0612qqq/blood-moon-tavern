@@ -84,6 +84,129 @@ def scan_disguise_leak(event: Event, payload: Any, viewer: Viewer, ended: bool) 
         raise LeakFound(f"real author leaked to {viewer}")
 
 
+class BotBrain:
+    """機器人的決策。只看 `views.build` 給的資料，靠 `send` 送意圖（DEV_PLAN P2）。"""
+
+    def __init__(
+        self,
+        rng: GameRng,
+        now: Callable[[], float],
+        send: Callable[[Actor, Action, dict[str, Any] | None], bool],
+        speak_rate: float = 0.3,
+        chat_rate: float = 0.01,
+    ) -> None:
+        self.rng = rng
+        self.now = now
+        self._send = send
+        self.speak_rate = speak_rate
+        self.chat_rate = chat_rate
+
+    def send(self, actor: Actor, action: Action, payload: dict[str, Any] | None = None) -> bool:
+        return self._send(actor, action, payload)
+
+    def _pick(self, items: list[str]) -> str:
+        return self.rng.choice(sorted(items))
+
+    def _roll(self, rate: float) -> bool:
+        return self.rng.randrange(1000) < rate * 1000
+
+    def turn(self, player_id: str, view: dict[str, Any]) -> None:
+        """看自己的視圖，決定要不要行動。"""
+        me = view["me"]
+        actor = Actor(player_id=player_id)
+        step = Step(view["step"])
+        if not me["alive"] and me["can_bet"] and self._roll(0.02):
+            self._bet(actor, view)
+        if self._roll(self.chat_rate):
+            self._chat(actor, view, me)
+        if not me["is_actor"] or (me["done"] and step is not Step.VOTE):
+            return
+        opens_at = view.get("opens_at")
+        if opens_at is not None and self.now() < opens_at:
+            return
+        self._step_action(actor, step, me, view)
+
+    def _step_action(
+        self, actor: Actor, step: Step, me: dict[str, Any], view: dict[str, Any]
+    ) -> None:
+        targets: list[str] = me.get("eligible_targets", [])
+        if step is Step.DEAL:
+            self.send(actor, Action.DEAL_ACK)
+        elif step is Step.WOLF:
+            self._wolf(actor, me, targets)
+        elif step is Step.SEER:
+            self._seer(actor, me, targets, view)
+        elif step is Step.WITCH:
+            self._witch(actor, me, targets)
+        elif step is Step.HUNTER:
+            target = self._pick(targets) if targets and self._roll(0.8) else None
+            self.send(actor, Action.HUNTER_SHOOT, {"target": target})
+        elif step in (Step.LAST_WORDS, Step.DAY_SPEAK):
+            if self._roll(self.speak_rate):
+                self.send(actor, Action.SPEAK_END)
+        elif step is Step.VOTE:
+            self._vote(actor, me, targets)
+
+    def _wolf(self, actor: Actor, me: dict[str, Any], targets: list[str]) -> None:
+        status = me["wolf_pack"]
+        if status.get("decided") or status.get("confirming_until") is not None:
+            return
+        picks = status.get("picks", {})
+        if me["id"] in picks and self._roll(0.7):
+            return
+        # 跟著同伴選的機率高，讓一致與不一致兩條路都走得到
+        chosen = [t for t in picks.values() if t is not None]
+        if chosen and self._roll(0.7):
+            self.send(actor, Action.WOLF_PICK, {"target": chosen[0]})
+        elif self._roll(0.1):
+            self.send(actor, Action.WOLF_PICK, {"target": None})
+        elif self._roll(0.05) and me["id"] in picks:
+            self.send(actor, Action.WOLF_PICK, {"clear": True})
+        elif targets:
+            self.send(actor, Action.WOLF_PICK, {"target": self._pick(targets)})
+
+    def _seer(
+        self, actor: Actor, me: dict[str, Any], targets: list[str], view: dict[str, Any]
+    ) -> None:
+        round_no = view["round_no"]
+        checks = me["seer_info"]["checks"]
+        if any(c["round_no"] == round_no for c in checks):
+            self.send(actor, Action.SEER_OK)
+        elif targets:
+            self.send(actor, Action.SEER_CHECK, {"target": self._pick(targets)})
+
+    def _witch(self, actor: Actor, me: dict[str, Any], targets: list[str]) -> None:
+        info = me["witch_info"]
+        if info["can_save"] and self._roll(0.5):
+            self.send(actor, Action.WITCH_ACT, {"save": True})
+        elif info["can_poison"] and targets and self._roll(0.3):
+            self.send(actor, Action.WITCH_ACT, {"poison": self._pick(targets)})
+        else:
+            self.send(actor, Action.WITCH_ACT, {})
+
+    def _vote(self, actor: Actor, me: dict[str, Any], targets: list[str]) -> None:
+        mine = me.get("my_vote")
+        if mine is not None and (not mine["can_change"] or not self._roll(0.02)):
+            return
+        target = self._pick(targets) if targets and self._roll(0.9) else None
+        self.send(actor, Action.VOTE_CAST, {"target": target})
+
+    def _bet(self, actor: Actor, view: dict[str, Any]) -> None:
+        others = [p["id"] for p in view["players"] if p["id"] != view["me"]["id"]]
+        self.send(actor, Action.BET_SET, {"wolves": [self._pick(others)], "faceless": None})
+
+    def _chat(self, actor: Actor, view: dict[str, Any], me: dict[str, Any]) -> None:
+        if me.get("can_disguise") and self._roll(0.5):
+            self.send(
+                actor,
+                Action.CHAT_SEND,
+                {"channel": Channel.PUBLIC, "as": "disguise", "kind": "text", "content": "假扮"},
+            )
+            return
+        channel = Channel.WOLF if "wolf_pack" in me and self._roll(0.5) else Channel.PUBLIC
+        self.send(actor, Action.CHAT_SEND, {"channel": channel, "kind": "text", "content": "你好"})
+
+
 class Simulation:
     """一局模擬。`chaos` 開啟時會隨機踢人、暫停、回上一步，用來壓測引擎。"""
 
@@ -106,6 +229,7 @@ class Simulation:
         self.seed = seed
         self.mode = mode
         self.messages_checked = 0
+        self.brain = BotBrain(self.choice_rng, self.clock.now, self._try)
         ids = [(f"p{i:02d}", f"玩{i:02d}") for i in range(1, players + 1)]
         narrator = None if mode is Mode.GOD else ids[0][0]
         self.engine = Engine.create(ids, mode, {}, self.clock, GameRng(seed), narrator_id=narrator)
@@ -192,95 +316,7 @@ class Simulation:
                 return
 
     def _bot_turn(self, player_id: str, view: dict[str, Any]) -> None:
-        me = view["me"]
-        actor = Actor(player_id=player_id)
-        step = Step(view["step"])
-        if not me["alive"] and me["can_bet"] and self._roll(0.02):
-            self._bet(actor, view)
-        if self._roll(0.01):
-            self._chat(actor, view, me)
-        if not me["is_actor"] or (me["done"] and step is not Step.VOTE):
-            return
-        opens_at = view.get("opens_at")
-        if opens_at is not None and self.clock.now() < opens_at:
-            return
-        self._step_action(actor, step, me)
-
-    def _step_action(self, actor: Actor, step: Step, me: dict[str, Any]) -> None:
-        targets: list[str] = me.get("eligible_targets", [])
-        if step is Step.DEAL:
-            self._try(actor, Action.DEAL_ACK)
-        elif step is Step.WOLF:
-            self._wolf(actor, me, targets)
-        elif step is Step.SEER:
-            self._seer(actor, me, targets)
-        elif step is Step.WITCH:
-            self._witch(actor, me, targets)
-        elif step is Step.HUNTER:
-            target = self._pick(targets) if targets and self._roll(0.8) else None
-            self._try(actor, Action.HUNTER_SHOOT, {"target": target})
-        elif step in (Step.LAST_WORDS, Step.DAY_SPEAK):
-            if self._roll(0.3):
-                self._try(actor, Action.SPEAK_END)
-        elif step is Step.VOTE:
-            self._vote(actor, me, targets)
-
-    def _wolf(self, actor: Actor, me: dict[str, Any], targets: list[str]) -> None:
-        status = me["wolf_pack"]
-        if status.get("decided") or status.get("confirming_until") is not None:
-            return
-        picks = status.get("picks", {})
-        if me["id"] in picks and self._roll(0.7):
-            return
-        # 跟著同伴選的機率高，讓一致與不一致兩條路都走得到
-        chosen = [t for t in picks.values() if t is not None]
-        if chosen and self._roll(0.7):
-            self._try(actor, Action.WOLF_PICK, {"target": chosen[0]})
-        elif self._roll(0.1):
-            self._try(actor, Action.WOLF_PICK, {"target": None})
-        elif self._roll(0.05) and me["id"] in picks:
-            self._try(actor, Action.WOLF_PICK, {"clear": True})
-        elif targets:
-            self._try(actor, Action.WOLF_PICK, {"target": self._pick(targets)})
-
-    def _seer(self, actor: Actor, me: dict[str, Any], targets: list[str]) -> None:
-        round_no = self.engine.state.round_no
-        checks = me["seer_info"]["checks"]
-        if any(c["round_no"] == round_no for c in checks):
-            self._try(actor, Action.SEER_OK)
-        elif targets:
-            self._try(actor, Action.SEER_CHECK, {"target": self._pick(targets)})
-
-    def _witch(self, actor: Actor, me: dict[str, Any], targets: list[str]) -> None:
-        info = me["witch_info"]
-        if info["can_save"] and self._roll(0.5):
-            self._try(actor, Action.WITCH_ACT, {"save": True})
-        elif info["can_poison"] and targets and self._roll(0.3):
-            self._try(actor, Action.WITCH_ACT, {"poison": self._pick(targets)})
-        else:
-            self._try(actor, Action.WITCH_ACT, {})
-
-    def _vote(self, actor: Actor, me: dict[str, Any], targets: list[str]) -> None:
-        mine = me.get("my_vote")
-        if mine is not None and (not mine["can_change"] or not self._roll(0.02)):
-            return
-        target = self._pick(targets) if targets and self._roll(0.9) else None
-        self._try(actor, Action.VOTE_CAST, {"target": target})
-
-    def _bet(self, actor: Actor, view: dict[str, Any]) -> None:
-        others = [p["id"] for p in view["players"] if p["id"] != view["me"]["id"]]
-        self._try(actor, Action.BET_SET, {"wolves": [self._pick(others)], "faceless": None})
-
-    def _chat(self, actor: Actor, view: dict[str, Any], me: dict[str, Any]) -> None:
-        if me.get("can_disguise") and self._roll(0.5):
-            self._try(
-                actor,
-                Action.CHAT_SEND,
-                {"channel": Channel.PUBLIC, "as": "disguise", "kind": "text", "content": "假扮"},
-            )
-            return
-        channel = Channel.WOLF if "wolf_pack" in me and self._roll(0.5) else Channel.PUBLIC
-        self._try(actor, Action.CHAT_SEND, {"channel": channel, "kind": "text", "content": "你好"})
+        self.brain.turn(player_id, view)
 
     # ---- 主持人機器人 ----
 
