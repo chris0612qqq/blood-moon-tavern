@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 import psutil
 import pytest
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, sync_playwright
 
 from server.auth import AdminStore
@@ -172,7 +173,10 @@ def act(page: Page) -> None:
             return
         if screen == "S8" and store(page, f"'{me}' in (s.server.me.wolf_pack.picks || {{}})"):
             return
-        cells.first.click(timeout=800)
+        try:
+            cells.first.click(timeout=800)
+        except PlaywrightError:
+            return  # 按的瞬間換步驟，格子被移除；下一輪再看畫面
         for testid in ("btn-seer-check", "btn-hunter-shoot", "btn-vote"):
             if tap(page, testid):
                 return

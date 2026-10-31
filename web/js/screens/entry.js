@@ -54,6 +54,29 @@ export function s1() {
   ];
 }
 
+/** 關房或開新房後，這支手機不再屬於上一間房：清掉結束畫面、舊連線與舊玩家身分。 */
+function resetForNewRoom() {
+  clearPlayerToken();
+  connect(null);
+  store.activeToken = null;
+  store.server = null;
+  store.ended = null;
+  store.closesAt = null;
+  store.subtitle = '';
+}
+
+/** 無管理員模式的管理員也是玩家：一定要走加入，才有座位、角色，也才當得了旁白主機。 */
+export function joinAsPlayerButton(room) {
+  return button(t('s3.toJoin'), () => {
+    store.ui.overlay = null;
+    form().join_password = room.password;
+    connect(null);
+    store.activeToken = null;
+    store.server = null;
+    changed();
+  }, { kind: 'suggest', testid: 'btn-to-join' });
+}
+
 export async function refreshAdminRoom() {
   const res = await api('/api/admin/room', { auth: adminToken() });
   store.adminRoom = res.ok ? res.data : null;
@@ -127,6 +150,7 @@ function openForm() {
           setFormError('open', res.code);
           return res;
         }
+        resetForNewRoom();
         await refreshAdminRoom();
         // 不等下一次 5 秒輪詢，否則按「去加入」會短暫退回等待頁
         await store.refreshHealth();
@@ -138,6 +162,20 @@ function openForm() {
   ];
 }
 
+function currentRoomEntry(room) {
+  const goToControl = () => {
+    store.ui.overlay = null;
+    connect(adminToken());
+    changed();
+  };
+  if (room.mode === 'god') return button(t('s3.toHost'), goToControl, { testid: 'btn-to-control' });
+  if (loadTokens().player) return null;
+  // 大廳時要加入當玩家；遊戲已開始時（手機不在）才以操作身分進去按繼續（SPEC A11）
+  return room.state === 'lobby'
+    ? joinAsPlayerButton(room)
+    : button(t('s3.toOperate'), goToControl, { testid: 'btn-to-control' });
+}
+
 function currentRoom(room) {
   return [
     h('h2', {}, t('s2.current')),
@@ -146,13 +184,7 @@ function currentRoom(room) {
       h('div', {}, `${t('s3.password')}：`, h('b', { testid: 'room-password' }, room.password)),
       h('div', { class: 'hint' }, t('s5.count', { n: room.roster?.length ?? 0, cap: room.capacity }))),
     button(t('s3.title'), () => { store.ui.overlay = 'S3'; changed(); }),
-    room.mode === 'god' || !loadTokens().player
-      ? button(t('s3.toHost'), () => {
-        store.ui.overlay = null;
-        connect(adminToken());
-        changed();
-      }, { testid: 'btn-to-control' })
-      : null,
+    currentRoomEntry(room),
     actionButton({
       id: 'btn-reopen',
       label: t('s2.reopen'),
@@ -161,6 +193,7 @@ function currentRoom(room) {
       run: async () => {
         const res = await api('/api/admin/room/reopen', { method: 'POST', auth: adminToken() });
         if (res.ok) {
+          resetForNewRoom();
           await refreshAdminRoom();
           await store.refreshHealth();
         }
@@ -176,7 +209,7 @@ function currentRoom(room) {
         const res = await api('/api/admin/room', { method: 'DELETE', auth: adminToken() });
         if (res.ok) {
           store.adminRoom = null;
-          clearPlayerToken();
+          resetForNewRoom();
           await store.refreshHealth();
           changed();
         }
@@ -211,11 +244,7 @@ export function s3() {
         connect(adminToken());
         changed();
       }, { kind: 'suggest', testid: 'btn-to-control' })
-      : button(t('s3.toJoin'), () => {
-        store.ui.overlay = null;
-        form().join_password = room.password;
-        changed();
-      }, { kind: 'suggest', testid: 'btn-to-join' }),
+      : joinAsPlayerButton(room),
   ];
 }
 

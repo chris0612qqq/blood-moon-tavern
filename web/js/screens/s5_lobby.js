@@ -85,7 +85,11 @@ export function s5(server) {
       unlockAudio(t('s5.soundTest'));
       changed();
     }, { testid: 'btn-sound' }),
-    isAdmin ? lobbyAdmin(server, players, need) : null,
+    // 無管理員模式的管理員要先加入才能開始，否則自己會變旁觀者、也沒有旁白主機
+    isAdmin && !server.me && server.room?.mode === 'auto'
+      ? h('p', { class: 'hint center', testid: 'lobby-need-join' }, t('s5.joinFirst'))
+      : null,
+    isAdmin && (server.me || server.room?.mode !== 'auto') ? lobbyAdmin(server, players, need) : null,
   ];
 }
 
