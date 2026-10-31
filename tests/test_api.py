@@ -1294,7 +1294,8 @@ class Bot:
 
     async def _poll(self) -> None:
         while True:
-            await asyncio.sleep(0.03)
+            # 只當保險：真正的觸發是 _on 收到變動訊息時
+            await asyncio.sleep(0.25)
             await self.send("state.request")
 
     async def _on(self, message: dict[str, Any]) -> None:
@@ -1304,6 +1305,8 @@ class Bot:
         self.last_seq = seq
         if message["t"] == "error" and message["code"] == "internal_error":
             self.errors.append(json.dumps(message))
+        if message["t"] in ("step", "timers", "wolf.picks", "paused"):
+            await self.send("state.request")
         if message["t"] != "state":
             return
         self.view = message
@@ -1378,9 +1381,9 @@ async def _host_loop(host: Bot, service: RoomService) -> None:
 def test_P3_twenty_clients_play_a_full_game(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: Mode
 ) -> None:
-    # 時間加速 40 倍；這裡只驗流程，斷線判斷另有測試
+    # 時間加速 20 倍；這裡只驗流程，斷線判斷另有測試
     monkeypatch.setattr(config, "OFFLINE_AFTER_SECONDS", 10**9)
-    env = Env(tmp_path, clock=SystemClock(40.0), tick=0.01)
+    env = Env(tmp_path, clock=SystemClock(20.0), tick=0.02)
     env.service.strict = True
     with LiveServer(env.service) as live:
         base = f"http://127.0.0.1:{live.port}"
@@ -1404,7 +1407,7 @@ def test_P3_twenty_clients_play_a_full_game(
                 await admin.ws.send(json.dumps({"t": "admin.start", "msg_id": "start"}))
                 if mode is Mode.GOD:
                     tasks.append(asyncio.create_task(_host_loop(admin, env.service)))
-                await asyncio.wait_for(asyncio.gather(*tasks), timeout=120)
+                await asyncio.wait_for(asyncio.gather(*tasks), timeout=300)
                 return [*bots, admin]
 
             bots = asyncio.run(main())

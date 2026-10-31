@@ -372,9 +372,9 @@ Cloudflare quick tunnel ──▶ 你家電腦：FastAPI（uvicorn, 127.0.0.1:87
     main.py config.py balance.py enums.py errors.py protocol.py state.py events.py rules.py engine.py actions.py modes.py
     disguise.py views.py room.py hub.py presence.py db.py auth.py media.py narration.py timers.py rng.py clock.py
     setup_admin.py  roles/（每個角色一檔：wolf faceless villager seer witch hunter）  migrations/  dev/（僅 DEV_MODE：bots.py 等）
-  scripts/ setup.bat start.bat preflight.bat publish_url.py keep_awake.py gen_protocol.py
+  scripts/ setup.bat start.bat preflight.bat publish_url.py keep_awake.py gen_protocol.py bench_t6.py
   VERSION  requirements.lock
-  tests/   test_rules.py test_disguise.py test_engine.py test_views.py test_bots.py test_api.py  e2e/（Playwright）
+  tests/   test_rules.py test_disguise.py test_engine.py test_views.py test_bots.py test_api.py test_d4.py test_skeleton.py helpers.py  e2e/（Playwright）
   local_assets/   （gitignore）你自備的官方圖片、音檔，覆蓋預設素材
   data/           （gitignore）game.db uploads/ backup/ logs/
   _archive/
@@ -452,9 +452,9 @@ CHECK_WIN 有勝負 或 admin.end ─▶ END（10 分鐘）─▶ CLOSED
 | POST／DELETE | /api/admin/room | 開房／關房（遊戲中也可） |
 | POST | /api/admin/room/reopen | 關房並以相同設定開新房 |
 | POST | /api/admin/password | 修改管理員密碼 |
-| POST | /api/join | 房間密碼＋名字＋PIN＋大頭貼＋裝置 ID → player token |
+| POST | /api/join | 房間密碼＋名字＋PIN＋裝置 ID → player token（大頭貼在取得 token 後以 `POST /api/media?kind=avatar` 上傳） |
 | POST | /api/rejoin | 名字＋PIN＋裝置 ID → token（擠掉舊裝置；管理員裝置同時取回管理權；被封鎖的裝置拒絕） |
-| POST | /api/media | 上傳 |
+| POST | /api/media?kind=photo\|voice\|avatar | 上傳（body 為檔案原始內容） |
 | GET | /api/media/{id}?exp&sig | 取檔 |
 | GET | /api/assets | 列出 `local_assets/` 可覆蓋的素材與簽章網址；**不需登入**（等待頁、加入頁也要用背景圖），只列 `bg/`、`ui/`、`roles/`、`audio/` 內的檔案 |
 
@@ -862,6 +862,7 @@ P0 環境與骨架 → P1（M1）規則核心 → P2（M2）引擎、保密視�
 | 8 | 遊戲狀態只存在 `event_log`＋`snapshot`，移除重複的表（B6） |
 | 9 | 協定補 `chat.history`、`media.refresh`、`wolf.pick.clear`；目錄補 `audio.js`、`layers.js`（B2、B7） |
 | 10 | 輪替測試標準依實測修正；機器人測試改為合計 1000 局（B10） |
+| 11 | 施工時補充：目錄加 `state.py`、`actions.py`、`hub.py`、`bench_t6.py`、`test_d4.py`；大頭貼改在加入後上傳（B2、B4、B7） |
 
 **v4.6 → v4.7**：與 DEV_PLAN v1.1 對齊——B2 加 `ci.yml`、`setup_admin.py`、`dev/bots.py`、`test_api.py`、`e2e/`；B4 加 `speak_seconds`、`score_bets`；B11 改為 P0–P9。
 
