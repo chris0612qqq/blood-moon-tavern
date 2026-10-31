@@ -240,7 +240,7 @@ function truthSummary(server, truth, name) {
     h('h2', {}, t('s18.roles')),
     [...server.players].sort((a, b) => a.seat - b.seat).map((p) => h('div', { class: 'list-row', key: p.id },
       avatar(server, p.id),
-      h('span', { class: 'grow' }, p.name),
+      h('span', { class: 'nowrap' }, p.name),
       // 夜晚死因結算才公開（SPEC A2）
       truth.death_causes?.[p.id]
         ? h('span', { class: 'hint end-cause', testid: `end-cause-${p.id}` }, causeJoke(truth.death_causes[p.id], p.role))

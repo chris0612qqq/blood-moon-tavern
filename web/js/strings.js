@@ -17,7 +17,7 @@ const TEXT = Object.freeze({
   'tab.players': '玩家',
   'phase.lobby': '大廳',
   'phase.none': '等待開局',
-  'phase.round': '第 {n} 回合 · {step}',
+  'phase.round': '第 {n} 回合',
   'error.raw': '{text}',
   's0.title': '等待管理員開局',
   's0.closed': '酒館尚未開門',

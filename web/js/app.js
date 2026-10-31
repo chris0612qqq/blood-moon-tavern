@@ -28,18 +28,20 @@ const OVERLAY_SCREENS = new Set(['S1', 'S2', 'S3', 'S21', 'S26', 'S27']);
 store.wolfCount = (n) => ROLE_TABLE[n]?.[0] ?? 1;
 store.errorLog = [];
 
+/** 狀態列標題，一行一件事，窄手機也不會斷在字中間。 */
 function statusTitle(server) {
-  if (!server) return t('app.name');
-  if (server.phase !== 'game') return `${server.room?.name ?? t('app.name')} · ${t('phase.lobby')}`;
-  if (!server.round_no) return stepName(server.step);
-  return t('phase.round', { n: server.round_no, step: stepName(server.step) });
+  if (!server) return [t('app.name')];
+  if (server.phase !== 'game') return [server.room?.name ?? t('app.name'), t('phase.lobby')];
+  if (!server.round_no) return [stepName(server.step)];
+  return [t('phase.round', { n: server.round_no }), stepName(server.step)];
 }
 
 function statusBar() {
   const server = store.server;
   const conn = store.conn;
   return h('div', { class: 'status' },
-    h('span', { class: 'status__title', testid: 'status-title' }, statusTitle(server)),
+    h('span', { class: 'status__title', testid: 'status-title' },
+      statusTitle(server).map((line) => h('span', { class: 'status__line' }, line))),
     server ? h('span', { class: `conn conn--${conn}`, testid: 'conn-light' }, t(`conn.${conn}`)) : null,
     iconButton('?', 'S26', 'btn-rules'),
     iconButton('⚙', 'S21', 'btn-settings'),

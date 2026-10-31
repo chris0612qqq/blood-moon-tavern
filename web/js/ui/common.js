@@ -114,7 +114,7 @@ export function avatar(server, id) {
 }
 
 /** 選擇格（SPEC C8.1）：不可選的人不出現；一律 3 欄。extra 是空刀、棄票這類特殊格。 */
-export function pickGrid({ ids, server, selected, onPick, marks = {}, extra = [], prefix = 'pick-cell' }) {
+export function pickGrid({ ids, server, selected, onPick, marks = null, extra = [], prefix = 'pick-cell' }) {
   const cells = ids.map((id) => {
     const row = server.players?.find((p) => p.id === id);
     return h('button', {
@@ -124,17 +124,18 @@ export function pickGrid({ ids, server, selected, onPick, marks = {}, extra = []
       onclick: () => onPick(id),
     },
     avatar(server, id),
-    h('div', {}, nameOf(server, id)),
-    h('div', { class: 'cell__seat' }, row ? `#${row.seat}` : ''),
-    h('div', { class: 'cell__marks' }, marks[id] ?? ''));
+    h('div', {},
+      h('span', { class: 'cell__seat' }, row ? `#${row.seat} ` : ''),
+      nameOf(server, id)),
+    h('div', { class: 'cell__marks' }, marks?.[id] ?? ''));
   });
   const specials = extra.map((e) => h('button', {
     class: `cell cell--empty ${selected === e.value ? 'cell--on' : ''}`,
     key: `extra-${e.value}`,
     testid: `${prefix}-${e.value}`,
     onclick: () => onPick(e.value),
-  }, e.label, h('div', { class: 'cell__marks' }, marks[e.value] ?? '')));
-  return h('div', { class: 'grid' }, cells, specials);
+  }, e.label, h('div', { class: 'cell__marks' }, marks?.[e.value] ?? '')));
+  return h('div', { class: `grid ${marks ? 'grid--marks' : ''}` }, cells, specials);
 }
 
 /** 點格子只是選取，再點一次取消（UI_RULES K7）。 */

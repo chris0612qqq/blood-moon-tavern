@@ -72,7 +72,7 @@ export function s12(server) {
 
 function speakOrder(server) {
   const queue = server.speak_queue ?? [];
-  return h('p', { class: 'hint', testid: 'speak-order' }, queue.length
+  return h('p', { class: 'hint keep-words', testid: 'speak-order' }, queue.length
     ? `${t('s13.next')}：${queue.map((id) => nameOf(server, id)).join(' → ')}`
     : '');
 }
