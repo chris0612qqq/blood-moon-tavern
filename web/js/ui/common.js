@@ -153,6 +153,35 @@ export function selection(name) {
   };
 }
 
+/**
+ * 複製文字，回傳是否成功（CODING_RULES E11）。
+ * 非 HTTPS 的網址沒有 navigator.clipboard（iPhone 連區網就是這樣），改用隱藏輸入框選取後複製。
+ */
+export async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // 被瀏覽器拒絕就走下面的舊方法
+    }
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  // 字級 16px 才不會讓 iOS 自動放大畫面；放在畫面外不影響版面
+  area.style.cssText = 'position:fixed;top:-100px;font-size:16px';
+  document.body.append(area);
+  try {
+    area.focus();
+    area.setSelectionRange(0, text.length);
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    area.remove();
+  }
+}
+
 export function toast(key, params) {
   store.ui.toast = { key, params };
   changed();

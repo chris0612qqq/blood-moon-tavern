@@ -9,7 +9,9 @@ import {
 import { changed, store } from '../store.js';
 import { deviceId } from '../storage.js';
 import { t } from '../strings.js';
-import { actionButton, button, clearFormError, errorLine, field, setFormError, toast } from '../ui/common.js';
+import {
+  actionButton, button, clearFormError, copyText, errorLine, field, setFormError, toast,
+} from '../ui/common.js';
 
 const form = () => store.ui.form;
 const adminToken = () => loadTokens().admin;
@@ -116,10 +118,9 @@ function openForm() {
     actionButton({
       id: 'btn-open-room',
       label: t('s2.open'),
-      disabled: !f.room_name ? ' ' : null,
       run: async () => {
         clearFormError('open');
-        const body = { mode, name: f.room_name, settings: {} };
+        const body = { mode, name: (f.room_name ?? '').trim() || t('app.name'), settings: {} };
         if (f.room_password) body.password = f.room_password;
         const res = await api('/api/admin/room', { method: 'POST', auth: adminToken(), body });
         if (!res.ok) {
@@ -199,15 +200,11 @@ export function s3() {
     h('p', {}, t('s3.password')),
     h('div', { class: 'big center', testid: 'room-password' }, room.password),
     h('p', {}, t('s3.link')),
-    h('div', { class: 'panel', testid: 'invite-url', style: 'overflow-wrap:anywhere' }, url),
+    h('div', { class: 'panel selectable', testid: 'invite-url', style: 'overflow-wrap:anywhere' }, url),
     button(t('s3.copy'), async () => {
-      try {
-        await navigator.clipboard.writeText(t('s3.invite', { url }));
-        toast('toast.copied');
-      } catch {
-        // 非 HTTPS 的區網沒有剪貼簿 API；上面的網址可以手動複製（CODING_RULES E11）
-      }
-    }),
+      const copied = await copyText(t('s3.invite', { url }));
+      toast(copied ? 'toast.copied' : 'toast.copyFailed');
+    }, { testid: 'btn-copy-invite' }),
     room.mode === 'god'
       ? button(t('s3.toHost'), () => {
         store.ui.overlay = null;
@@ -234,7 +231,6 @@ function afterJoin(data, name) {
   savePlayerToken(data.token);
   saveLastName(name);
   form().join_pin = '';
-  form().join_pin2 = '';
   connect(data.token);
   changed();
 }
@@ -244,23 +240,16 @@ function joinForm() {
   const name = (f.join_name ?? '').trim();
   const left = LIMITS.NAME_GRAPHEMES - [...name].length;
   const pinOk = /^\d{4}$/.test(f.join_pin ?? '');
-  const mismatch = f.join_pin2 && f.join_pin !== f.join_pin2;
   return [
     h('h1', { testid: 'screen-s4' }, t('s4.title')),
     field('join_password', t('s4.password'), { inputmode: 'numeric', maxlength: LIMITS.ROOM_PASSWORD_DIGITS }),
     field('join_name', t('s4.name'), { hint: left > 0 ? t('s4.nameLeft', { n: left }) : null }),
     field('join_pin', t('s4.pin'), { inputmode: 'numeric', maxlength: LIMITS.PIN_DIGITS, type: 'password', hint: t('s4.pinHint') }),
-    field('join_pin2', t('s4.pinAgain'), {
-      inputmode: 'numeric',
-      maxlength: LIMITS.PIN_DIGITS,
-      type: 'password',
-      error: mismatch ? t('s4.pinMismatch') : null,
-    }),
     errorLine('join'),
     actionButton({
       id: 'btn-join',
       label: t('s4.join'),
-      disabled: !f.join_password || !name || !pinOk || f.join_pin !== f.join_pin2 ? ' ' : null,
+      disabled: !f.join_password || !name || !pinOk ? ' ' : null,
       run: async () => {
         clearFormError('join');
         const res = await api('/api/join', {
