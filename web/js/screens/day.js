@@ -19,7 +19,8 @@ export function s11(server) {
         h('p', { class: 'center' }, t('s11.deaths')),
         deaths.map((id) => deadRow(server, id)),
       ]
-      : (row?.saved ? null : h('p', { class: 'big center', testid: 'peaceful' }, t('s11.peaceful'))),
+      // 公布和死者是兩則訊息，中間可能畫一次：有人要死就不能先說平安夜
+      : (row?.saved || server.dawn_count ? null : h('p', { class: 'big center', testid: 'peaceful' }, t('s11.peaceful'))),
     row?.saved ? h('p', { class: 'center', testid: 'dawn-saved' }, t('s11.saved', { name: nameOf(server, row.saved) })) : null,
     betEntry(server),
   ];

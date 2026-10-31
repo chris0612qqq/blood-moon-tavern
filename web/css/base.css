@@ -2,7 +2,7 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; overscroll-behavior: none; }
 body { background: #2a2a2a; color: #eee; font: 16px/1.45 system-ui, "PingFang TC", "Noto Sans TC", sans-serif; }
-#app { display: flex; flex-direction: column; height: 100dvh; max-width: 520px; margin: 0 auto; }
+#app { display: flex; flex-direction: column; height: var(--app-h, 100dvh); max-width: 520px; margin: 0 auto; }
 html[data-phase="night"] body { background: #151515; }
 
 .status { display: flex; align-items: center; gap: 4px; padding: 6px 8px; background: #3a3a3a; min-height: 44px; }
@@ -47,6 +47,7 @@ button.btn:disabled { color: #999; border-color: #666; }
 label.field { display: block; margin: 12px 0; }
 input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; padding: 10px; border-radius: 4px; border: 1px solid #888; background: #222; color: #eee; }
 .error-text { color: #f99; font-size: 14px; }
+.input--error { border: 2px solid #e66; }
 
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
 .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 76px; background: #444; border: 2px solid #777; border-radius: 4px; color: #fff; padding: 4px; font-size: 16px; }
@@ -77,6 +78,7 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .bubble--wolf { background: #533; }
 .bubble__who { font-size: 14px; color: #ccc; }
 .chat__input { display: flex; gap: 6px; padding-top: 8px; }
+.chat__input button.btn { padding: 0 4px; white-space: nowrap; width: 100%; margin: 0; }
 .chat__input textarea { flex: 1; min-height: 44px; height: 44px; resize: none; }
 
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 30; }

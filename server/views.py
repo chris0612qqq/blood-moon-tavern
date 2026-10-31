@@ -431,7 +431,13 @@ def public_messages(event: Event, state: GameState) -> list[Message]:
             assert state.pause is not None
             return [{"t": "paused", "reason": state.pause.reason.value, "resume_at": data["at"]}]
         case EventType.DAWN_ANNOUNCED:
-            return [{"t": "dawn", "saved": _saved_tonight(state, state.round_no)}]
+            return [
+                {
+                    "t": "dawn",
+                    "saved": _saved_tonight(state, state.round_no),
+                    "count": data["count"],
+                }
+            ]
         case EventType.NARRATOR_SET:
             return [narrator_message(data["player"])]
         case _:

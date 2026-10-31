@@ -85,12 +85,30 @@ function playerRow(server, row) {
     h('span', { class: 'hint' }, row.alive ? playerStatus(server, row.id) : '☠'));
 }
 
+/** 女巫沒事可做時還要裝作在等，回傳建議等到的時間；不用等就回 null。 */
+export function witchWaitUntil(server, now) {
+  const host = server.host;
+  if (server.step !== 'WITCH') return null;
+  const nothingToDo = !host.actors.length || (host.witch.antidote_used && host.witch.poison_used);
+  const until = host.timers?.min_until;
+  return nothingToDo && until && now < until ? until : null;
+}
+
 /** 下一句要等目前這句念完、該做的人都做完才高亮，免得金框一按就跳走（使用者試玩回饋）。 */
 function nextIsReady(server) {
   const host = server.host;
   const opened = !server.opens_at || serverNow() >= server.opens_at;
   const done = host.timed_out || host.actors.every((id) => host.done.includes(id));
-  return opened && done;
+  return opened && done && !witchWaitUntil(server, serverNow());
+}
+
+function witchWaitHint(server) {
+  const until = witchWaitUntil(server, serverNow());
+  if (!until) return null;
+  return h('p', { class: 'hint center', testid: 'witch-wait' },
+    t('s20.witchWait'), ' ',
+    h('span', { 'data-deadline': until }, String(Math.ceil(until - serverNow()))),
+    ' ', t('s20.witchWaitUnit'));
 }
 
 function voiceControls(server) {
@@ -267,6 +285,7 @@ function hostGame(server) {
         server.paused
           ? null
           : actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', small: true, run: () => send('admin.pause') })),
+      witchWaitHint(server),
       voiceControls(server),
       server.paused
         ? actionButton({

@@ -115,6 +115,7 @@ const HANDLERS = {
   dawn(msg) {
     if (!store.server) return;
     store.server.announced = true;
+    store.server.dawn_count = msg.count;
     historyRow(store.server).saved = msg.saved;
   },
   'vote.reveal'(msg) {

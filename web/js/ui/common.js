@@ -43,6 +43,7 @@ export function actionButton(o) {
 }
 
 async function press(key, o) {
+  if (store.ui.buttons[key]) return; // 確認框連點也只送一次（UI_RULES K1）
   store.ui.buttons[key] = { state: 'pending' };
   changed();
   const result = await o.run();
@@ -188,20 +189,51 @@ export function toast(key, params) {
   changed();
 }
 
-/** 表單欄位：值存在 ui.form。 */
+const INVISIBLE = /[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202f\u2060\ufeff]/gu;
+const NAME_CHARS = /^[\p{L}\p{N}]*$/u;
+const segmenter = new Intl.Segmenter('zh-Hant', { granularity: 'grapheme' });
+
+/** 字素：「👍🏽」算一個字，和伺服器的計法一樣。 */
+const graphemes = (text) => [...segmenter.segment(text)].map((part) => part.segment);
+
+/** 去掉前後空白與看不見的字元（UI_RULES K9），超過字數的部分不收。 */
+export function cleanName(raw, limit) {
+  return graphemes(raw.replace(INVISIBLE, '').trim()).slice(0, limit).join('');
+}
+
+export const nameIsValid = (name) => NAME_CHARS.test(name);
+export const graphemeCount = (text) => graphemes(text).length;
+const onlyDigits = (raw) => raw.replace(/\D/gu, '');
+
+// 元素沒有 oncompositionend 屬性，只能這樣聽：Chrome 選完字後不會再發 input，補發一次才收得到
+document.addEventListener('compositionend', (e) => {
+  e.target.dispatchEvent(new Event('input', { bubbles: true }));
+});
+
+/**
+ * 表單欄位：值存在 ui.form。o.clean 可清理輸入；數字欄位只收數字。
+ * 注音、倉頡組字中（K8）不清理也不更新畫面，否則打「ㄒㄧㄠˇ」就會被判超過字數。
+ */
 export function field(name, label, o = {}) {
   const form = store.ui.form;
+  const clean = o.clean ?? (o.inputmode === 'numeric' ? onlyDigits : null);
+  const commit = (input) => {
+    let value = clean ? clean(input.value) : input.value;
+    if (o.maxlength) value = value.slice(0, o.maxlength);
+    if (value !== input.value) input.value = value;
+    form[name] = value;
+    changed();
+  };
   return h('label', { class: 'field' }, label,
     h('input', {
+      class: o.error ? 'input--error' : '',
       testid: o.testid ?? `input-${name}`,
       value: form[name] ?? '',
       type: o.type ?? 'text',
       inputmode: o.inputmode,
-      maxlength: o.maxlength,
       autocomplete: o.autocomplete ?? 'off',
       oninput: (e) => {
-        form[name] = e.target.value;
-        changed();
+        if (!e.isComposing) commit(e.target);
       },
     }),
     o.hint ? h('div', { class: 'hint' }, o.hint) : null,

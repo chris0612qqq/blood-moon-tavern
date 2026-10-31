@@ -344,6 +344,7 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
 
         # ---- 結算：全部揭曉 ----
         press(admin, "tab-players")
+        press(admin, "btn-players-manage")  # 危險操作收在管理裡（UI_RULES K6）
         press(admin, "btn-admin-end")
         press(admin, "dialog-confirm")
         wait_step(bystander, "END")

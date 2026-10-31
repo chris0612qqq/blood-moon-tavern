@@ -232,6 +232,32 @@ store.restart = () => {
   pollHealth();
 };
 
+// UI_RULES K12：鍵盤跳出來時畫面跟著縮，輸入框移到看得到的地方（等鍵盤動畫結束）
+const KEYBOARD_MS = 300;
+window.visualViewport?.addEventListener('resize', () => {
+  document.documentElement.style.setProperty('--app-h', `${window.visualViewport.height}px`);
+});
+document.addEventListener('focusin', (e) => {
+  if (e.target.matches('input, textarea')) {
+    setTimeout(() => e.target.scrollIntoView({ block: 'center' }), KEYBOARD_MS);
+  }
+});
+
+// UI_RULES K14：遊戲中按返回不會直接離開。第一次點擊才加歷史，否則瀏覽器會把它跳過
+const stayHere = () => history.pushState({ bmt: true }, '');
+window.addEventListener('pointerdown', stayHere, { once: true });
+window.addEventListener('popstate', () => {
+  const playing = store.server?.phase === 'game' && store.server.step !== STEP.END;
+  if (!store.ui.overlay && !playing) {
+    history.back();
+    return;
+  }
+  stayHere();
+  if (store.ui.overlay) store.ui.overlay = null;
+  else store.ui.dialog = { text: t('dialog.leave'), confirmLabel: t('dialog.leaveOk'), onConfirm: () => history.go(-2) };
+  changed();
+});
+
 subscribe(draw);
 window.__bmt = store; // Playwright 比對畫面與 store 用（UI_RULES UT1），不含任何別人的秘密
 draw();

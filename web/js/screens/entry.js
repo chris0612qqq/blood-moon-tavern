@@ -10,7 +10,8 @@ import { changed, store } from '../store.js';
 import { deviceId } from '../storage.js';
 import { t } from '../strings.js';
 import {
-  actionButton, button, clearFormError, copyText, errorLine, field, setFormError, toast,
+  actionButton, button, cleanName, clearFormError, copyText, errorLine, field, graphemeCount,
+  nameIsValid, setFormError, toast,
 } from '../ui/common.js';
 
 const form = () => store.ui.form;
@@ -264,21 +265,30 @@ function afterJoin(data, name) {
   changed();
 }
 
+const nameField = (o = {}) => field('join_name', t('s4.name'), {
+  ...o,
+  clean: (raw) => cleanName(raw, LIMITS.NAME_GRAPHEMES),
+});
+
 function joinForm() {
   const f = form();
-  const name = (f.join_name ?? '').trim();
-  const left = LIMITS.NAME_GRAPHEMES - [...name].length;
+  const name = f.join_name ?? '';
+  const left = LIMITS.NAME_GRAPHEMES - graphemeCount(name);
+  const nameOk = nameIsValid(name);
   const pinOk = /^\d{4}$/.test(f.join_pin ?? '');
   return [
     h('h1', { testid: 'screen-s4' }, t('s4.title')),
     field('join_password', t('s4.password'), { inputmode: 'numeric', maxlength: LIMITS.ROOM_PASSWORD_DIGITS }),
-    field('join_name', t('s4.name'), { hint: left > 0 ? t('s4.nameLeft', { n: left }) : null }),
+    nameField({
+      hint: left > 0 && nameOk ? t('s4.nameLeft', { n: left }) : null,
+      error: nameOk ? null : t('s4.nameChars'),
+    }),
     field('join_pin', t('s4.pin'), { inputmode: 'numeric', maxlength: LIMITS.PIN_DIGITS, type: 'password', hint: t('s4.pinHint') }),
     errorLine('join'),
     actionButton({
       id: 'btn-join',
       label: t('s4.join'),
-      disabled: !f.join_password || !name || !pinOk ? ' ' : null,
+      disabled: !f.join_password || left > 0 || !nameOk || !pinOk ? ' ' : null,
       run: async () => {
         clearFormError('join');
         const res = await api('/api/join', {
@@ -300,10 +310,10 @@ function joinForm() {
 
 function rejoinForm() {
   const f = form();
-  const name = (f.join_name ?? '').trim();
+  const name = f.join_name ?? '';
   return [
     h('h1', { testid: 'screen-s4-rejoin' }, t('s4.rejoinTitle')),
-    field('join_name', t('s4.name')),
+    nameField(),
     field('join_pin', t('s4.pin'), { inputmode: 'numeric', maxlength: LIMITS.PIN_DIGITS, type: 'password' }),
     errorLine('rejoin'),
     actionButton({

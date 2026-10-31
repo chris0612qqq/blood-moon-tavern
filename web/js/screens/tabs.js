@@ -9,6 +9,8 @@ import { actionButton, avatar, button, nameOf } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { roleCard } from './night.js';
 
+const CHAT_MAX = 500;
+const CHAT_WARN = 50;
 const NIGHT_STEPS = new Set(['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END']);
 
 function displayName(server, msg) {
@@ -73,11 +75,14 @@ export function chatTab(server, channel) {
       asButton(t('chat.asSelf'), 'self', !fake && !masked),
       canMask ? asButton(t('chat.asWolf'), 'wolf', masked) : null,
       canFake ? asButton(t('chat.asFake', { name: nameOf(server, target) }), 'fake', fake) : null) : null,
+    !block && CHAT_MAX - draft.length <= CHAT_WARN
+      ? h('p', { class: 'hint', testid: 'chat-left' }, t('chat.left', { n: CHAT_MAX - draft.length }))
+      : null,
     block ? h('p', { class: 'hint center', testid: 'chat-blocked' }, block) : h('div', { class: 'chat__input' },
       h('textarea', {
         testid: 'chat-input',
         placeholder: t('chat.placeholder'),
-        maxlength: 500,
+        maxlength: CHAT_MAX,
         value: draft,
         oninput: (e) => { store.ui.drafts[draftKey] = e.target.value; changed(); },
       }),
@@ -113,6 +118,8 @@ export function playersTab(server) {
   const list = server.players ?? server.roster ?? [];
   const offline = new Set((server.roster ?? []).filter((r) => r.offline).map((r) => r.id));
   const canPause = server.is_admin && !server.host && !server.paused && server.phase === 'game' && !NIGHT_STEPS.has(server.step) && server.step !== 'END';
+  const canManage = server.is_admin && !server.host && server.phase === 'game' && server.step !== 'END';
+  const managing = canManage && store.ui.playersManage;
   return [
     h('h1', { testid: 'view-players' }, t('players.title')),
     [...list].sort((a, b) => a.seat - b.seat).map((p) => h('div', { class: 'list-row', key: p.id },
@@ -122,7 +129,7 @@ export function playersTab(server) {
       offline.has(p.id) ? h('span', { class: 'badge' }, t('s5.offlineTag')) : null,
       p.alive === false ? h('span', { class: 'hint', testid: `player-cause-${p.id}` }, causePlain(p.death_cause)) : null,
       p.alive === false ? h('span', { class: 'badge' }, `☠ ${roleName(p.public_role ?? p.role)}`.trim()) : null,
-      server.is_admin && !server.host && p.alive !== false && server.phase === 'game' && server.step !== 'END'
+      managing && p.alive !== false
         ? actionButton({
           id: `kick-${p.id}`,
           small: true,
@@ -133,7 +140,11 @@ export function playersTab(server) {
         })
         : null)),
     canPause ? actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', run: () => send('admin.pause') }) : null,
-    server.is_admin && !server.host && server.phase === 'game' && server.step !== 'END'
+    canManage ? button(t('players.manage'), () => {
+      store.ui.playersManage = !managing;
+      changed();
+    }, { testid: 'btn-players-manage' }) : null,
+    managing
       ? actionButton({
         id: 'btn-admin-end',
         label: t('s20.end'),

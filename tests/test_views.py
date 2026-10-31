@@ -161,7 +161,9 @@ class TestBuild:
             if game.state.announced:
                 break
         dawn = next(e for e in collected if e.type is EventType.DAWN_ANNOUNCED)
-        assert views.filter_event(dawn, player("p8"), game.state) == [{"t": "dawn", "saved": "p1"}]
+        assert views.filter_event(dawn, player("p8"), game.state) == [
+            {"t": "dawn", "saved": "p1", "count": 0}
+        ]
 
     def test_host_sees_death_cause(self, god: Game) -> None:
         god.act(HOST, Action.HOST_SET_ALIVE, player="p1", alive=False)

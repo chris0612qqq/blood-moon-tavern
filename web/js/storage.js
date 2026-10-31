@@ -1,8 +1,9 @@
 // 手機本機資料（CODING_RULES E12）：讀不到一律當新使用者，不拋錯。
 // DEV_MODE 的 ?dev_device=x 讓一台電腦能開多個分頁當多位玩家（CODING_RULES D9）。
+// 正式環境一律 HTTPS，所以只有 http 才理會這個參數。
 
 const params = new URLSearchParams(location.search);
-export const DEV_DEVICE = params.get('dev_device');
+export const DEV_DEVICE = location.protocol === 'http:' ? params.get('dev_device') : null;
 const PREFIX = DEV_DEVICE ? `bmt.${DEV_DEVICE}.` : 'bmt.';
 const memory = new Map();
 

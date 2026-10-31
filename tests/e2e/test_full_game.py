@@ -447,13 +447,13 @@ def test_join_form_rules(server_url: str) -> None:
         assert not has(page, "input-join_pin2")
         fill(page, "input-join_password", "1234")
         fill(page, "input-join_name", "太長名字")
+        assert page.locator('[data-testid="input-join_name"]').input_value() == "太長"  # 多的不收
         fill(page, "input-join_pin", "11")
         page.wait_for_timeout(200)
         assert page.locator('[data-testid="btn-join"]').is_disabled()  # PIN 不足 4 碼
         fill(page, "input-join_pin", "1111")
         press(page, "btn-join")
-        wait(page, "error-join")
-        assert "2 個字" in page.locator('[data-testid="error-join"]').inner_text()
+        wait(page, "my-seat")
         browser.close()
 
 
