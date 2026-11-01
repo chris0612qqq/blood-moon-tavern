@@ -444,8 +444,10 @@ def test_host_briefing_wall(server_url: str) -> None:  # noqa: F811
             [first, second],
         )
         host.evaluate(STORE_MESSAGE, {"t": "step", "step": "SUSPECT_VOTE"})
-        wait(host, "host-wall")
-        assert f"{names[0]} 選 {names[1]}" in host.locator('[data-testid="act-wolf"]').inner_text()
+        host.wait_for_function(  # 天黑時簡報牆就在，要等重繪後的內容
+            "(row) => document.querySelector('[data-testid=\"act-wolf\"]')?.textContent.includes(row)",
+            arg=f"{names[0]} 選 {names[1]}",
+        )
         host.evaluate(
             STORE_MESSAGE,
             {"t": "progress", "done": 1, "total": 6, "suspect_picks": {first: second}},
