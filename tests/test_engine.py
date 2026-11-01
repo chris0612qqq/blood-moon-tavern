@@ -123,15 +123,21 @@ class Game:
         raise AssertionError(f"never announced, at {self.state.step}")
 
     def _pass_first_round(self, wanted: Step) -> None:
-        """要到第二輪的測試不關心第一輪：大家投 nominate，被提名者講完申述。"""
+        """要到第二輪的測試不關心第一輪：票分給 3 個人才會進第二輪，被提名者講完申述。"""
         state = self.state
         if wanted not in (Step.VOTE, Step.DEFENSE) or self._not_open():
             return
         if state.step is Step.SUSPECT_VOTE:
             alive = [p.id for p in state.players if p.alive]
+            order = [*(p for p in self.nominate if p in alive), *alive]
+            voted = {t for t in state.vote_round().ballots.values() if t}
             for voter in list(state.actors):
                 if voter not in state.done:
-                    target = next(p for p in (*self.nominate, *alive) if p in alive and p != voter)
+                    # 還沒湊滿 3 個目標就投新的人，湊滿後集中投第一順位
+                    fresh = [p for p in order if p != voter and p not in voted]
+                    pool = fresh if len(voted) < balance.SECOND_ROUND_MIN_TARGETS else order
+                    target = next(p for p in pool if p != voter)
+                    voted.add(target)
                     self.act(voter, Action.VOTE_CAST, target=target)
         elif wanted is Step.VOTE and state.step is Step.DEFENSE and state.current_speaker:
             self.act(state.current_speaker, Action.SPEAK_END)
@@ -144,9 +150,8 @@ class Game:
             self.engine.tick()
 
     def vote_all(self, target: str | None, skip: tuple[str, ...] = ()) -> None:
-        if target is not None:
-            self.nominate = (target,)
-        self.wait_for(Step.VOTE)
+        """大家投同一個人：第一輪就直接決定（SPEC A5.4）。"""
+        self.wait_for(Step.SUSPECT_VOTE)
         for voter in list(self.state.actors):
             if voter in skip:
                 continue
@@ -224,14 +229,34 @@ class TestTransitions:
             game.act("p5", Action.WOLF_PICK, target="p1")
         assert err.value.code is ErrorCode.FORBIDDEN
 
-    def test_step_not_open_during_narration(self, game: Game) -> None:
+    def test_vote_not_open_during_narration(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        while game.state.step is not Step.SUSPECT_VOTE:
+            game.clock.advance(0.25)
+            game.engine.tick()
+        with pytest.raises(GameError) as err:
+            game.act("p1", Action.VOTE_CAST, target="p2")
+        assert err.value.code is ErrorCode.STEP_NOT_OPEN
+
+    def test_role_acts_during_narration_and_leaves_when_it_ends(self, game: Game) -> None:
         game.ack_all()
         while game.state.step is not Step.WOLF:
             game.clock.advance(0.25)
             game.engine.tick()
-        with pytest.raises(GameError) as err:
-            game.act("p5", Action.WOLF_PICK, target="p1")
-        assert err.value.code is ErrorCode.STEP_NOT_OPEN
+        opens_at = game.state.timers.opens_at
+        assert opens_at is not None and game.clock.now() < opens_at
+        for wolf in list(game.state.actors):
+            game.act(wolf, Action.WOLF_PICK, target="p1")
+        game.clock.advance(balance.WOLF_CONFIRM_SECONDS + 0.1)
+        game.engine.tick()
+        assert game.state.night().wolf_decided
+        assert game.clock.now() < opens_at and game.state.step is Step.WOLF  # 還在念，不換步驟
+        game.clock.advance(opens_at - game.clock.now() + 0.1)
+        game.engine.tick()
+        assert game.state.step is Step.WOLF_END
 
     def test_L4_grace_then_deadline_passed(self, game: Game) -> None:
         game.to_wolf_step()
@@ -624,7 +649,7 @@ class TestVote:
         assert game.state.step is Step.SUSPECT_VOTE
         game.act("p2", Action.VOTE_CAST, target="p3")
         game.run(2)
-        assert game.state.step is Step.DEFENSE
+        assert game.state.step is Step.REVEAL  # 只有兩個人被投，直接決定
         assert game.state.vote_round().suspect_counts["p3"] == 1
 
     def test_grace_never_exceeds_deadline(self, game: Game) -> None:
@@ -639,22 +664,17 @@ class TestVote:
         self._at_vote(game)
         game.act("p1", Action.VOTE_CAST, target="p2")
         game.run(balance.VOTE_SECONDS + 1)
-        assert game.state.vote_round().suspect_counts == {"p2": 1}
-        game.wait_for(Step.VOTE)
-        game.act("p1", Action.VOTE_CAST, target="p2")
-        game.run(balance.VOTE_SECONDS + 1)
         votes = game.state.vote_round()
-        assert votes.ballots["p3"] is None and votes.exiled == "p2"
+        assert votes.suspect_counts == {"p2": 1} and votes.direct
+        game.wait_for(Step.REVEAL)
+        assert game.state.vote_round().exiled == "p2"
 
     def test_D4_23_tie_no_exile(self, game: Game) -> None:
         self._at_vote(game)
         game.act("p1", Action.VOTE_CAST, target="p2")
         game.act("p2", Action.VOTE_CAST, target="p1")
         game.run(balance.VOTE_SECONDS + 1)
-        game.wait_for(Step.VOTE)
-        game.act("p3", Action.VOTE_CAST, target="p1")
-        game.act("p4", Action.VOTE_CAST, target="p2")
-        game.run(balance.VOTE_SECONDS + 1)
+        game.wait_for(Step.REVEAL)  # 兩個人同票：沒有最高票，無人出局
         assert game.state.vote_round().exiled is None
         assert all(p.alive for p in game.state.players)
 
@@ -879,24 +899,45 @@ class TestTwoRoundVote:
         assert votes.nominees == [] and votes.exiled is None and votes.ballots == {}
         assert game.state.line_id == "no_nominee"
 
-    def test_single_nominee_can_be_spared(self, game: Game) -> None:
+    def test_one_target_is_exiled_directly(self, game: Game) -> None:
         self._at_suspects(game)
         self._cast(game, {p: "p1" for p in game.state.actors if p != "p1"})
-        game.wait_for(Step.DEFENSE)
-        game.act("p1", Action.SPEAK_END)
-        game.wait_for(Step.VOTE)
-        self._cast(game, {})  # 全部棄票
         game.wait_for(Step.REVEAL)
-        assert game.state.vote_round().exiled is None
+        votes = game.state.vote_round()
+        assert votes.exiled == "p1" and votes.direct and votes.ballots == {}
+        assert votes.suspect_counts == {"p1": len(game.state.players) - 1}
+
+    def test_two_targets_exile_the_higher_directly(self, game: Game) -> None:
+        self._at_suspects(game)
+        self._cast(game, {"p3": "p1", "p4": "p1", "p5": "p2"})
+        game.wait_for(Step.REVEAL)
+        votes = game.state.vote_round()
+        assert votes.exiled == "p1" and votes.suspect_counts == {"p1": 2, "p2": 1}
+        assert votes.ballots == {}  # 誰投誰不留
+        assert game.state.step is Step.REVEAL
+
+    def test_two_targets_tied_means_no_exile(self, game: Game) -> None:
+        self._at_suspects(game)
+        self._cast(game, {"p3": "p1", "p4": "p2"})
+        game.wait_for(Step.REVEAL)
+        assert game.state.vote_round().exiled is None and game.state.line_id == "tie"
+
+    def test_three_targets_go_to_second_round(self, game: Game) -> None:
+        self._at_suspects(game)
+        self._cast(game, {"p3": "p1", "p4": "p2", "p5": "p6"})
+        game.wait_for(Step.DEFENSE)
+        votes = game.state.vote_round()
+        assert not votes.direct and set(votes.nominees or []) == {"p1", "p2", "p6"}
 
     def test_second_round_tie_means_no_exile(self, game: Game) -> None:
         self._at_suspects(game)
-        self._cast(game, {"p3": "p1", "p4": "p2"})
+        self._cast(game, {"p3": "p1", "p4": "p2", "p5": "p6"})
         game.wait_for(Step.VOTE)
         voters = list(game.state.actors)
         half = len(voters) // 2
-        for i, voter in enumerate(voters):
+        for i, voter in enumerate(voters[: half * 2]):  # 單數時多的一人不投
             game.act(voter, Action.VOTE_CAST, target="p1" if i < half else "p2")
+        game.run(balance.VOTE_SECONDS + 1)
         game.wait_for(Step.REVEAL)
         assert game.state.vote_round().exiled is None and game.state.line_id == "tie"
 

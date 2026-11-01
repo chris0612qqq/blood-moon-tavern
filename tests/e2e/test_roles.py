@@ -181,18 +181,28 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         finish_speeches(pages, "SUSPECT_VOTE")
         for page in pages:
             wait_open(page)
+            # 票分給 3 個人才會進第二輪（SPEC A5.4）
             if page is hunter:
-                press(page, "pick-cell-abstain")
+                press(page, f"pick-cell-{id_of[villagers[0]]}")
+            elif page is villagers[0]:
+                press(page, f"pick-cell-{id_of[villagers[2]]}")
             else:
                 press(page, f"pick-cell-{id_of[hunter]}")
             press(page, "btn-vote")
+            if page is pages[0]:  # 第一輪看得到別人選誰（SPEC A5.4）
+                wait(pages[1], "suspect-picks")
+                pages[1].wait_for_function(
+                    "(name) => document.querySelector('[data-testid=\"suspect-picks\"]')"
+                    ".textContent.includes(name)",
+                    arg=name_of[pages[0]],
+                )
             # 最後一人投完很快就換步驟，來不及看到「已投」也算過
             page.wait_for_function(
                 "document.querySelector('[data-testid=\"vote-done\"]')"
                 " || window.__bmt.server.step !== 'SUSPECT_VOTE'"
             )
 
-        # ---- 申述：只有被提名的獵人，第一輪誰投誰不公開（SPEC v4.18） ----
+        # ---- 申述：3 位被提名者，第一輪誰投誰不留紀錄（SPEC v4.18） ----
         wait_step(hunter, "DEFENSE")
         wait(villagers[1], "nominees")
         assert name_of[hunter] in text_of(villagers[1], "nominees")
@@ -201,10 +211,10 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
 
         # ---- 第二輪：被提名者不能投，其他人只看得到被提名者 ----
         wait(hunter, "screen-s14-watch")
-        voters = [p for p in pages if p is not hunter]
+        voters = [p for p in pages if p not in (hunter, villagers[0], villagers[2])]
         for page in voters:
             wait_open(page)
-            assert page.locator('[data-testid^="pick-cell-"]').count() == 2  # 獵人＋棄票
+            assert page.locator('[data-testid^="pick-cell-"]').count() == 4  # 3 位＋棄票
             press(page, f"pick-cell-{id_of[hunter]}")
             press(page, "btn-vote")
             page.wait_for_function(

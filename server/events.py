@@ -168,6 +168,7 @@ def _nominees_set(state: GameState, data: dict[str, Any]) -> None:
     round_votes = state.vote_round()
     round_votes.nominees = list(data["counts"])
     round_votes.suspect_counts = dict(data["counts"])
+    round_votes.direct = data.get("direct", False)
     round_votes.ballots = {}
     round_votes.changed = []
 

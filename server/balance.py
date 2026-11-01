@@ -56,7 +56,9 @@ SFX_GAP_PADDING_SECONDS: Final = 0.3
 WITCH_MIN_SECONDS_LOW: Final = 8
 WITCH_MIN_SECONDS_HIGH: Final = 15
 VOTE_ALL_CAST_GRACE_SECONDS: Final = 5
-RESUME_COUNTDOWN_SECONDS: Final = 5
+# 第一輪被投的人少於這個數就不進第二輪，直接照票數決定（SPEC A5.4）
+SECOND_ROUND_MIN_TARGETS: Final = 3
+RESUME_COUNTDOWN_SECONDS: Final = 2.5
 HOST_EXTEND_SECONDS: Final = 30
 
 # 演出長度（SPEC C9.2 #13）：伺服器等動畫播完才推進
@@ -69,6 +71,9 @@ PEACEFUL_NIGHT_SECONDS: Final = 1.5
 NARRATION_SECONDS_PER_CHAR: Final = 0.25
 NARRATION_RATE: Final = 0.45
 NARRATION_PADDING_SECONDS: Final = 1.0
+# 天亮、公布死者、請人發言這段接得快一點（使用者試玩回饋）：間隔和停留除以這個倍率，語速不變
+DAY_PACE: Final = 1.5
+DAY_PACE_LINES: Final = frozenset({"dawn", "peaceful", "deaths", "last_words", "speak"})
 
 # 主持人同一句按到第幾次開始不耐煩（超過 4 次、超過 8 次）
 NAG_PRESSES: Final[tuple[int, ...]] = (5, 9)

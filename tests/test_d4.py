@@ -281,6 +281,12 @@ def test_D4_40_any_player_can_take_over_narration(game: Game) -> None:
     assert game.state.narrator_id == "p5"
 
 
+def test_day_lines_run_at_day_pace() -> None:
+    assert timers.step_gap("speak") == pytest.approx(4 / balance.DAY_PACE)
+    assert timers.step_gap("dawn") == pytest.approx(4 / balance.DAY_PACE)
+    assert timers.step_gap("wolf_close") == 4  # 夜晚不變
+
+
 def test_D4_42_auto_step_gap_at_least_4_seconds() -> None:
     assert timers.step_gap("wolf_close") == 4
     assert timers.step_gap("night_start") == 4  # 音效 2 秒＋0.3 秒仍小於 4 秒

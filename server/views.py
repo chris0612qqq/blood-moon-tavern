@@ -126,9 +126,19 @@ def _public_actors(state: GameState) -> list[str]:
 
 def _suspect_counts(state: GameState) -> dict[str, int]:
     """第一輪只公開結果（SPEC A5.4）；誰投誰已經不在狀態裡。"""
-    if state.step not in (Step.DEFENSE, Step.VOTE) or not state.votes:
+    if not state.votes:
         return {}
-    return dict(state.vote_round().suspect_counts)
+    votes = state.vote_round()
+    if state.step in (Step.DEFENSE, Step.VOTE) or (state.step is Step.REVEAL and votes.direct):
+        return dict(votes.suspect_counts)
+    return {}
+
+
+def _suspect_picks(state: GameState) -> dict[str, str | None]:
+    """第一輪投票當下人人看得到誰選誰（SPEC A5.4）；進申述就丟掉，不留紀錄。"""
+    if state.step is not Step.SUSPECT_VOTE or not state.votes:
+        return {}
+    return dict(state.vote_round().ballots)
 
 
 def public_block(state: GameState) -> Message:
@@ -152,6 +162,7 @@ def public_block(state: GameState) -> Message:
         "history": public_history(state),
         "winner": state.winner.value if state.winner else None,
         "suspect_counts": _suspect_counts(state),
+        "suspect_picks": _suspect_picks(state),
     }
 
 
@@ -409,7 +420,7 @@ def public_messages(event: Event, state: GameState) -> list[Message]:
                 }
             ]
         case EventType.DEAL_ACKED | EventType.VOTE_CAST | EventType.VOTE_VOIDED:
-            return [{"t": "progress", **_progress(state)}]
+            return [{"t": "progress", **_progress(state), "suspect_picks": _suspect_picks(state)}]
         case EventType.VOTES_REVEALED:
             return [{"t": "vote.reveal", "ballots": data["ballots"], "exiled": data["exiled"]}]
         case EventType.PLAYER_DIED:

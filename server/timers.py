@@ -11,6 +11,11 @@ from server.state import PauseState, Timers
 _TIMER_FIELDS = ("opens_at", "deadline", "min_until", "confirm_until", "grace_until")
 
 
+def line_pace(line_id: str | None) -> float:
+    """這句旁白的節奏倍率（SPEC A8.2）。"""
+    return balance.DAY_PACE if line_id in balance.DAY_PACE_LINES else 1.0
+
+
 def narration_seconds(text: str) -> float:
     """旁白長度估算：字數 × 0.25 秒 ÷ 語速＋1 秒。伺服器不等手機回報（CODING_RULES E15）。"""
     return (
@@ -25,10 +30,10 @@ def sfx_seconds(line_id: str) -> float:
 
 
 def step_gap(line_id: str) -> float:
-    """自動模式步驟間隔：至少 4 秒；有開場音效時取 音效＋0.3 秒 與 4 秒的大者（SPEC A8.2）。"""
+    """自動模式步驟間隔：至少 4 秒，天亮到發言這段再除以倍率；音效要放得完（SPEC A8.2）。"""
     sfx = sfx_seconds(line_id)
     padded = sfx + balance.SFX_GAP_PADDING_SECONDS if sfx else 0.0
-    return max(float(balance.STEP_GAP_SECONDS), padded)
+    return max(balance.STEP_GAP_SECONDS / line_pace(line_id), padded)
 
 
 def to_remaining(timers: Timers, now: float) -> dict[str, float]:

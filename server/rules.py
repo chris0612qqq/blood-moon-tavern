@@ -262,14 +262,25 @@ def nominees(votes: Mapping[str, str | None]) -> dict[str, int]:
     return {target: n for target, n in sorted(counts.items()) if n in keep}
 
 
+def needs_second_round(votes: Mapping[str, str | None]) -> bool:
+    """第一輪至少 3 個人被投才要申述和第二輪（SPEC A5.4）。"""
+    targets = {target for target in votes.values() if target is not None}
+    return len(targets) >= balance.SECOND_ROUND_MIN_TARGETS
+
+
+def plurality(counts: Mapping[str, int]) -> str | None:
+    """唯一最高票的人；平票或沒有票回 None（L15）。"""
+    if not counts:
+        return None
+    top = max(counts.values())
+    leaders = [target for target, n in counts.items() if n == top]
+    return leaders[0] if len(leaders) == 1 else None
+
+
 def tally(votes: Mapping[str, str | None]) -> TallyResult:
     """計票（SPEC A5.4）：平票或全部棄票＝無人出局（L15）。"""
     counts = Counter(target for target in votes.values() if target is not None)
-    if not counts:
-        return TallyResult(exiled=None, counts={})
-    top = max(counts.values())
-    leaders = [t for t, n in counts.items() if n == top]
-    return TallyResult(exiled=leaders[0] if len(leaders) == 1 else None, counts=dict(counts))
+    return TallyResult(exiled=plurality(counts), counts=dict(counts))
 
 
 def check_win(state: GameState) -> Winner | None:
