@@ -41,6 +41,7 @@ class Game:
         seed: int = 1,
     ) -> None:
         roles = roles or ROLES_8
+        self.nominate: tuple[str, ...] = ()
         monkeypatch.setattr("server.rules.deal", lambda ids, history, rng: dict(roles))
         self.clock = FakeClock()
         players = [(pid, pid.upper()) for pid in roles]
@@ -75,6 +76,7 @@ class Game:
         while self.state.step is not step or (step in ACTION_STEPS and self._not_open()):
             if self.clock.now() > end:
                 raise AssertionError(f"stuck at {self.state.step}, wanted {step}")
+            self._pass_first_round(step)
             self.clock.advance(0.25)
             self.engine.tick()
 
@@ -120,6 +122,20 @@ class Game:
             self.engine.tick()
         raise AssertionError(f"never announced, at {self.state.step}")
 
+    def _pass_first_round(self, wanted: Step) -> None:
+        """要到第二輪的測試不關心第一輪：大家投 nominate，被提名者講完申述。"""
+        state = self.state
+        if wanted not in (Step.VOTE, Step.DEFENSE) or self._not_open():
+            return
+        if state.step is Step.SUSPECT_VOTE:
+            alive = [p.id for p in state.players if p.alive]
+            for voter in list(state.actors):
+                if voter not in state.done:
+                    target = next(p for p in (*self.nominate, *alive) if p in alive and p != voter)
+                    self.act(voter, Action.VOTE_CAST, target=target)
+        elif wanted is Step.VOTE and state.step is Step.DEFENSE and state.current_speaker:
+            self.act(state.current_speaker, Action.SPEAK_END)
+
     def finish_speech(self) -> None:
         while self.state.step in (Step.DAY_SPEAK, Step.LAST_WORDS):
             if not self._not_open() and self.state.current_speaker:
@@ -128,6 +144,8 @@ class Game:
             self.engine.tick()
 
     def vote_all(self, target: str | None, skip: tuple[str, ...] = ()) -> None:
+        if target is not None:
+            self.nominate = (target,)
         self.wait_for(Step.VOTE)
         for voter in list(self.state.actors):
             if voter in skip:
@@ -579,7 +597,11 @@ class TestVote:
         game.night(None)
         game.wait_for(Step.DAY_SPEAK)
         game.finish_speech()
-        game.wait_for(Step.VOTE)
+        game.wait_for(Step.SUSPECT_VOTE)  # 投票規則兩輪相同，用第一輪測
+
+    def _cast_all(self, game: Game, target: str) -> None:
+        for voter in list(game.state.actors):
+            game.act(voter, Action.VOTE_CAST, target=None if voter == target else target)
 
     def test_change_once_only(self, game: Game) -> None:
         self._at_vote(game)
@@ -596,25 +618,29 @@ class TestVote:
 
     def test_all_cast_waits_5_seconds_and_allows_change(self, game: Game) -> None:
         self._at_vote(game)
-        game.vote_all("p1")
+        self._cast_all(game, "p1")
         assert game.state.timers.grace_until is not None
         game.run(balance.VOTE_ALL_CAST_GRACE_SECONDS - 1)
-        assert game.state.step is Step.VOTE
+        assert game.state.step is Step.SUSPECT_VOTE
         game.act("p2", Action.VOTE_CAST, target="p3")
         game.run(2)
-        assert game.state.step is Step.REVEAL
-        assert game.state.vote_round().ballots["p2"] == "p3"
+        assert game.state.step is Step.DEFENSE
+        assert game.state.vote_round().suspect_counts["p3"] == 1
 
     def test_grace_never_exceeds_deadline(self, game: Game) -> None:
         self._at_vote(game)
         deadline = game.state.timers.deadline
         assert deadline is not None
         game.clock.advance(deadline - game.clock.now() - 1)
-        game.vote_all("p1")
+        self._cast_all(game, "p1")
         assert game.state.timers.grace_until == deadline
 
     def test_timeout_is_abstain(self, game: Game) -> None:
         self._at_vote(game)
+        game.act("p1", Action.VOTE_CAST, target="p2")
+        game.run(balance.VOTE_SECONDS + 1)
+        assert game.state.vote_round().suspect_counts == {"p2": 1}
+        game.wait_for(Step.VOTE)
         game.act("p1", Action.VOTE_CAST, target="p2")
         game.run(balance.VOTE_SECONDS + 1)
         votes = game.state.vote_round()
@@ -624,6 +650,10 @@ class TestVote:
         self._at_vote(game)
         game.act("p1", Action.VOTE_CAST, target="p2")
         game.act("p2", Action.VOTE_CAST, target="p1")
+        game.run(balance.VOTE_SECONDS + 1)
+        game.wait_for(Step.VOTE)
+        game.act("p3", Action.VOTE_CAST, target="p1")
+        game.act("p4", Action.VOTE_CAST, target="p2")
         game.run(balance.VOTE_SECONDS + 1)
         assert game.state.vote_round().exiled is None
         assert all(p.alive for p in game.state.players)
@@ -777,6 +807,22 @@ class TestPause:
         assert game.state.pause is None
         assert game.state.current_speaker not in (None, speaker)
 
+    @pytest.mark.parametrize("mode", [Mode.AUTO, Mode.GOD])
+    @pytest.mark.parametrize("step", [Step.DAY_SPEAK, Step.VOTE])
+    def test_resume_says_the_current_step_in_both_modes(
+        self, monkeypatch: pytest.MonkeyPatch, mode: Mode, step: Step
+    ) -> None:
+        game = Game(monkeypatch, mode=mode)
+        game.engine.state.step = step
+        game.engine.state.line_id = {Step.DAY_SPEAK: "speak", Step.VOTE: "vote"}[step]
+        game.engine.state.current_speaker = "p1" if step is Step.DAY_SPEAK else None
+        game.act(ADMIN, Action.ADMIN_PAUSE)
+        game.act(ADMIN, Action.ADMIN_RESUME)
+        game.clock.advance(balance.RESUME_COUNTDOWN_SECONDS + 0.1)
+        events = game.engine.tick()
+        narrated = [e for e in events if e.type is EventType.NARRATE]
+        assert [e.data["line_id"] for e in narrated] == [game.state.line_id]
+
     def test_auto_resume_renarrates(self, game: Game) -> None:
         game.to_wolf_step()
         game.engine.system_pause(PauseReason.PRESENCE)
@@ -784,6 +830,88 @@ class TestPause:
         game.clock.advance(balance.RESUME_COUNTDOWN_SECONDS + 1)
         events = game.engine.tick()
         assert any(e.type is EventType.NARRATE for e in events)
+
+
+class TestTwoRoundVote:
+    """SPEC A5.4 v4.18：第一輪投嫌疑人、申述、第二輪放逐。"""
+
+    def _at_suspects(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.wait_for(Step.SUSPECT_VOTE)
+
+    def _cast(self, game: Game, target: dict[str, str | None]) -> None:
+        for voter in list(game.state.actors):
+            game.act(voter, Action.VOTE_CAST, target=target.get(voter))
+
+    def test_flow_and_first_round_ballots_are_not_kept(self, game: Game) -> None:
+        self._at_suspects(game)
+        self._cast(game, {"p1": "p2", "p3": "p2", "p4": "p2", "p5": "p1", "p6": "p1", "p2": "p3"})
+        game.wait_for(Step.DEFENSE)
+        votes = game.state.vote_round()
+        assert set(votes.nominees or []) == {"p1", "p2"}
+        assert votes.suspect_counts == {"p2": 3, "p1": 2}
+        assert votes.ballots == {}  # 誰投誰不留
+        assert game.state.current_speaker == "p1"  # 依座位
+        game.act("p1", Action.SPEAK_END)
+        game.run(1)
+        game.wait_for(Step.DEFENSE)
+        assert game.state.current_speaker == "p2"
+        game.act("p2", Action.SPEAK_END)
+        game.wait_for(Step.VOTE)
+        assert "p1" not in game.state.actors and "p2" not in game.state.actors
+        with pytest.raises(GameError):
+            game.act("p1", Action.VOTE_CAST, target="p2")  # 被提名者不能投
+        with pytest.raises(GameError):
+            game.act("p3", Action.VOTE_CAST, target="p4")  # 只能投被提名者
+        for voter in list(game.state.actors):
+            game.act(voter, Action.VOTE_CAST, target="p2")
+        game.wait_for(Step.REVEAL)
+        assert game.state.vote_round().exiled == "p2"
+
+    def test_all_abstain_in_first_round_means_no_exile(self, game: Game) -> None:
+        self._at_suspects(game)
+        self._cast(game, {})
+        game.wait_for(Step.REVEAL)
+        votes = game.state.vote_round()
+        assert votes.nominees == [] and votes.exiled is None and votes.ballots == {}
+        assert game.state.line_id == "no_nominee"
+
+    def test_single_nominee_can_be_spared(self, game: Game) -> None:
+        self._at_suspects(game)
+        self._cast(game, {p: "p1" for p in game.state.actors if p != "p1"})
+        game.wait_for(Step.DEFENSE)
+        game.act("p1", Action.SPEAK_END)
+        game.wait_for(Step.VOTE)
+        self._cast(game, {})  # 全部棄票
+        game.wait_for(Step.REVEAL)
+        assert game.state.vote_round().exiled is None
+
+    def test_second_round_tie_means_no_exile(self, game: Game) -> None:
+        self._at_suspects(game)
+        self._cast(game, {"p3": "p1", "p4": "p2"})
+        game.wait_for(Step.VOTE)
+        voters = list(game.state.actors)
+        half = len(voters) // 2
+        for i, voter in enumerate(voters):
+            game.act(voter, Action.VOTE_CAST, target="p1" if i < half else "p2")
+        game.wait_for(Step.REVEAL)
+        assert game.state.vote_round().exiled is None and game.state.line_id == "tie"
+
+    def test_everyone_nominated_means_no_second_round(self, game: Game) -> None:
+        self._at_suspects(game)
+        alive = list(game.state.actors)
+        self._cast(game, {voter: alive[(i + 1) % len(alive)] for i, voter in enumerate(alive)})
+        game.wait_for(Step.DEFENSE)
+        for _ in range(len(alive)):
+            if game.state.step is Step.DEFENSE:
+                game.wait_for(Step.DEFENSE)
+                game.act(str(game.state.current_speaker), Action.SPEAK_END)
+                game.run(1)
+        game.wait_for(Step.REVEAL)
+        assert game.state.vote_round().exiled is None
 
 
 class TestChat:
@@ -1278,7 +1406,7 @@ def _attach_helpers() -> None:
         raise AssertionError(f"never reached {step}")
 
     def finish_speech_or_to_vote(self: Game) -> None:
-        finish_speech_to(self, Step.VOTE)
+        finish_speech_to(self, Step.SUSPECT_VOTE)
 
     Game.finish_speech_to = finish_speech_to  # type: ignore[attr-defined]
     Game.finish_speech_or_to_vote = finish_speech_or_to_vote  # type: ignore[attr-defined]

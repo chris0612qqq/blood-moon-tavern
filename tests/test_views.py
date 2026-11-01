@@ -175,7 +175,7 @@ class TestBuild:
         game.night(None)
         game.wait_for(Step.DAY_SPEAK)
         game.finish_speech()
-        game.wait_for(Step.VOTE)
+        game.wait_for(Step.SUSPECT_VOTE)
         game.act("p1", Action.VOTE_CAST, target="p2")
         view = views.build(game.state, player("p3"))
         assert view["progress"] == {"done": 1, "total": 8}
@@ -433,7 +433,7 @@ class TestEvents:
         game.night(None)
         game.wait_for(Step.DAY_SPEAK)
         game.finish_speech()
-        game.wait_for(Step.VOTE)
+        game.wait_for(Step.SUSPECT_VOTE)
         events = game.act("p1", Action.VOTE_CAST, target="p2")
         cast = next(e for e in events if e.type is EventType.VOTE_CAST)
         others = views.filter_event(cast, player("p3"), game.state)

@@ -23,7 +23,7 @@ from server.events import Event, EventType, replay
 from server.modes import Actor
 from server.rng import GameRng
 from server.roles import is_wolf
-from server.rules import public_role, role_is_public
+from server.rules import VOTE_STEPS, public_role, role_is_public
 from server.views import HOST_VIEWER, OBSERVER_VIEWER, Viewer, ViewerKind, build, filter_event
 
 TICK_SECONDS = 0.25
@@ -123,7 +123,7 @@ class BotBrain:
             self._bet(actor, view)
         if self._roll(self.chat_rate):
             self._chat(actor, view, me)
-        if not me["is_actor"] or (me["done"] and step is not Step.VOTE):
+        if not me["is_actor"] or (me["done"] and step not in VOTE_STEPS):
             return
         opens_at = view.get("opens_at")
         if opens_at is not None and self.now() < opens_at:
@@ -145,10 +145,10 @@ class BotBrain:
         elif step is Step.HUNTER:
             target = self._pick(targets) if targets and self._roll(0.8) else None
             self.send(actor, Action.HUNTER_SHOOT, {"target": target})
-        elif step in (Step.LAST_WORDS, Step.DAY_SPEAK):
+        elif step in (Step.LAST_WORDS, Step.DAY_SPEAK, Step.DEFENSE):
             if self._roll(self.speak_rate):
                 self.send(actor, Action.SPEAK_END)
-        elif step is Step.VOTE:
+        elif step in VOTE_STEPS:
             self._vote(actor, me, targets)
 
     def _wolf(self, actor: Actor, me: dict[str, Any], targets: list[str]) -> None:

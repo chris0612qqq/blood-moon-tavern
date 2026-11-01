@@ -32,6 +32,7 @@ p { margin: 8px 0; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .grow { flex: 1; }
 .panel { background: #383838; padding: 12px; border-radius: 4px; margin: 8px 0; }
+.pause-row { display: flex; justify-content: flex-end; }
 .far-apart { margin-top: 32px; } /* 危險操作和常用按鈕隔開（UI_RULES K6） */
 .danger-zone { border: 1px solid #a55; }
 

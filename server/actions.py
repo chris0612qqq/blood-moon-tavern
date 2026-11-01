@@ -232,7 +232,7 @@ def _maybe_start_vote_grace(engine: Engine) -> None:
     state = engine.state
     timing = state.timers
     if (
-        state.step is not Step.VOTE
+        state.step not in rules.VOTE_STEPS
         or timing.grace_until is not None
         or set(state.actors) - set(state.done)
     ):
@@ -359,7 +359,7 @@ def remove_player(engine: Engine, player_id: str, cause: DeathCause) -> None:
         cleared = [w for w, t in night.wolf_picks.items() if t == player_id or w == player_id]
         if cleared:
             engine.emit(EventType.WOLF_PICK_CLEARED, wolves=cleared)
-    if state.step is Step.VOTE:
+    if state.step in rules.VOTE_STEPS:
         engine.emit(EventType.VOTE_VOIDED, player=player_id)
     engine.kill(player_id, cause)
     winner = rules.check_win(state)

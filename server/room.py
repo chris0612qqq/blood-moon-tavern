@@ -81,6 +81,9 @@ class Room:
     unrestorable: bool = False
 
 
+_SPEAKER_LINES = frozenset({"speak", "last_words", "defense"})
+
+
 class RoomService:
     """伺服器一次只有一個房間（SPEC A1）。"""
 
@@ -550,6 +553,8 @@ class RoomService:
                 self.chat_seq = max(self.chat_seq, row["id"])
                 if row["disguise_period"] is not None or row["is_wolf_mask"]:
                     self.disguised_chat.append(row)
+            elif event.type is EventType.NARRATE:
+                self._notify_speaker(event.data)
             elif event.type is EventType.STEP_ENTERED:
                 self._room_log(f"step {event.data['step']}")
             elif event.type is EventType.GAME_ENDED:
@@ -608,6 +613,7 @@ class RoomService:
             public = views.public_messages(event, state)  # 每個事件只算一次（P2）
             full = event.type in (
                 EventType.RESUMED,
+                EventType.NOMINEES_SET,  # 選票清空，自己的已投狀態也要跟著換
                 EventType.ROLLED_BACK,
                 EventType.GAME_ENDED,
             )
@@ -714,6 +720,15 @@ class RoomService:
             self.players[player_id].seat = seat
         self.db.write([_player_statement(room.id, self.players[p]) for p in frame.order])
         self.broadcast_roster()
+
+    def _notify_speaker(self, narrated: dict[str, Any]) -> None:
+        """輪到誰發言，本人手機也念一次（SPEC C4）。他就是旁白主機時已經念過了。"""
+        engine = self.engine
+        if engine is None or narrated["line_id"] not in _SPEAKER_LINES or not narrated["speak"]:
+            return
+        speaker = engine.state.current_speaker
+        if speaker is not None and speaker != engine.state.narrator_id:
+            self.broadcast_to([speaker], narrated["text"])
 
     def broadcast_to(
         self,

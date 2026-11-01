@@ -13,7 +13,7 @@ import { s10, s19, s6, s7, s8, s9 } from './screens/night.js';
 import { s11, s12, s13, s14, s15, s16, s17, s22, s27 } from './screens/day.js';
 import { lobbyMenu, s20 } from './screens/host.js';
 import { broadcastTab } from './screens/broadcast.js';
-import { chatTab, NIGHT_STEPS, playersTab, roleTab, s18, s21, s26 } from './screens/tabs.js';
+import { chatTab, NIGHT_STEPS, pauseButton, playersTab, roleTab, s18, s21, s26 } from './screens/tabs.js';
 
 const HEALTH_MS = 5000;
 const TOAST_MS = 3000;
@@ -155,7 +155,7 @@ function mainContent(screen) {
   if (tabView) return tabView;
   // 遊戲分頁暫停時蓋上卷軸（UI_RULES F7）；主持人的控制台要能按繼續，所以不蓋
   if (server.paused && !server.host && server.phase === 'game' && server.step !== STEP.END) return s16(server);
-  return [deadTag(server), s19(server), SCREENS[screen](server)];
+  return [deadTag(server), pauseButton(server), s19(server), SCREENS[screen](server)];
 }
 
 // 看最新訊息時跟著捲到底；往上翻舊訊息時不打擾。是否在看最新只由使用者的捲動決定：

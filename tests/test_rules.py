@@ -415,3 +415,23 @@ class TestBets:
             ("b", 0, 4),
             ("c", 0, 4),
         ]
+
+
+class TestNominees:
+    """SPEC A5.4 第一輪：最高票與第二高票的所有人進第二輪。"""
+
+    @pytest.mark.parametrize(
+        ("votes", "expected"),
+        [
+            ({"a": "x", "b": "x", "c": "y"}, {"x": 2, "y": 1}),
+            ({"a": "x", "b": "x", "c": "y", "d": "z"}, {"x": 2, "y": 1, "z": 1}),
+            ({"a": "x", "b": "y"}, {"x": 1, "y": 1}),
+            ({"a": "x", "b": "y", "c": "z"}, {"x": 1, "y": 1, "z": 1}),
+            ({"a": "x", "b": "x", "c": "y", "d": "y", "e": "z"}, {"x": 2, "y": 2}),
+            ({"a": "x", "b": "x", "c": None}, {"x": 2}),
+            ({"a": None, "b": None}, {}),
+            ({}, {}),
+        ],
+    )
+    def test_top_two_levels(self, votes: dict[str, str | None], expected: dict[str, int]) -> None:
+        assert rules.nominees(votes) == expected

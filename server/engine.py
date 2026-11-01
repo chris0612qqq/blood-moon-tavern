@@ -41,7 +41,9 @@ TRANSITIONS: Mapping[Step, StepRule] = {
     Step.DAWN: _rule([], [Step.HUNTER, Step.LAST_WORDS, Step.DAY_SPEAK]),
     Step.HUNTER: _rule([Action.HUNTER_SHOOT], [Step.LAST_WORDS, Step.DAY_SPEAK, Step.NIGHT_START]),
     Step.LAST_WORDS: _rule([Action.SPEAK_END], [Step.LAST_WORDS, Step.DAY_SPEAK, Step.NIGHT_START]),
-    Step.DAY_SPEAK: _rule([Action.SPEAK_END], [Step.DAY_SPEAK, Step.VOTE]),
+    Step.DAY_SPEAK: _rule([Action.SPEAK_END], [Step.DAY_SPEAK, Step.SUSPECT_VOTE]),
+    Step.SUSPECT_VOTE: _rule([Action.VOTE_CAST], [Step.DEFENSE, Step.REVEAL]),
+    Step.DEFENSE: _rule([Action.SPEAK_END], [Step.DEFENSE, Step.VOTE, Step.REVEAL]),
     Step.VOTE: _rule([Action.VOTE_CAST], [Step.REVEAL]),
     Step.REVEAL: _rule([], [Step.HUNTER, Step.LAST_WORDS, Step.NIGHT_START]),
     Step.END: _rule([], []),
@@ -59,6 +61,8 @@ STEP_LINES: Mapping[Step, str] = {
     Step.HUNTER: "hunter",
     Step.LAST_WORDS: "last_words",
     Step.DAY_SPEAK: "speak",
+    Step.SUSPECT_VOTE: "suspect_vote",
+    Step.DEFENSE: "defense",
     Step.VOTE: "vote",
 }
 LINE_STEPS: Mapping[str, Step] = {line: step for step, line in STEP_LINES.items()}
@@ -73,6 +77,8 @@ ACTION_STEPS = frozenset(
         Step.HUNTER,
         Step.LAST_WORDS,
         Step.DAY_SPEAK,
+        Step.SUSPECT_VOTE,
+        Step.DEFENSE,
         Step.VOTE,
     }
 )
@@ -271,8 +277,8 @@ class Engine:
         assert pause is not None
         resumed = timers.from_remaining(pause, now)
         self.emit(EventType.RESUMED, timers=resumed.model_dump())
-        # SPEC A8.6：無管理員模式自動重念；上帝模式由主持人按重念
-        if self.state.mode is Mode.AUTO and self.state.line_id is not None:
+        # SPEC A8.6：大家停了一陣子，繼續時念一次現在該做什麼（使用者要求，兩種模式都念）
+        if self.state.line_id is not None:
             self.narrate_current()
 
     # ---- 時間觸發 ----
@@ -307,7 +313,7 @@ class Engine:
             self.emit(EventType.WITCH_ACTED, save=False, poison=None)
         elif state.step is Step.HUNTER and state.hunter_pending is not None:
             actions.resolve_hunter(self, state.hunter_pending, None)
-        elif state.step is Step.VOTE:
+        elif state.step in rules.VOTE_STEPS:
             for pid in state.actors:
                 if pid not in state.vote_round().ballots:
                     self.emit(EventType.VOTE_CAST, voter=pid, target=None, changed=False)
@@ -354,7 +360,14 @@ class Engine:
             later = sequence[sequence.index(step) + 1 :]
             return next(s for s in later if self.should_enter(s))
         if step is Step.DAY_SPEAK:
-            return Step.DAY_SPEAK if state.speak_queue else Step.VOTE
+            return Step.DAY_SPEAK if state.speak_queue else Step.SUSPECT_VOTE
+        if step is Step.SUSPECT_VOTE:
+            return Step.DEFENSE if rules.nominees(state.vote_round().ballots) else Step.REVEAL
+        if step is Step.DEFENSE:
+            if state.speak_queue:
+                return Step.DEFENSE
+            # 被提名者第二輪不投；全部活人都被提名就沒有人能投（SPEC A5.4）
+            return Step.VOTE if self._final_voters() and self._alive_nominees() else Step.REVEAL
         if step is Step.VOTE:
             return Step.REVEAL
         if step is Step.LAST_WORDS and state.speak_queue:
@@ -398,12 +411,22 @@ class Engine:
             text = narration.render("win", side=narration.SIDE_NAMES[winner])
         self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=True)
 
+    def _alive_nominees(self) -> list[str]:
+        state = self.state
+        return [p for p in state.vote_round().nominees or [] if state.player(p).alive]
+
+    def _final_voters(self) -> list[str]:
+        nominated = self.state.vote_round().nominees or []
+        return [p.id for p in rules.alive_players(self.state) if p.id not in nominated]
+
     def _plan_actors(self, step: Step) -> list[str]:
         state = self.state
         if step is Step.DEAL:
             return [p.id for p in state.players]
-        if step is Step.VOTE:
+        if step is Step.SUSPECT_VOTE:
             return [p.id for p in rules.alive_players(state)]
+        if step is Step.VOTE:
+            return self._final_voters()
         if step is Step.HUNTER:
             assert state.hunter_pending is not None
             return [state.hunter_pending]
@@ -420,6 +443,8 @@ class Engine:
             Step.HUNTER: self.seconds("hunter", balance.HUNTER_SECONDS),
             Step.LAST_WORDS: self.seconds("last_words", balance.LAST_WORDS_SECONDS),
             Step.DAY_SPEAK: self.seconds("speak", rules.speak_seconds(len(self.state.players))),
+            Step.SUSPECT_VOTE: self.seconds("vote", balance.VOTE_SECONDS),
+            Step.DEFENSE: self.seconds("defense", balance.DEFENSE_SECONDS),
             Step.VOTE: self.seconds("vote", balance.VOTE_SECONDS),
         }
         return table.get(step, 0)
@@ -430,6 +455,8 @@ class Engine:
         same_step = step is state.step
         if step is Step.NIGHT_START:
             self._begin_night()
+        if state.step is Step.SUSPECT_VOTE:
+            self.emit(EventType.NOMINEES_SET, counts=rules.nominees(state.vote_round().ballots))
         queue, speaker = self._speech_queue(step, same_step)
         line_id, text = self._line_for(step, speaker)
         now = self.now
@@ -489,12 +516,15 @@ class Engine:
 
     def _speech_queue(self, step: Step, same_step: bool) -> tuple[list[str], str | None]:
         state = self.state
-        if step not in (Step.LAST_WORDS, Step.DAY_SPEAK):
+        if step not in (Step.LAST_WORDS, Step.DAY_SPEAK, Step.DEFENSE):
             return [], None
         if same_step:
             queue = list(state.speak_queue)
         elif step is Step.LAST_WORDS:
             queue = rules.last_words_queue(state)
+        elif step is Step.DEFENSE:
+            alive = self._alive_nominees()
+            queue = sorted(alive, key=lambda pid: state.player(pid).seat)
         else:
             queue = rules.speak_order(state, self.rng)
             if not queue:
@@ -503,8 +533,19 @@ class Engine:
         return queue[1:], queue[0]
 
     def _line_for(self, step: Step, speaker: str | None) -> tuple[str | None, str]:
+        if step is Step.DEFENSE and speaker and self.state.step is not Step.DEFENSE:
+            names = [self.state.player(p).name for p in self.state.vote_round().nominees or []]
+            text = narration.render(
+                "defense_first",
+                names=narration.NAME_SEPARATOR.join(names),
+                name=self.state.player(speaker).name,
+            )
+            return "defense", text
         if step is Step.REVEAL:
-            result = rules.tally(self.state.vote_round().ballots)
+            round_votes = self.state.vote_round()
+            if round_votes.nominees == []:
+                return "no_nominee", narration.render("no_nominee")
+            result = rules.tally(round_votes.ballots)
             if result.exiled is None:
                 return "tie", narration.render("tie")
             exiled = self.state.player(result.exiled)
@@ -523,10 +564,10 @@ class Engine:
         line_id = state.line_id
         assert line_id is not None
         # 暫停時發言者被判死：沒有人可念，繼續後步驟會自己換下一位
-        if line_id in ("speak", "last_words") and state.current_speaker is None:
+        if line_id in ("speak", "last_words", "defense") and state.current_speaker is None:
             return
-        if line_id == "tie":
-            text = narration.render("tie")
+        if line_id in ("tie", "no_nominee"):
+            text = narration.render(line_id)
         elif line_id in ("exile", "exile_wolf"):
             exiled = state.vote_round().exiled
             assert exiled is not None

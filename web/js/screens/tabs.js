@@ -8,6 +8,7 @@ import { actionButton, avatar, button, nameOf } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { roleCard } from './night.js';
 
+const DAY_STEPS = new Set(['DAWN', 'HUNTER', 'LAST_WORDS', 'DAY_SPEAK', 'SUSPECT_VOTE', 'DEFENSE', 'VOTE', 'REVEAL']);
 const CHAT_MAX = 500;
 const CHAT_WARN = 50;
 const FIRST_CHAT_ID = 1;
@@ -132,10 +133,16 @@ export function roleTab(server) {
   ];
 }
 
+/** 無管理員模式的管理員：白天在遊戲畫面就按得到暫停（SPEC A3）。上帝控制台有自己的暫停鈕。 */
+export function pauseButton(server) {
+  if (!server.is_admin || server.host || server.paused || !DAY_STEPS.has(server.step)) return null;
+  return h('div', { class: 'pause-row' },
+    actionButton({ id: 'btn-pause', small: true, kind: 'secondary', label: t('s16.pause'), run: () => send('admin.pause') }));
+}
+
 export function playersTab(server) {
   const list = server.players ?? server.roster ?? [];
   const offline = new Set((server.roster ?? []).filter((r) => r.offline).map((r) => r.id));
-  const canPause = server.is_admin && !server.host && !server.paused && server.phase === 'game' && !NIGHT_STEPS.has(server.step) && server.step !== 'END';
   const canEnd = server.is_admin && !server.host && server.phase === 'game' && server.step !== 'END';
   return [
     h('h1', { testid: 'view-players' }, t('players.title')),
@@ -146,7 +153,6 @@ export function playersTab(server) {
       offline.has(p.id) ? h('span', { class: 'badge' }, t('s5.offlineTag')) : null,
       p.alive === false ? h('span', { class: 'hint', testid: `player-cause-${p.id}` }, causePlain(p.death_cause)) : null,
       p.alive === false ? h('span', { class: 'badge' }, `☠ ${roleName(p.public_role ?? p.role)}`.trim()) : null)),
-    canPause ? actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', run: () => send('admin.pause') }) : null,
     (server.history ?? []).length ? h('h2', {}, t('players.log')) : null,
     (server.history ?? []).map((row) => h('div', { class: 'panel', key: `round${row.round_no}` },
       h('b', {}, t('players.round', { n: row.round_no })),
