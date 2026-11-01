@@ -166,6 +166,16 @@ function votedView(server, vote, progress) {
   ];
 }
 
+/** 第二輪每人幾票，高票在前（SPEC A5.4）。棄票不算。 */
+function tallyLine(server, ballots) {
+  const counts = {};
+  for (const [, to] of ballots) if (to) counts[to] = (counts[to] ?? 0) + 1;
+  const names = Object.entries(counts)
+    .sort(([, a], [, b]) => b - a)
+    .map(([id, n]) => t('s14.nominee', { name: nameOf(server, id), n }));
+  return names.length ? h('p', { class: 'center keep-words', testid: 'reveal-tally' }, names.join('、')) : null;
+}
+
 export function s15(server) {
   const reveal = store.lastReveal ?? {};
   const ballots = Object.entries(reveal.ballots ?? {});
@@ -175,6 +185,7 @@ export function s15(server) {
       ? t('s15.exiled', { name: nameOf(server, reveal.exiled) })
       : t(server.line_id === 'no_nominee' ? 's15.noNominee' : 's15.tie')),
     reveal.exiled ? deadRow(server, reveal.exiled) : null,
+    tallyLine(server, ballots),
     ballots.map(([from, to]) => h('div', { class: 'list-row', key: from },
       t('s15.ballot', { from: nameOf(server, from), to: to ? nameOf(server, to) : t('s14.abstain') }))),
     betEntry(server),
