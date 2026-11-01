@@ -437,8 +437,49 @@ class TestEvents:
         events = game.act("p1", Action.VOTE_CAST, target="p2")
         cast = next(e for e in events if e.type is EventType.VOTE_CAST)
         others = views.filter_event(cast, player("p3"), game.state)
-        assert others == [{"t": "progress", "done": 1, "total": 8}]
+        assert others == [{"t": "progress", "done": 1, "total": 8, "suspect_picks": {"p1": "p2"}}]
         assert "me" in [m["t"] for m in views.filter_event(cast, player("p1"), game.state)]
+
+    def test_first_round_picks_public_second_round_secret(self, game: Game) -> None:
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.wait_for(Step.SUSPECT_VOTE)
+        game.act("p1", Action.VOTE_CAST, target="p2")
+        assert views.build(game.state, player("p3"))["suspect_picks"] == {"p1": "p2"}
+        game.nominate = ("p2",)
+        game.wait_for(Step.DEFENSE)
+        assert views.build(game.state, player("p3"))["suspect_picks"] == {}
+        game.wait_for(Step.VOTE)
+        assert views.build(game.state, player("p3"))["suspect_counts"]
+        voter = game.state.actors[0]
+        events = game.act(voter, Action.VOTE_CAST, target="p2")
+        cast = next(e for e in events if e.type is EventType.VOTE_CAST)
+        other = game.state.actors[1]
+        assert views.filter_event(cast, player(other), game.state)[0]["suspect_picks"] == {}
+        assert views.build(game.state, player(other))["suspect_picks"] == {}
+
+    def test_second_round_reveal_clears_first_round_counts(self, game: Game) -> None:
+        # step 訊息要帶票數：手機留著第一輪的舊值，揭曉時會和第二輪加在一起
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.wait_for(Step.SUSPECT_VOTE)
+        game.nominate = ("p2",)
+        game.wait_for(Step.VOTE)
+        collected = []
+        for _ in range(1000):
+            game.clock.advance(0.25)
+            collected += game.engine.tick()
+            if game.state.step is Step.REVEAL:
+                break
+        entered = [e for e in collected if e.type is EventType.STEP_ENTERED][-1]
+        step = next(
+            m for m in views.filter_event(entered, player("p3"), game.state) if m["t"] == "step"
+        )
+        assert step["step"] == "REVEAL" and step["suspect_counts"] == {}
 
     def test_vote_reveal_public(self, game: Game) -> None:
         game.to_wolf_step()

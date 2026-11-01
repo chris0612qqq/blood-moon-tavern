@@ -362,7 +362,8 @@ class Engine:
         if step is Step.DAY_SPEAK:
             return Step.DAY_SPEAK if state.speak_queue else Step.SUSPECT_VOTE
         if step is Step.SUSPECT_VOTE:
-            return Step.DEFENSE if rules.nominees(state.vote_round().ballots) else Step.REVEAL
+            second = rules.needs_second_round(state.vote_round().ballots)
+            return Step.DEFENSE if second else Step.REVEAL
         if step is Step.DEFENSE:
             if state.speak_queue:
                 return Step.DEFENSE
@@ -456,7 +457,12 @@ class Engine:
         if step is Step.NIGHT_START:
             self._begin_night()
         if state.step is Step.SUSPECT_VOTE:
-            self.emit(EventType.NOMINEES_SET, counts=rules.nominees(state.vote_round().ballots))
+            ballots = state.vote_round().ballots
+            self.emit(
+                EventType.NOMINEES_SET,
+                counts=rules.nominees(ballots),
+                direct=not rules.needs_second_round(ballots),
+            )
         queue, speaker = self._speech_queue(step, same_step)
         line_id, text = self._line_for(step, speaker)
         now = self.now
@@ -545,10 +551,10 @@ class Engine:
             round_votes = self.state.vote_round()
             if round_votes.nominees == []:
                 return "no_nominee", narration.render("no_nominee")
-            result = rules.tally(round_votes.ballots)
-            if result.exiled is None:
+            exiled_id = self._exile_result()
+            if exiled_id is None:
                 return "tie", narration.render("tie")
-            exiled = self.state.player(result.exiled)
+            exiled = self.state.player(exiled_id)
             # 放逐到狼就大聲宣布（使用者試玩回饋）
             exile_line = "exile_wolf" if is_wolf(exiled.role) else "exile"
             return exile_line, narration.render(exile_line, name=exiled.name)
@@ -613,17 +619,26 @@ class Engine:
             show = balance.PEACEFUL_NIGHT_SECONDS
         # 主持人不用再按：天亮請睜眼念完就直接宣布（使用者試玩回饋）
         self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=True)
-        wait = max(show, timers.narration_seconds(text))
+        wait = max(show / timers.line_pace(line_id), timers.narration_seconds(text))
         self.emit(EventType.TIMERS_SET, timers=Timers(deadline=self.now + wait).model_dump())
 
+    def _exile_result(self) -> str | None:
+        """被放逐的人：第一輪就決定時看票數，否則看第二輪（SPEC A5.4）。"""
+        votes = self.state.vote_round()
+        if votes.direct:
+            return rules.plurality(votes.suspect_counts)
+        return rules.tally(votes.ballots).exiled
+
     def _reveal_votes(self) -> None:
+        votes = self.state.vote_round()
+        ballots = dict(votes.ballots)
+        exiled = self._exile_result()
+        self.emit(EventType.VOTES_REVEALED, exiled=exiled, ballots=ballots)
+        if exiled is not None:
+            self.kill(exiled, DeathCause.VOTE)
+        shown_votes = len(ballots) + sum(votes.suspect_counts.values()) * votes.direct
+        show = shown_votes * balance.REVEAL_VOTE_EACH_SECONDS + balance.REVEAL_FOCUS_SECONDS
         state = self.state
-        ballots = dict(state.vote_round().ballots)
-        result = rules.tally(ballots)
-        self.emit(EventType.VOTES_REVEALED, exiled=result.exiled, ballots=ballots)
-        if result.exiled is not None:
-            self.kill(result.exiled, DeathCause.VOTE)
-        show = len(ballots) * balance.REVEAL_VOTE_EACH_SECONDS + balance.REVEAL_FOCUS_SECONDS
         timing = state.timers
         assert timing.opens_at is not None
         self.emit(

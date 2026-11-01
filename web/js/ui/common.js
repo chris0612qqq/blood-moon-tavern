@@ -1,6 +1,6 @@
 // 共用元件灰盒版（DEV_PLAN P4）：ActionButton、CountdownRing、PickGrid、Avatar、確認框。
 import { h } from '../dom.js';
-import { serverNow } from '../net.js';
+import { send, serverNow } from '../net.js';
 import { changed, store } from '../store.js';
 import { errorText, t } from '../strings.js';
 
@@ -65,6 +65,22 @@ async function press(key, o) {
   }, SUCCESS_MS);
 }
 
+/** 暫停和繼續共用同一顆按鈕，位置不變（使用者要求）。 */
+export function pauseToggle(server) {
+  const paused = server.paused;
+  if (!paused) {
+    return actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', small: true, run: () => send('admin.pause') });
+  }
+  return actionButton({
+    id: 'btn-resume',
+    label: t('s16.resume'),
+    kind: 'suggest',
+    small: true,
+    disabled: paused.resume_at ? t('s16.resuming') : null,
+    run: () => send('admin.resume'),
+  });
+}
+
 /** 普通按鈕（不送伺服器）。 */
 export function button(label, onclick, o = {}) {
   const classes = ['btn', o.kind ? `btn--${o.kind}` : 'btn--secondary', o.small ? 'btn--small' : ''];
@@ -83,14 +99,20 @@ export function countdown(server, hint) {
       testid: 'countdown',
       'data-deadline': paused ? null : (server.deadline ?? null),
       'data-opens': paused ? null : (notOpen ? server.opens_at : null),
+      'data-prep': prepText(server),
     }, paused ? '‖' : clockText(server)),
     hint ? h('div', { class: 'hint' }, hint) : null);
+}
+
+// 角色步驟旁白念的時候就能選（SPEC A8.2），其他步驟要等念完
+function prepText(server) {
+  return t(['WOLF', 'SEER', 'WITCH', 'HUNTER'].includes(server.step) ? 'prep.canAct' : 'prep');
 }
 
 // 重繪時先放正確文字，時鐘下一影格才更新，避免數字閃掉
 function clockText(server) {
   const now = serverNow();
-  if (server.opens_at && now < server.opens_at) return t('prep');
+  if (server.opens_at && now < server.opens_at) return prepText(server);
   return server.deadline ? String(Math.max(0, Math.ceil(server.deadline - now))) : '';
 }
 

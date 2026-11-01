@@ -77,6 +77,10 @@ def dispatch(
     HANDLERS[action](engine, actor, payload)
 
 
+# 角色不用等旁白念完就能選；步驟仍要念完才離開（使用者試玩回饋，SPEC A8.2）
+_ACT_DURING_NARRATION = frozenset({Step.WOLF, Step.SEER, Step.WITCH, Step.HUNTER})
+
+
 def _check_actor_action(engine: Engine, actor: Actor, action: Action) -> None:
     from server.engine import TRANSITIONS
 
@@ -87,7 +91,11 @@ def _check_actor_action(engine: Engine, actor: Actor, action: Action) -> None:
         raise _fail(ErrorCode.FORBIDDEN)
     now = engine.now
     timing = state.timers
-    if timing.opens_at is not None and now < timing.opens_at:
+    if (
+        state.step not in _ACT_DURING_NARRATION
+        and timing.opens_at is not None
+        and now < timing.opens_at
+    ):
         raise _fail(ErrorCode.STEP_NOT_OPEN)
     past_deadline = (
         timing.deadline is not None and now > timing.deadline + config.DEADLINE_GRACE_SECONDS

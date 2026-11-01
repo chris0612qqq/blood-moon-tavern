@@ -154,7 +154,7 @@ function mainContent(screen) {
   const tabView = tabContent(server);
   if (tabView) return tabView;
   // 遊戲分頁暫停時蓋上卷軸（UI_RULES F7）；主持人的控制台要能按繼續，所以不蓋
-  if (server.paused && !server.host && server.phase === 'game' && server.step !== STEP.END) return s16(server);
+  if (server.paused && !server.host && server.phase === 'game' && server.step !== STEP.END) return [pauseButton(server), s16(server)];
   return [deadTag(server), pauseButton(server), s19(server), SCREENS[screen](server)];
 }
 
@@ -212,7 +212,7 @@ function clockFrame() {
   for (const el of document.querySelectorAll('[data-deadline]')) {
     const opens = Number(el.dataset.opens);
     let text;
-    if (el.dataset.opens && now < opens) text = t('prep');
+    if (el.dataset.opens && now < opens) text = el.dataset.prep ?? t('prep');
     else {
       const left = Math.max(0, Math.ceil(Number(el.dataset.deadline) - now));
       text = el.dataset.clock === 'mmss'

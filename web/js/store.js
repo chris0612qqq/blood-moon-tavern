@@ -90,6 +90,7 @@ const HANDLERS = {
     Object.assign(s, msg);
     delete s.opens_at;
     delete s.deadline;
+    delete s.suspect_picks;
     delete s.grace_until;
     s.announced = false;
     s.timed_out = false;
@@ -102,7 +103,9 @@ const HANDLERS = {
     if (store.server) store.server.me = msg;
   },
   progress(msg) {
-    if (store.server) store.server.progress = { done: msg.done, total: msg.total };
+    if (!store.server) return;
+    store.server.progress = { done: msg.done, total: msg.total };
+    store.server.suspect_picks = msg.suspect_picks ?? {};
   },
   narrate(msg) {
     store.subtitle = msg.text;
