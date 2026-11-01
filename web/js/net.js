@@ -82,7 +82,15 @@ function open() {
   const ws = new WebSocket(wsUrl());
   socket = ws;
   lastSeq = 0;
+  // 封包被丟掉時瀏覽器可能很久都不報失敗，這裡自己放棄、換下一次重試
+  const connectTimer = setTimeout(() => {
+    if (socket !== ws) return;
+    ws.onclose = null;
+    ws.close();
+    onClose(ws, { code: 1006 });
+  }, TIMEOUT_MS);
   ws.onopen = () => {
+    clearTimeout(connectTimer);
     ws.send(JSON.stringify({ t: 'auth', token, client_version: PROTOCOL_VERSION }));
   };
   ws.onmessage = (event) => onMessage(ws, event);
