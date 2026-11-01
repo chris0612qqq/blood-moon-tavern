@@ -450,9 +450,11 @@ def test_host_briefing_wall(server_url: str) -> None:  # noqa: F811
             STORE_MESSAGE,
             {"t": "progress", "done": 1, "total": 6, "suspect_picks": {first: second}},
         )
-        wait(host, "suspect-picks")
-        board = host.locator('[data-testid="suspect-picks"]').inner_text()
-        assert names[0] in board and f"{names[1]} 1 票" in board
+        host.wait_for_function(  # 看板一開始就在，要等重繪後的內容
+            "(row) => document.querySelector('[data-testid=\"suspect-picks\"]')"
+            "?.textContent.includes(row)",
+            arg=f"{names[1]} 1 票（{names[0]}）",
+        )
         host.evaluate(
             """(id) => {
               const s = window.__bmt.server;
