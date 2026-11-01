@@ -101,7 +101,10 @@ function isNarrator(server) {
 
 /** 收到 narrate 時呼叫：只有旁白主機或主持人手機發聲。 */
 export function onNarrate(msg) {
-  if (msg.speak && isNarrator(store.server)) speak(msg.text);
+  if (!msg.speak || !isNarrator(store.server)) return;
+  // 主持人選了「我自己念」：繼續後的重念也只顯示字幕
+  if (store.server.host && !store.ui.speakAloud) return;
+  speak(msg.text);
 }
 
 /** 收到定向廣播：伺服器只送給被指定的手機，所以不看是不是旁白主機。音效（msg.sound）P8 才接。 */

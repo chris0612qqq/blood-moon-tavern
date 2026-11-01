@@ -1555,3 +1555,29 @@ def test_broadcast_one_phone_after_another_and_cleared_on_close(
     admin.close()
     env.service.close_room()
     assert env.service.pending_broadcasts == []
+
+
+def test_speaker_phone_also_hears_their_turn(env: Env, client: TestClient) -> None:
+    open_room(env, client)
+    tokens = player_tokens(client, 8)
+    admin = Ws(client, env.admin_token)
+    assert admin.reply("admin.start")["t"] == "ack"
+    engine = env.service.engine
+    assert engine is not None
+    narrator = engine.state.narrator_id
+    token, speaker = next(item for item in tokens if item[1] != narrator)
+    token_other, _ = next(item for item in tokens if item[1] not in (narrator, speaker))
+    ws, other = Ws(client, token), Ws(client, token_other)
+    engine.state.current_speaker = speaker
+    env.service._notify_speaker({"line_id": "speak", "text": "請 A0 發言", "speak": True})
+    got = ws.until("broadcast")
+    assert got["text"] == "請 A0 發言" and got["speak"] is True
+    assert not _saw_broadcast_before_ack(other)
+    # 別的台詞、主持人自己念、本人就是旁白主機：都不多念
+    env.service._notify_speaker({"line_id": "vote", "text": "投票", "speak": True})
+    env.service._notify_speaker({"line_id": "speak", "text": "x", "speak": False})
+    engine.state.narrator_id = speaker
+    env.service._notify_speaker({"line_id": "speak", "text": "x", "speak": True})
+    assert not _saw_broadcast_before_ack(ws)
+    for conn in (ws, other, admin):
+        conn.close()

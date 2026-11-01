@@ -271,8 +271,8 @@ class Engine:
         assert pause is not None
         resumed = timers.from_remaining(pause, now)
         self.emit(EventType.RESUMED, timers=resumed.model_dump())
-        # SPEC A8.6：無管理員模式自動重念；上帝模式由主持人按重念
-        if self.state.mode is Mode.AUTO and self.state.line_id is not None:
+        # SPEC A8.6：大家停了一陣子，繼續時念一次現在該做什麼（使用者要求，兩種模式都念）
+        if self.state.line_id is not None:
             self.narrate_current()
 
     # ---- 時間觸發 ----

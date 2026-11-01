@@ -359,3 +359,22 @@ def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa:
             ".includes('3')"
         )
         browser.close()
+
+
+def test_admin_pause_button_on_game_screen_by_day_only(server_url: str) -> None:  # noqa: F811
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=SMALLEST).new_page()
+        _lobby_with_bots(page, server_url)
+        press(page, "btn-start")
+        press(page, "dialog-confirm")
+        page.wait_for_function("window.__bmt.server.phase === 'game'")
+        page.wait_for_timeout(200)
+        assert not has(page, "btn-pause")  # 發牌不算白天
+        page.evaluate(STORE_MESSAGE, {"t": "step", "step": "WOLF"})
+        page.wait_for_timeout(100)
+        assert not has(page, "btn-pause")  # 夜晚不能暫停
+        page.evaluate(STORE_MESSAGE, {"t": "step", "step": "VOTE"})
+        wait(page, "btn-pause")
+        assert "tab" not in page.locator('[data-testid="btn-pause"]').get_attribute("class")
+        browser.close()

@@ -777,6 +777,22 @@ class TestPause:
         assert game.state.pause is None
         assert game.state.current_speaker not in (None, speaker)
 
+    @pytest.mark.parametrize("mode", [Mode.AUTO, Mode.GOD])
+    @pytest.mark.parametrize("step", [Step.DAY_SPEAK, Step.VOTE])
+    def test_resume_says_the_current_step_in_both_modes(
+        self, monkeypatch: pytest.MonkeyPatch, mode: Mode, step: Step
+    ) -> None:
+        game = Game(monkeypatch, mode=mode)
+        game.engine.state.step = step
+        game.engine.state.line_id = {Step.DAY_SPEAK: "speak", Step.VOTE: "vote"}[step]
+        game.engine.state.current_speaker = "p1" if step is Step.DAY_SPEAK else None
+        game.act(ADMIN, Action.ADMIN_PAUSE)
+        game.act(ADMIN, Action.ADMIN_RESUME)
+        game.clock.advance(balance.RESUME_COUNTDOWN_SECONDS + 0.1)
+        events = game.engine.tick()
+        narrated = [e for e in events if e.type is EventType.NARRATE]
+        assert [e.data["line_id"] for e in narrated] == [game.state.line_id]
+
     def test_auto_resume_renarrates(self, game: Game) -> None:
         game.to_wolf_step()
         game.engine.system_pause(PauseReason.PRESENCE)
