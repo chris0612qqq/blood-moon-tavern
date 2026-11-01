@@ -14,8 +14,19 @@ from server.roles import deal_sequence, is_wolf, role_def
 from server.state import Bet, GameState, NightRecord, PlayerState
 
 DAY_STEPS = frozenset(
-    {Step.DAWN, Step.HUNTER, Step.LAST_WORDS, Step.DAY_SPEAK, Step.VOTE, Step.REVEAL}
+    {
+        Step.DAWN,
+        Step.HUNTER,
+        Step.LAST_WORDS,
+        Step.DAY_SPEAK,
+        Step.SUSPECT_VOTE,
+        Step.DEFENSE,
+        Step.VOTE,
+        Step.REVEAL,
+    }
 )
+# 兩輪投票共用同一套選票、改票、等 5 秒的邏輯
+VOTE_STEPS = frozenset({Step.SUSPECT_VOTE, Step.VOTE})
 NIGHT_STEPS = frozenset(
     {
         Step.NIGHT_START,
@@ -168,6 +179,9 @@ def eligible_targets(state: GameState, actor_id: str, action: Action) -> list[st
     # 狼人可以咬同伴，也可以選自己（使用者試玩回饋，SPEC v4.13）；其他行動不能選自己
     include_self = action is Action.WOLF_PICK
     others = [p for p in state.players if p.alive and (include_self or p.id != actor_id)]
+    if action is Action.VOTE_CAST and state.step is Step.VOTE:
+        nominated = state.vote_round().nominees or []
+        others = [p for p in others if p.id in nominated]
     return [p.id for p in sorted(others, key=lambda p: p.seat)]
 
 
@@ -232,6 +246,20 @@ def resolve_night(night: NightRecord) -> list[tuple[str, DeathCause]]:
 def can_shoot(cause: DeathCause) -> bool:
     """獵人能否開槍：被毒、手動修正都不能（SPEC A5.2、A5.6）。"""
     return cause in (DeathCause.WOLF, DeathCause.VOTE, DeathCause.HUNTER)
+
+
+def nominees(votes: Mapping[str, str | None]) -> dict[str, int]:
+    """第一輪：取最高票與第二高票的所有人，同票都進第二輪（SPEC A5.4）。全棄回空。"""
+    counts = Counter(target for target in votes.values() if target is not None)
+    levels = sorted(set(counts.values()), reverse=True)
+    if not levels:
+        return {}
+    top = levels[0]
+    if sum(1 for n in counts.values() if n == top) >= 2 or len(levels) == 1:
+        keep = {top}
+    else:
+        keep = {top, levels[1]}
+    return {target: n for target, n in sorted(counts.items()) if n in keep}
 
 
 def tally(votes: Mapping[str, str | None]) -> TallyResult:

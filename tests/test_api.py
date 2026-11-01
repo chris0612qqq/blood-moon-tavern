@@ -1369,9 +1369,9 @@ class Bot:
             await self.send("witch.act")
         elif step == Step.HUNTER.value:
             await self.send("hunter.shoot", target=first)
-        elif step in (Step.DAY_SPEAK.value, Step.LAST_WORDS.value):
+        elif step in (Step.DAY_SPEAK.value, Step.LAST_WORDS.value, Step.DEFENSE.value):
             await self.send("speak.end")
-        elif step == Step.VOTE.value:
+        elif step in (Step.SUSPECT_VOTE.value, Step.VOTE.value):
             await self.send("vote.cast", target=first)
 
 

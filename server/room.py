@@ -81,7 +81,7 @@ class Room:
     unrestorable: bool = False
 
 
-_SPEAKER_LINES = frozenset({"speak", "last_words"})
+_SPEAKER_LINES = frozenset({"speak", "last_words", "defense"})
 
 
 class RoomService:
@@ -613,6 +613,7 @@ class RoomService:
             public = views.public_messages(event, state)  # 每個事件只算一次（P2）
             full = event.type in (
                 EventType.RESUMED,
+                EventType.NOMINEES_SET,  # 選票清空，自己的已投狀態也要跟著換
                 EventType.ROLLED_BACK,
                 EventType.GAME_ENDED,
             )

@@ -178,7 +178,7 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         shot(faceless, "faceless_panel")
 
         # ---- 投票：全投獵人（獵人棄票），揭曉 ----
-        finish_speeches(pages, "VOTE")
+        finish_speeches(pages, "SUSPECT_VOTE")
         for page in pages:
             wait_open(page)
             if page is hunter:
@@ -186,7 +186,27 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
             else:
                 press(page, f"pick-cell-{id_of[hunter]}")
             press(page, "btn-vote")
-            # 最後一人投完很快就進揭曉，來不及看到「已投」也算過
+            # 最後一人投完很快就換步驟，來不及看到「已投」也算過
+            page.wait_for_function(
+                "document.querySelector('[data-testid=\"vote-done\"]')"
+                " || window.__bmt.server.step !== 'SUSPECT_VOTE'"
+            )
+
+        # ---- 申述：只有被提名的獵人，第一輪誰投誰不公開（SPEC v4.18） ----
+        wait_step(hunter, "DEFENSE")
+        wait(villagers[1], "nominees")
+        assert name_of[hunter] in text_of(villagers[1], "nominees")
+        assert store(villagers[1], "s.server.history.every((row) => !row.ballots)")
+        finish_speeches(pages, "VOTE")
+
+        # ---- 第二輪：被提名者不能投，其他人只看得到被提名者 ----
+        wait(hunter, "screen-s14-watch")
+        voters = [p for p in pages if p is not hunter]
+        for page in voters:
+            wait_open(page)
+            assert page.locator('[data-testid^="pick-cell-"]').count() == 2  # 獵人＋棄票
+            press(page, f"pick-cell-{id_of[hunter]}")
+            press(page, "btn-vote")
             page.wait_for_function(
                 "document.querySelector('[data-testid=\"vote-done\"]')"
                 " || window.__bmt.server.step !== 'VOTE'"

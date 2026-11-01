@@ -8,7 +8,7 @@ import { actionButton, avatar, button, nameOf } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { roleCard } from './night.js';
 
-const DAY_STEPS = new Set(['DAWN', 'HUNTER', 'LAST_WORDS', 'DAY_SPEAK', 'VOTE', 'REVEAL']);
+const DAY_STEPS = new Set(['DAWN', 'HUNTER', 'LAST_WORDS', 'DAY_SPEAK', 'SUSPECT_VOTE', 'DEFENSE', 'VOTE', 'REVEAL']);
 const CHAT_MAX = 500;
 const CHAT_WARN = 50;
 const FIRST_CHAT_ID = 1;
