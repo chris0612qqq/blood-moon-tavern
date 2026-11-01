@@ -193,7 +193,7 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
                 wait(pages[1], "suspect-picks")
                 pages[1].wait_for_function(
                     "(name) => document.querySelector('[data-testid=\"suspect-picks\"]')"
-                    ".textContent.includes(name)",
+                    "?.textContent.includes(name)",
                     arg=name_of[pages[0]],
                 )
             # 最後一人投完很快就換步驟，來不及看到「已投」也算過

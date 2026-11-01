@@ -409,6 +409,7 @@ def public_messages(event: Event, state: GameState) -> list[Message]:
             step["public_actors"] = block["public_actors"]
             step["night_plan"] = block["night_plan"]
             step["progress"] = block["progress"]
+            step["suspect_counts"] = block["suspect_counts"]
             return [step]
         case EventType.NARRATE:
             return [

@@ -460,6 +460,27 @@ class TestEvents:
         assert views.filter_event(cast, player(other), game.state)[0]["suspect_picks"] == {}
         assert views.build(game.state, player(other))["suspect_picks"] == {}
 
+    def test_second_round_reveal_clears_first_round_counts(self, game: Game) -> None:
+        # step 訊息要帶票數：手機留著第一輪的舊值，揭曉時會和第二輪加在一起
+        game.to_wolf_step()
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.wait_for(Step.SUSPECT_VOTE)
+        game.nominate = ("p2",)
+        game.wait_for(Step.VOTE)
+        collected = []
+        for _ in range(1000):
+            game.clock.advance(0.25)
+            collected += game.engine.tick()
+            if game.state.step is Step.REVEAL:
+                break
+        entered = [e for e in collected if e.type is EventType.STEP_ENTERED][-1]
+        step = next(
+            m for m in views.filter_event(entered, player("p3"), game.state) if m["t"] == "step"
+        )
+        assert step["step"] == "REVEAL" and step["suspect_counts"] == {}
+
     def test_vote_reveal_public(self, game: Game) -> None:
         game.to_wolf_step()
         game.night(None)
