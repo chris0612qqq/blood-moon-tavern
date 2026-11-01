@@ -141,6 +141,29 @@ def test_f1_f2_reconnect_banner_then_offline_then_recovers(
     assert page.locator('[data-testid="conn-banner"]').count() == 0
 
 
+def test_f1_stuck_connection_gives_up_and_retries(browser: Browser, server_url: str) -> None:  # noqa: F811
+    """封包被丟掉時瀏覽器遲遲不報失敗（WebKit 測出來的）：8 秒後自己放棄換下一次。"""
+    page = lobby_page(browser, server_url)
+    page.evaluate(
+        """() => {
+          const Working = window.WebSocket;
+          window.__working = Working;
+          window.__stuck = [];
+          window.WebSocket = function () {
+            const ws = { readyState: 0, close() { ws.closed = true; } };
+            window.__stuck.push(ws);
+            return ws;
+          };
+          Object.assign(window.WebSocket, { CONNECTING: 0, OPEN: 1 });
+          window.__sockets.at(-1).close();
+        }"""
+    )
+    page.wait_for_function("window.__stuck.length >= 2", timeout=20000)
+    assert page.evaluate("window.__stuck[0].closed") is True
+    page.evaluate("window.WebSocket = window.__working; window.dispatchEvent(new Event('online'))")
+    page.wait_for_function("window.__bmt.conn === 'online'")
+
+
 def test_f3_server_down_says_closed_and_retries(browser: Browser, server_url: str) -> None:  # noqa: F811
     page = browser.new_context(viewport=MOBILE).new_page()
 
