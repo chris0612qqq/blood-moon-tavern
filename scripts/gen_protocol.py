@@ -47,6 +47,7 @@ def render() -> str:
             "PIN_DIGITS": config.PIN_DIGITS,
             "ROOM_PASSWORD_DIGITS": config.ROOM_PASSWORD_DIGITS,
             "CHAT_MAX_CHARS": config.CHAT_MAX_CHARS,
+            "BROADCAST_MAX_INTERVAL": config.BROADCAST_MAX_INTERVAL_SECONDS,
             "MIN_PLAYERS": balance.MIN_PLAYERS,
             "MAX_PLAYERS": balance.MAX_PLAYERS,
             "COUNTDOWN_MIN_SECONDS": balance.COUNTDOWN_MIN_SECONDS,

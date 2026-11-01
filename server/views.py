@@ -553,6 +553,11 @@ def roster_message(rows: Sequence[Message]) -> Message:
     return {"t": "roster", "players": list(rows)}
 
 
+def broadcast_message(text: str, speak: bool, sound: str | None) -> Message:
+    """定向廣播的內容（SPEC C4）。只有呼叫端指定的手機會收到。"""
+    return {"t": "broadcast", "text": text, "speak": speak, "sound": sound}
+
+
 def narrator_message(player_id: str | None) -> Message:
     return {"t": "roster.narrator", "player": player_id}
 

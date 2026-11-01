@@ -11,7 +11,7 @@ import { roleCard } from './night.js';
 const CHAT_MAX = 500;
 const CHAT_WARN = 50;
 const FIRST_CHAT_ID = 1;
-const NIGHT_STEPS = new Set(['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END']);
+export const NIGHT_STEPS = new Set(['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END']);
 
 function displayName(server, msg) {
   if (msg.is_host_msg) return t('chat.host');

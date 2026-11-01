@@ -186,7 +186,11 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
             else:
                 press(page, f"pick-cell-{id_of[hunter]}")
             press(page, "btn-vote")
-            wait(page, "vote-done")
+            # 最後一人投完很快就進揭曉，來不及看到「已投」也算過
+            page.wait_for_function(
+                "document.querySelector('[data-testid=\"vote-done\"]')"
+                " || window.__bmt.server.step !== 'VOTE'"
+            )
         shot(pages[0], "vote_done")
 
         # ---- 獵人：被放逐，確認框後帶走狼同伴 ----

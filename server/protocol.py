@@ -84,6 +84,22 @@ class ChatSend(ClientFrame):
         return None if value is None else clean_text(value)
 
 
+class AdminBroadcast(ClientFrame):
+    targets: list[Id] = Field(min_length=1, max_length=config.ROOM_CAPACITY)
+    text: str = Field(min_length=1, max_length=config.CHAT_MAX_CHARS)
+    speak: bool = True
+    sound: Id | None = None  # 音效代號，P8 有素材才用；手機端目前略過
+    interval_s: float = Field(default=0, ge=0, le=config.BROADCAST_MAX_INTERVAL_SECONDS)
+
+    @field_validator("text")
+    @classmethod
+    def _clean(cls, value: str) -> str:
+        cleaned = clean_text(value)
+        if not cleaned:
+            raise ValueError("empty")
+        return cleaned
+
+
 class ChatHistory(ClientFrame):
     channel: Channel
     before_id: int
@@ -165,6 +181,7 @@ CLIENT_MESSAGES: Final[dict[str, type[ClientFrame]]] = {
     "admin.pause": Empty,
     "admin.resume": Empty,
     "admin.narrator": PlayerRef,
+    "admin.broadcast": AdminBroadcast,
     "admin.reset_pin": PlayerRef,
     "host.line": HostLine,
     "host.replay": HostReplay,
