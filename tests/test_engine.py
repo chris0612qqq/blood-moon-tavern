@@ -674,7 +674,10 @@ class TestVote:
         game.act("p1", Action.VOTE_CAST, target="p2")
         game.act("p2", Action.VOTE_CAST, target="p1")
         game.run(balance.VOTE_SECONDS + 1)
-        game.wait_for(Step.REVEAL)  # 兩個人同票：沒有最高票，無人出局
+        game.wait_for(Step.VOTE)  # 第一輪兩人同票進第二輪；第二輪同票才無人出局
+        game.act("p3", Action.VOTE_CAST, target="p1")
+        game.act("p4", Action.VOTE_CAST, target="p2")
+        game.run(balance.VOTE_SECONDS + 1)
         assert game.state.vote_round().exiled is None
         assert all(p.alive for p in game.state.players)
 
@@ -916,11 +919,13 @@ class TestTwoRoundVote:
         assert votes.ballots == {}  # 誰投誰不留
         assert game.state.step is Step.REVEAL
 
-    def test_two_targets_tied_means_no_exile(self, game: Game) -> None:
+    def test_two_targets_tied_go_to_second_round(self, game: Game) -> None:
         self._at_suspects(game)
         self._cast(game, {"p3": "p1", "p4": "p2"})
-        game.wait_for(Step.REVEAL)
-        assert game.state.vote_round().exiled is None and game.state.line_id == "tie"
+        game.wait_for(Step.DEFENSE)
+        votes = game.state.vote_round()
+        assert not votes.direct and set(votes.nominees or []) == {"p1", "p2"}
+        assert votes.suspect_counts == {"p1": 1, "p2": 1}
 
     def test_three_targets_go_to_second_round(self, game: Game) -> None:
         self._at_suspects(game)

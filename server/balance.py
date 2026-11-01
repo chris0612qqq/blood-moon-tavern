@@ -56,7 +56,7 @@ SFX_GAP_PADDING_SECONDS: Final = 0.3
 WITCH_MIN_SECONDS_LOW: Final = 8
 WITCH_MIN_SECONDS_HIGH: Final = 15
 VOTE_ALL_CAST_GRACE_SECONDS: Final = 5
-# 第一輪被投的人少於這個數就不進第二輪，直接照票數決定（SPEC A5.4）
+# 第一輪被投的人少於這個數就不進第二輪，直接照票數決定；兩人同票例外（SPEC A5.4）
 SECOND_ROUND_MIN_TARGETS: Final = 3
 RESUME_COUNTDOWN_SECONDS: Final = 2.5
 HOST_EXTEND_SECONDS: Final = 30

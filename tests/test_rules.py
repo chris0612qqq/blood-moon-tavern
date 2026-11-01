@@ -426,7 +426,8 @@ class TestDirectExile:
             ({}, False),
             ({"a": None}, False),
             ({"a": "x", "b": "x"}, False),
-            ({"a": "x", "b": "y", "c": None}, False),
+            ({"a": "x", "b": "x", "c": "y"}, False),
+            ({"a": "x", "b": "y", "c": None}, True),  # 兩人同票
             ({"a": "x", "b": "y", "c": "z"}, True),
         ],
     )

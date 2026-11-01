@@ -263,9 +263,11 @@ def nominees(votes: Mapping[str, str | None]) -> dict[str, int]:
 
 
 def needs_second_round(votes: Mapping[str, str | None]) -> bool:
-    """第一輪至少 3 個人被投才要申述和第二輪（SPEC A5.4）。"""
-    targets = {target for target in votes.values() if target is not None}
-    return len(targets) >= balance.SECOND_ROUND_MIN_TARGETS
+    """第一輪至少 3 個人被投，或兩人同票，才要申述和第二輪（SPEC A5.4）。"""
+    counts = Counter(target for target in votes.values() if target is not None)
+    return len(counts) >= balance.SECOND_ROUND_MIN_TARGETS or (
+        len(counts) > 1 and plurality(counts) is None
+    )
 
 
 def plurality(counts: Mapping[str, int]) -> str | None:
