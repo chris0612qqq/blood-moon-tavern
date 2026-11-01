@@ -4,7 +4,7 @@ import { api, send } from '../net.js';
 import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
 import { causeJoke, causePlain, deathLabel, roleName, t } from '../strings.js';
-import { actionButton, avatar, button, nameOf } from '../ui/common.js';
+import { actionButton, avatar, button, nameOf, pauseToggle } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { roleCard } from './night.js';
 
@@ -135,9 +135,8 @@ export function roleTab(server) {
 
 /** 無管理員模式的管理員：白天在遊戲畫面就按得到暫停（SPEC A3）。上帝控制台有自己的暫停鈕。 */
 export function pauseButton(server) {
-  if (!server.is_admin || server.host || server.paused || !DAY_STEPS.has(server.step)) return null;
-  return h('div', { class: 'pause-row' },
-    actionButton({ id: 'btn-pause', small: true, kind: 'secondary', label: t('s16.pause'), run: () => send('admin.pause') }));
+  if (!server.is_admin || server.host || (!server.paused && !DAY_STEPS.has(server.step))) return null;
+  return h('div', { class: 'pause-row' }, pauseToggle(server));
 }
 
 export function playersTab(server) {
@@ -181,7 +180,7 @@ function roleHolder(server, truth, role) {
   return Object.entries(truth.roles ?? {}).find(([, r]) => r === role)?.[0] ?? null;
 }
 
-function actRow(kind, label, ...content) {
+export function actRow(kind, label, ...content) {
   return h('div', { class: `act act--${kind}`, testid: `act-${kind}` },
     h('b', { class: 'act__label' }, label),
     h('div', {}, content));

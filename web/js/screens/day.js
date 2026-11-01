@@ -85,6 +85,37 @@ function nomineeLine(server) {
   return names.length ? h('p', { class: 'center keep-words', testid: 'nominees' }, t('s14.nominees', { list: names.join('、') })) : null;
 }
 
+/** 第一輪投票當下誰選誰，和狼人選刀一樣看得到（使用者要求，SPEC A5.4）。第二輪不公開。 */
+export function suspectBoard(server) {
+  if (server.step !== 'SUSPECT_VOTE') return null;
+  const groups = {};
+  for (const [voter, target] of Object.entries(server.suspect_picks ?? {})) {
+    (groups[target ?? 'abstain'] ??= []).push(nameOf(server, voter));
+  }
+  const rows = Object.entries(groups).sort(([, a], [, b]) => b.length - a.length);
+  return h('div', { class: 'panel', testid: 'suspect-picks' }, rows.length
+    ? rows.map(([target, voters]) => h('div', { key: target }, target === 'abstain'
+      ? t('s14.boardAbstain', { who: voters.join('、') })
+      : t('s14.boardRow', { target: nameOf(server, target), n: voters.length, who: voters.join('、') })))
+    : t('s14.boardEmpty'));
+}
+
+function suspectMarks(server) {
+  if (server.step !== 'SUSPECT_VOTE') return null;
+  const marks = {};
+  for (const [voter, target] of Object.entries(server.suspect_picks ?? {})) {
+    if (voter === server.me?.id) continue;
+    const key = target ?? 'abstain';
+    marks[key] = [marks[key], nameOf(server, voter)].filter(Boolean).join(' ');
+  }
+  return marks;
+}
+
+export function voteProgress(server) {
+  const { done = 0, total = 0 } = server.progress ?? {};
+  return h('p', { class: 'center', testid: 'vote-progress' }, t('s14.progress', { done, total }));
+}
+
 export function s13(server) {
   const me = server.me;
   const speaker = server.speaker;
@@ -108,14 +139,14 @@ export function s13(server) {
 
 export function s14(server) {
   const me = server.me;
-  const { done = 0, total = 0 } = server.progress ?? {};
-  const progress = h('p', { class: 'center', testid: 'vote-progress' }, t('s14.progress', { done, total }));
+  const progress = voteProgress(server);
   if (!me?.is_actor) {
     return [
       h('h1', { class: 'center', testid: 'screen-s14-watch' }, t('s14.watch')),
       server.step === 'VOTE' ? nomineeLine(server) : null,
       countdown(server),
       progress,
+      suspectBoard(server),
       betEntry(server),
     ];
   }
@@ -133,9 +164,11 @@ export function s14(server) {
       server,
       selected: sel.value,
       onPick: sel.set,
+      marks: suspectMarks(server),
       extra: [{ value: 'abstain', label: t('s14.abstain') }],
     }),
     progress,
+    suspectBoard(server),
     sel.value
       ? actionButton({
         id: 'btn-vote',
@@ -157,6 +190,7 @@ function votedView(server, vote, progress) {
       : t('s14.mineAbstain')),
     countdown(server),
     progress,
+    suspectBoard(server),
     vote.can_change
       ? button(t('s14.change'), () => {
         store.ui.picks[`change@${server.step_seq}`] = true;
@@ -166,9 +200,9 @@ function votedView(server, vote, progress) {
   ];
 }
 
-/** 第二輪每人幾票，高票在前（SPEC A5.4）。棄票不算。 */
+/** 每人幾票，高票在前（SPEC A5.4）。棄票不算。第一輪就決定時只有票數，沒有誰投誰。 */
 function tallyLine(server, ballots) {
-  const counts = {};
+  const counts = { ...server.suspect_counts };
   for (const [, to] of ballots) if (to) counts[to] = (counts[to] ?? 0) + 1;
   const names = Object.entries(counts)
     .sort(([, a], [, b]) => b - a)
@@ -200,9 +234,6 @@ export function s16(server) {
     h('p', {}, pauseReason(paused.reason)),
     paused.resume_at
       ? h('div', { class: 'count', 'data-deadline': paused.resume_at }, '')
-      : null,
-    server.is_admin && !paused.resume_at
-      ? actionButton({ id: 'btn-resume', label: t('s16.resume'), run: () => send('admin.resume') })
       : null);
 }
 

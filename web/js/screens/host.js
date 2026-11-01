@@ -1,10 +1,12 @@
 // S20 上帝控制台（SPEC C4）：大廳、遊戲中、結算三種狀態。結算共用 S18。
 import { h } from '../dom.js';
 import { send, serverNow } from '../net.js';
-import { LIMITS } from '../protocol.js';
+import { LIMITS, ROLE } from '../protocol.js';
 import { changed, store } from '../store.js';
-import { deathLabel, LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
-import { actionButton, avatar, button, countdown, nameOf } from '../ui/common.js';
+import { causePlain, deathLabel, LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
+import { actionButton, avatar, button, countdown, nameOf, pauseToggle } from '../ui/common.js';
+import { suspectBoard, voteProgress } from './day.js';
+import { actRow } from './tabs.js';
 import { lobbyAdmin, lobbyList, lobbyMenu, seated, voiceWarning } from './s5_lobby.js';
 
 export { lobbyMenu };
@@ -25,18 +27,6 @@ function hostLobby(server) {
     // 名單放最後：20 人時按鈕才不會被擠到要滑很遠
     h('div', {}, lobbyList(server, players, true)),
   ];
-}
-
-function nightSummary(server) {
-  const night = server.host.nights?.at(-1);
-  if (!night || server.step === 'DEAL') return null;
-  const name = (id) => (id ? nameOf(server, id) : t('s20.nobody'));
-  return h('p', { class: 'hint', testid: 'host-night' }, t('s20.night', {
-    wolf: night.wolf_decided ? name(night.wolf_target) : '…',
-    seer: name(night.seer_target),
-    saved: night.witch_saved ? '✔' : t('s20.nobody'),
-    poison: name(night.witch_poison),
-  }));
 }
 
 function playerStatus(server, id) {
@@ -207,11 +197,120 @@ function revealTab(server) {
   ];
 }
 
+// 簡報牆的順序；白天的步驟都算過了夜晚
+const NIGHT_ORDER = ['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END', 'DAWN'];
+
+function reached(server, step) {
+  const at = NIGHT_ORDER.indexOf(server.step);
+  return at === -1 || at >= NIGHT_ORDER.indexOf(step);
+}
+
+function wallWolf(night, name) {
+  const picks = Object.entries(night.wolf_picks ?? {})
+    .map(([wolf, target]) => t('s18.wolfPick', { who: name(wolf), target: target ? name(target) : t('s8.empty') }));
+  const result = night.wolf_target ? t('s18.wolfKill', { target: name(night.wolf_target) }) : t('s18.wolfEmpty');
+  return actRow('wolf', t('s18.actWolf'),
+    picks.join('、') || t('s20.wallPicking'), night.wolf_decided ? ` ${result}` : '');
+}
+
+/** 這個角色這回合有沒有上場：活著，或是今晚才死的。 */
+function holderOf(server, role, row) {
+  const holder = server.host.players.find((p) => p.role === role);
+  return holder && (holder.alive || row?.deaths?.includes(holder.id)) ? holder.id : null;
+}
+
+function wallSeer(server, night, row, name) {
+  const seer = holderOf(server, ROLE.SEER, row);
+  if (!seer || !reached(server, 'SEER')) return null;
+  if (night.seer_target) {
+    return actRow('seer', t('s18.actSeer'), t('s18.seerAct', {
+      who: name(seer),
+      target: name(night.seer_target),
+      result: t(night.seer_is_wolf ? 'role.wolfResult' : 'role.goodResult'),
+    }));
+  }
+  return actRow('seer', t('s18.actSeer'), server.step === 'SEER' ? t('s20.wallPicking') : t('s18.seerNone', { who: name(seer) }));
+}
+
+function wallWitch(server, night, row, name) {
+  const witch = holderOf(server, ROLE.WITCH, row);
+  if (!witch || !reached(server, 'WITCH')) return null;
+  let text = t('s18.witchNone', { who: name(witch) });
+  if (night.witch_saved) text = t('s18.witchSave', { who: name(witch), target: name(night.wolf_target) });
+  else if (night.witch_poison) text = t('s18.witchPoison', { who: name(witch), target: name(night.witch_poison) });
+  else if (server.step === 'WITCH') text = t('s20.wallPicking');
+  return actRow('witch', t('s18.actWitch'), text);
+}
+
+function wallDawn(server, night, row, name) {
+  if (!reached(server, 'DAWN') || (server.step === 'DAWN' && !server.announced)) return null;
+  const dead = (row?.deaths ?? []).filter((id) => ['bite', 'poison'].includes(row.causes?.[id]));
+  return actRow('death', t('s18.actDeath'),
+    dead.length
+      ? dead.map((id) => t('s18.deathRow', { name: name(id), cause: causePlain(row.causes[id]) })).join('、')
+      : (night.witch_saved ? '' : t('s18.peaceful')),
+    night.witch_saved ? h('div', {}, t('s18.saved', { name: name(night.wolf_target) })) : null);
+}
+
+/** 第一輪：投票中看誰選誰，投完看票數和誰進第二輪。誰投誰不留（SPEC A5.4）。 */
+function wallFirstRound(server, round, name) {
+  const label = t('s20.firstRound');
+  if (server.step === 'SUSPECT_VOTE') return actRow('vote', label, voteProgress(server), suspectBoard(server));
+  if (!round?.nominees) return null;
+  const counts = Object.entries(round.suspect_counts).sort(([, a], [, b]) => b - a)
+    .map(([id, n]) => t('s14.nominee', { name: name(id), n }));
+  return actRow('vote', label,
+    h('div', { class: 'keep-words', testid: 'host-nominees' }, counts.length
+      ? t('s14.nominees', { list: counts.join('、') })
+      : t('s15.noNominee')),
+    counts.length && round.direct && round.revealed
+      ? h('div', { testid: 'wall-direct' }, round.exiled ? t('s18.exiled', { name: name(round.exiled) }) : t('s18.tie'))
+      : null);
+}
+
+/** 第二輪：主持人投票中就看得到誰投誰，揭曉後多一行結果。 */
+function wallSecondRound(server, round, name) {
+  const ballots = Object.entries(round?.ballots ?? {});
+  if (round?.direct || (server.step !== 'VOTE' && !round?.revealed)) return null;
+  const counts = {};
+  for (const [, to] of ballots) if (to) counts[to] = (counts[to] ?? 0) + 1;
+  const tally = Object.entries(counts).sort(([, a], [, b]) => b - a)
+    .map(([id, n]) => t('s14.nominee', { name: name(id), n }));
+  return actRow('vote', t('s20.secondRound'),
+    h('div', { testid: 'wall-second-round' },
+      round?.revealed
+        ? h('div', {}, round.exiled ? t('s18.exiled', { name: name(round.exiled) }) : t('s18.tie'))
+        : voteProgress(server),
+      tally.length ? h('div', { class: 'keep-words' }, tally.join('、')) : null,
+      ballots.map(([from, to]) => h('div', { class: 'hint', key: from },
+        t('s15.ballot', { from: name(from), to: to ? name(to) : t('s14.abstain') })))));
+}
+
+/** 行動狀態的簡報牆（使用者要求）：這回合所有選擇和投票，發生一件報一件。 */
+function briefingWall(server) {
+  const n = server.round_no;
+  const night = server.host.nights?.find((x) => x.round_no === n);
+  if (!night || server.step === 'DEAL') return null;
+  const row = (server.history ?? []).find((r) => r.round_no === n);
+  const round = server.host.votes?.find((v) => v.round_no === n);
+  const name = (id) => nameOf(server, id);
+  return h('div', { testid: 'host-wall' },
+    h('h2', {}, t('s20.wallTitle', { n })),
+    wallWolf(night, name),
+    wallSeer(server, night, row, name),
+    wallWitch(server, night, row, name),
+    wallDawn(server, night, row, name),
+    (server.host.hunter_shots ?? []).filter((s) => s.round_no === n).map((s) => actRow('hunter', t('s18.actHunter'),
+      t(s.target ? 's18.hunterShot' : 's18.hunterHolster', { who: name(s.hunter), target: s.target ? name(s.target) : '' }))),
+    wallFirstRound(server, round, name),
+    wallSecondRound(server, round, name));
+}
+
 function statusTab(server) {
   const speaking = ['DAY_SPEAK', 'LAST_WORDS', 'DEFENSE'].includes(server.step);
   return [
     h('h2', { testid: 'host-view-status' }, t('s20.status')),
-    nightSummary(server),
+    briefingWall(server),
     server.host.players.map((row) => playerRow(server, row)),
     speaking
       ? [
@@ -246,19 +345,9 @@ function hostGame(server) {
         h('h1', { class: 'grow', testid: 'screen-s20-game' }, stepName(server.step)),
         // 天黑、閉眼這類步驟沒有人要行動，不顯示倒數，免得看起來像逾時
         server.host.actors.length ? countdown(server, overdue(server) ? t('s20.overdue') : null) : null,
-        server.paused
-          ? null
-          : actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', small: true, run: () => send('admin.pause') })),
+        pauseToggle(server)),
       witchWaitHint(server),
-      voiceControls(server),
-      server.paused
-        ? actionButton({
-          id: 'btn-resume',
-          label: t('s16.resume'),
-          disabled: server.paused.resume_at ? t('s16.resuming') : null,
-          run: () => send('admin.resume'),
-        })
-        : null),
+      voiceControls(server)),
     h('div', { class: 'host-layout' },
       h('div', { class: 'host-rail' }, HOST_TABS.map(([id, label]) => h('button', {
         class: `host-tab ${current === id ? 'host-tab--on' : ''}`,

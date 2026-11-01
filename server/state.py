@@ -67,6 +67,8 @@ class VoteRound(BaseModel):
     # 第一輪只留結果（SPEC A5.4）：誰投誰不留在狀態裡，紀錄和看真相都只有第二輪
     nominees: list[str] | None = None
     suspect_counts: dict[str, int] = Field(default_factory=dict)
+    # 第一輪就決定了（被投的少於 3 人）：沒有申述和第二輪
+    direct: bool = False
 
 
 class HunterShot(BaseModel):

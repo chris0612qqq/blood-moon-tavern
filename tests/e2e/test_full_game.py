@@ -288,6 +288,8 @@ def run_game(server_url: str, mode: str) -> None:
         first.mouse.up()
         first.wait_for_function("!document.querySelector('[data-testid=\"role-name\"]')")
 
+        if host:  # 整局都開著簡報牆，真實資料有問題時下面的 errors 會抓到
+            press(host, "host-tab-status")
         play_until_end(pages, host)
         for page in pages:
             wait(page, "screen-s18", timeout=20000)

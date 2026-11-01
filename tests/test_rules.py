@@ -417,6 +417,29 @@ class TestBets:
         ]
 
 
+class TestDirectExile:
+    """SPEC A5.4：被投的少於 3 人不進第二輪，直接看票數。"""
+
+    @pytest.mark.parametrize(
+        ("votes", "second"),
+        [
+            ({}, False),
+            ({"a": None}, False),
+            ({"a": "x", "b": "x"}, False),
+            ({"a": "x", "b": "x", "c": "y"}, False),
+            ({"a": "x", "b": "y", "c": None}, True),  # 兩人同票
+            ({"a": "x", "b": "y", "c": "z"}, True),
+        ],
+    )
+    def test_needs_second_round(self, votes: dict[str, str | None], second: bool) -> None:
+        assert rules.needs_second_round(votes) is second
+
+    def test_plurality(self) -> None:
+        assert rules.plurality({"x": 2, "y": 1}) == "x"
+        assert rules.plurality({"x": 1, "y": 1}) is None
+        assert rules.plurality({}) is None
+
+
 class TestNominees:
     """SPEC A5.4 第一輪：最高票與第二高票的所有人進第二輪。"""
 

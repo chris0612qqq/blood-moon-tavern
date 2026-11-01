@@ -377,4 +377,106 @@ def test_admin_pause_button_on_game_screen_by_day_only(server_url: str) -> None:
         page.evaluate(STORE_MESSAGE, {"t": "step", "step": "VOTE"})
         wait(page, "btn-pause")
         assert "tab" not in page.locator('[data-testid="btn-pause"]').get_attribute("class")
+        # 暫停和繼續同一顆按鈕，位置不變
+        place = page.locator('[data-testid="btn-pause"]').bounding_box()
+        page.evaluate("window.__bmt.server.paused = { reason: 'admin', resume_at: null }")
+        page.evaluate(STORE_MESSAGE, {"t": "state.none"})
+        wait(page, "btn-resume")
+        assert has(page, "screen-s16") and not has(page, "btn-pause")
+        moved = page.locator('[data-testid="btn-resume"]').bounding_box()
+        assert place and moved and moved["y"] == place["y"]
+        assert moved["x"] + moved["width"] == place["x"] + place["width"]  # 靠右對齊
+        browser.close()
+
+
+def test_reveal_shows_counts_when_first_round_decides(server_url: str) -> None:  # noqa: F811
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        order = _lobby_with_bots(page, server_url)
+        press(page, "btn-start")
+        press(page, "dialog-confirm")
+        page.wait_for_function("window.__bmt.server.phase === 'game'")
+        name = store(page, f"s.server.players.find((p) => p.id === '{order[1]}').name")
+        page.evaluate(
+            "(id) => { window.__bmt.server.suspect_counts = { [id]: 3 }; }",
+            order[1],
+        )
+        page.evaluate(STORE_MESSAGE, {"t": "vote.reveal", "ballots": {}, "exiled": order[1]})
+        page.evaluate(STORE_MESSAGE, {"t": "step", "step": "REVEAL"})
+        wait(page, "reveal-tally")
+        assert f"{name} 3 票" in page.locator('[data-testid="reveal-tally"]').inner_text()
+        browser.close()
+
+
+def test_host_briefing_wall(server_url: str) -> None:  # noqa: F811
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        host = browser.new_context(viewport=MOBILE).new_page()
+        host.goto(server_url)
+        admin_open_room(host, "god")
+        press(host, "btn-to-control")
+        wait(host, "screen-s20")
+        press(host, "btn-add-bots")
+        host.wait_for_function("window.__bmt.server.roster.length >= 6")
+        press(host, "btn-start")
+        press(host, "dialog-confirm")
+        wait(host, "btn-host-next")
+        # 機器人看牌的事件會蓋掉下面假的資料，先進天黑（之後等主持人按才有新事件）
+        host.wait_for_function("window.__bmt.server.host.next_line === 'night_start'")
+        press(host, "btn-host-next")
+        host.wait_for_timeout(250)  # 確認框要等下一次重繪才出現
+        if has(host, "dialog-confirm"):
+            press(host, "dialog-confirm")
+        host.wait_for_function("window.__bmt.server.step === 'NIGHT_START'")
+        host.wait_for_timeout(300)
+        press(host, "host-tab-status")
+        wait(host, "host-view-status")
+        first, second = store(host, "s.server.players.slice(0, 2).map((p) => p.id)")
+        names = store(host, "s.server.players.slice(0, 2).map((p) => p.name)")
+        host.evaluate(
+            """([wolf, target]) => {
+              const s = window.__bmt.server;
+              s.round_no = 1;
+              s.host.nights = [{ round_no: 1, wolf_picks: { [wolf]: target }, wolf_decided: true,
+                wolf_target: target, seer_target: null, witch_saved: false, witch_poison: null }];
+            }""",
+            [first, second],
+        )
+        host.evaluate(STORE_MESSAGE, {"t": "step", "step": "SUSPECT_VOTE"})
+        host.wait_for_function(  # 天黑時簡報牆就在，要等重繪後的內容
+            "(row) => document.querySelector('[data-testid=\"act-wolf\"]')"
+            "?.textContent.includes(row)",
+            arg=f"{names[0]} 選 {names[1]}",
+        )
+        host.evaluate(
+            STORE_MESSAGE,
+            {"t": "progress", "done": 1, "total": 6, "suspect_picks": {first: second}},
+        )
+        host.wait_for_function(  # 看板一開始就在，要等重繪後的內容
+            "(row) => document.querySelector('[data-testid=\"suspect-picks\"]')"
+            "?.textContent.includes(row)",
+            arg=f"{names[1]} 1 票（{names[0]}）",
+        )
+        host.evaluate(
+            """(id) => {
+              const s = window.__bmt.server;
+              s.host.votes = [{ round_no: s.round_no, nominees: [id],
+                suspect_counts: { [id]: 3 }, ballots: {}, revealed: false, exiled: null }];
+            }""",
+            second,
+        )
+        host.evaluate(STORE_MESSAGE, {"t": "step", "step": "DEFENSE"})
+        wait(host, "host-nominees")
+        assert f"{names[1]} 3 票" in host.locator('[data-testid="host-nominees"]').inner_text()
+        assert not has(host, "wall-second-round")
+        # 第二輪：主持人投票中就看得到誰投誰
+        host.evaluate(
+            """([from, to]) => { window.__bmt.server.host.votes[0].ballots = { [from]: to }; }""",
+            [first, second],
+        )
+        host.evaluate(STORE_MESSAGE, {"t": "step", "step": "VOTE"})
+        wait(host, "wall-second-round")
+        second_round = host.locator('[data-testid="wall-second-round"]').inner_text()
+        assert f"{names[0]} → {names[1]}" in second_round and f"{names[1]} 1 票" in second_round
         browser.close()
