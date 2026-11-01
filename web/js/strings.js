@@ -142,7 +142,13 @@ const TEXT = Object.freeze({
   's13.others': '{name} 發言中',
   's13.end': '結束發言',
   's13.next': '下一位',
+  's13.mineDefense': '輪到你申述',
+  's13.othersDefense': '{name} 申述中',
+  's14.titleSuspect': '選一個你最懷疑的人',
+  's14.nominees': '最有嫌疑：{list}',
+  's14.nominee': '{name} {n} 票',
   's14.title': '選一個人放逐',
+  's15.noNominee': '全部棄票，今天沒有人被放逐',
   's14.abstain': '棄票',
   's14.vote': '投給 {name}',
   's14.voteAbstain': '棄票',
@@ -412,7 +418,9 @@ const STEP_NAMES = Object.freeze({
   [STEP.HUNTER]: '獵人',
   [STEP.LAST_WORDS]: '遺言',
   [STEP.DAY_SPEAK]: '發言',
-  [STEP.VOTE]: '投票',
+  [STEP.SUSPECT_VOTE]: '投嫌疑人',
+  [STEP.DEFENSE]: '申述',
+  [STEP.VOTE]: '放逐投票',
   [STEP.REVEAL]: '揭曉',
   [STEP.END]: '結算',
 });
@@ -430,7 +438,8 @@ const LINE_LABELS = Object.freeze({
   peaceful: '昨晚是平安夜',
   deaths: '宣布昨晚結果',
   hunter: '獵人請發動技能',
-  vote: '請開始投票',
+  suspect_vote: '請投嫌疑人',
+  vote: '請投放逐票',
 });
 
 /** 取文字並代入具名參數。 */

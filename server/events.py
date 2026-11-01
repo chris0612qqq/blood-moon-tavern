@@ -37,6 +37,7 @@ class EventType(StrEnum):
     NIGHT_TARGET_CLEARED = "night_target_cleared"
     VOTE_CAST = "vote_cast"
     VOTE_VOIDED = "vote_voided"
+    NOMINEES_SET = "nominees_set"
     VOTES_REVEALED = "votes_revealed"
     DAWN_ANNOUNCED = "dawn_announced"
     PLAYER_DIED = "player_died"
@@ -161,6 +162,14 @@ def _vote_voided(state: GameState, data: dict[str, Any]) -> None:
     for voter, target in round_votes.ballots.items():
         if target == player_id:
             round_votes.ballots[voter] = None
+
+
+def _nominees_set(state: GameState, data: dict[str, Any]) -> None:
+    round_votes = state.vote_round()
+    round_votes.nominees = list(data["counts"])
+    round_votes.suspect_counts = dict(data["counts"])
+    round_votes.ballots = {}
+    round_votes.changed = []
 
 
 def _votes_revealed(state: GameState, data: dict[str, Any]) -> None:
@@ -303,6 +312,7 @@ _APPLIERS: dict[EventType, Callable[[GameState, dict[str, Any]], None]] = {
     EventType.NIGHT_TARGET_CLEARED: _night_target_cleared,
     EventType.VOTE_CAST: _vote_cast,
     EventType.VOTE_VOIDED: _vote_voided,
+    EventType.NOMINEES_SET: _nominees_set,
     EventType.VOTES_REVEALED: _votes_revealed,
     EventType.DAWN_ANNOUNCED: _dawn_announced,
     EventType.PLAYER_DIED: _player_died,

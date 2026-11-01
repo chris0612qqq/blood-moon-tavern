@@ -208,7 +208,7 @@ function revealTab(server) {
 }
 
 function statusTab(server) {
-  const speaking = server.step === 'DAY_SPEAK' || server.step === 'LAST_WORDS';
+  const speaking = ['DAY_SPEAK', 'LAST_WORDS', 'DEFENSE'].includes(server.step);
   return [
     h('h2', { testid: 'host-view-status' }, t('s20.status')),
     nightSummary(server),

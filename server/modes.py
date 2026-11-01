@@ -44,6 +44,7 @@ HOST_PUSHED_STEPS = frozenset(
         Step.WITCH_END,
         Step.DAWN,
         Step.HUNTER,
+        Step.SUSPECT_VOTE,
         Step.VOTE,
     }
 )

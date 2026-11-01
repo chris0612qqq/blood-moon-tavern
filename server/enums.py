@@ -34,6 +34,8 @@ class Step(StrEnum):
     HUNTER = "HUNTER"
     LAST_WORDS = "LAST_WORDS"
     DAY_SPEAK = "DAY_SPEAK"
+    SUSPECT_VOTE = "SUSPECT_VOTE"
+    DEFENSE = "DEFENSE"
     VOTE = "VOTE"
     REVEAL = "REVEAL"
     END = "END"

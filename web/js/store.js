@@ -225,7 +225,7 @@ function enterStep(previous, step) {
   store.ui.picks = {};
   if (step === 'NIGHT_START') store.ui.tab = 'game';
   // 要投票的人如果還在聊天或看規則，會錯過投票（使用者要求）。已出局、旁觀、主持人不用投，不打擾
-  if (step === 'VOTE' && store.server?.me?.alive) {
+  if ((step === 'SUSPECT_VOTE' || step === 'VOTE') && store.server?.me?.alive) {
     store.ui.tab = 'game';
     store.ui.overlay = null;
   }

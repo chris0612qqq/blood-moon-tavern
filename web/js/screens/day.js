@@ -78,13 +78,24 @@ function speakOrder(server) {
     : '');
 }
 
+/** 第一輪的結果：被提名者和票數（SPEC A5.4）。誰投誰不公開。 */
+function nomineeLine(server) {
+  const counts = server.suspect_counts ?? {};
+  const names = Object.entries(counts).map(([id, n]) => t('s14.nominee', { name: nameOf(server, id), n }));
+  return names.length ? h('p', { class: 'center keep-words', testid: 'nominees' }, t('s14.nominees', { list: names.join('、') })) : null;
+}
+
 export function s13(server) {
   const me = server.me;
   const speaker = server.speaker;
   const mine = me?.is_actor && speaker === me.id;
+  const defending = server.step === 'DEFENSE';
   return [
     h('h1', { class: 'center', testid: mine ? 'screen-s13-mine' : 'screen-s13' },
-      mine ? t('s13.mine') : t('s13.others', { name: nameOf(server, speaker) })),
+      mine
+        ? t(defending ? 's13.mineDefense' : 's13.mine')
+        : t(defending ? 's13.othersDefense' : 's13.others', { name: nameOf(server, speaker) })),
+    defending ? nomineeLine(server) : null,
     h('div', { class: 'center' }, speaker ? avatar(server, speaker) : null),
     countdown(server),
     speakOrder(server),
@@ -102,6 +113,7 @@ export function s14(server) {
   if (!me?.is_actor) {
     return [
       h('h1', { class: 'center', testid: 'screen-s14-watch' }, t('s14.watch')),
+      server.step === 'VOTE' ? nomineeLine(server) : null,
       countdown(server),
       progress,
       betEntry(server),
@@ -113,7 +125,8 @@ export function s14(server) {
   const sel = selection('vote');
   const abstain = sel.value === 'abstain';
   return [
-    h('h1', { testid: 'screen-s14' }, t('s14.title')),
+    h('h1', { testid: 'screen-s14' }, t(server.step === 'SUSPECT_VOTE' ? 's14.titleSuspect' : 's14.title')),
+    server.step === 'VOTE' ? nomineeLine(server) : null,
     countdown(server, t('s14.timeout')),
     pickGrid({
       ids: me.eligible_targets ?? [],
@@ -153,6 +166,16 @@ function votedView(server, vote, progress) {
   ];
 }
 
+/** 第二輪每人幾票，高票在前（SPEC A5.4）。棄票不算。 */
+function tallyLine(server, ballots) {
+  const counts = {};
+  for (const [, to] of ballots) if (to) counts[to] = (counts[to] ?? 0) + 1;
+  const names = Object.entries(counts)
+    .sort(([, a], [, b]) => b - a)
+    .map(([id, n]) => t('s14.nominee', { name: nameOf(server, id), n }));
+  return names.length ? h('p', { class: 'center keep-words', testid: 'reveal-tally' }, names.join('、')) : null;
+}
+
 export function s15(server) {
   const reveal = store.lastReveal ?? {};
   const ballots = Object.entries(reveal.ballots ?? {});
@@ -160,8 +183,9 @@ export function s15(server) {
     h('h1', { class: 'center', testid: 'screen-s15' }, t('s15.title')),
     h('p', { class: 'big center', testid: 'reveal-result' }, reveal.exiled
       ? t('s15.exiled', { name: nameOf(server, reveal.exiled) })
-      : t('s15.tie')),
+      : t(server.line_id === 'no_nominee' ? 's15.noNominee' : 's15.tie')),
     reveal.exiled ? deadRow(server, reveal.exiled) : null,
+    tallyLine(server, ballots),
     ballots.map(([from, to]) => h('div', { class: 'list-row', key: from },
       t('s15.ballot', { from: nameOf(server, from), to: to ? nameOf(server, to) : t('s14.abstain') }))),
     betEntry(server),

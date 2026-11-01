@@ -20,6 +20,7 @@ SIDE_NAMES: Final[dict[Winner, str]] = {
 }
 
 # 白話，角色一律叫本名，閉著眼也聽得懂（使用者試玩回饋，SPEC v4.10）
+NAME_SEPARATOR: Final = "、"
 LINES: Final[dict[str, str]] = {
     "night_start": "天黑請閉眼",
     "wolf_open": "狼人請睜眼，請選擇今晚要殺的人",
@@ -36,7 +37,11 @@ LINES: Final[dict[str, str]] = {
     "hunter_holster": "獵人 {name} 選擇不開槍",
     "last_words": "請 {name} 發表遺言",
     "speak": "請 {name} 發言",
-    "vote": "請開始投票",
+    "suspect_vote": "請投出最有嫌疑的人",
+    "defense": "請 {name} 申述",
+    "defense_first": "最有嫌疑的是 {names}，請 {name} 申述",
+    "vote": "請投票，決定要放逐誰",
+    "no_nominee": "全部棄票，今天沒有人被放逐",
     "exile": "{name} 被放逐，可憐，被自己人放逐了",
     "exile_wolf": "成功將狼人放逐！{name} 是狼人！",
     "tie": "平票，無人出局",

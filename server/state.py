@@ -64,6 +64,9 @@ class VoteRound(BaseModel):
     changed: list[str] = Field(default_factory=list)
     exiled: str | None = None
     revealed: bool = False
+    # 第一輪只留結果（SPEC A5.4）：誰投誰不留在狀態裡，紀錄和看真相都只有第二輪
+    nominees: list[str] | None = None
+    suspect_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class HunterShot(BaseModel):

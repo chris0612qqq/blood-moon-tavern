@@ -20,6 +20,7 @@ _STEP_ACTIONS = {
     Step.SEER: Action.SEER_CHECK,
     Step.WITCH: Action.WITCH_ACT,
     Step.HUNTER: Action.HUNTER_SHOOT,
+    Step.SUSPECT_VOTE: Action.VOTE_CAST,
     Step.VOTE: Action.VOTE_CAST,
 }
 
@@ -111,16 +112,23 @@ def night_plan(state: GameState) -> list[str]:
 def _progress(state: GameState) -> Message:
     if state.step is Step.DEAL:
         return {"done": sum(1 for p in state.players if p.acked), "total": len(state.players)}
-    if state.step is Step.VOTE:
+    if state.step in rules.VOTE_STEPS:
         return {"done": len(state.vote_round().ballots), "total": len(state.actors)}
     return {}
 
 
 def _public_actors(state: GameState) -> list[str]:
     """白天的行動者（獵人、發言者）本來就公開；夜晚不送（SPEC C8.4）。"""
-    if rules.is_night_step(state.step) or state.step is Step.VOTE or state.step is Step.DEAL:
+    if rules.is_night_step(state.step) or state.step in rules.VOTE_STEPS or state.step is Step.DEAL:
         return []
     return list(state.actors)
+
+
+def _suspect_counts(state: GameState) -> dict[str, int]:
+    """第一輪只公開結果（SPEC A5.4）；誰投誰已經不在狀態裡。"""
+    if state.step not in (Step.DEFENSE, Step.VOTE) or not state.votes:
+        return {}
+    return dict(state.vote_round().suspect_counts)
 
 
 def public_block(state: GameState) -> Message:
@@ -143,6 +151,7 @@ def public_block(state: GameState) -> Message:
         "players": [_public_player(state, p, _ended(state)) for p in state.players],
         "history": public_history(state),
         "winner": state.winner.value if state.winner else None,
+        "suspect_counts": _suspect_counts(state),
     }
 
 
@@ -229,7 +238,7 @@ def _me_block(state: GameState, player: PlayerState) -> Message:
     action = _STEP_ACTIONS.get(state.step)
     if is_actor and action is not None:
         block["eligible_targets"] = rules.eligible_targets(state, player.id, action)
-    if state.step is Step.VOTE and state.votes and player.id in state.vote_round().ballots:
+    if state.step in rules.VOTE_STEPS and state.votes and player.id in state.vote_round().ballots:
         votes = state.vote_round()
         block["my_vote"] = {
             "target": votes.ballots[player.id],
