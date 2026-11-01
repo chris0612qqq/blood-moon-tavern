@@ -27,7 +27,7 @@ from server.enums import Action, Channel, ChatKind, Mode, PauseReason, Step
 from server.errors import ErrorCode, GameError
 from server.events import Event, EventType
 from server.hub import Connection, Session, Socket
-from server.migrations import SchemaTooNew, upgrade_event
+from server.migrations import SchemaTooNew, upgrade_event, upgrade_snapshot
 from server.modes import Actor
 from server.presence import PresenceAction, PresenceMonitor
 from server.rng import GameRng
@@ -106,7 +106,6 @@ class RoomService:
         self.room: Room | None = None
         self.engine: Engine | None = None
         self.players: dict[str, RoomPlayer] = {}
-        self.banned: set[str] = set()
         self.sessions: dict[str, Session] = {}
         self.admin_tokens: set[str] = set()
         self.conns: list[Connection] = []
@@ -231,7 +230,6 @@ class RoomService:
         self.room = None
         self.engine = None
         self.players = {}
-        self.banned = set()
         self.sessions = {
             key: session for key, session in self.sessions.items() if key in self.admin_tokens
         }
@@ -265,8 +263,6 @@ class RoomService:
         self._check_can_join(body.device_id, name)
 
     def _check_can_join(self, device_id: str, name: str) -> None:
-        if device_id in self.banned:
-            raise GameError(ErrorCode.BANNED)
         if len(self.players) >= config.ROOM_CAPACITY:
             raise GameError(ErrorCode.ROOM_FULL)
         if any(p.name == name for p in self.players.values()):
@@ -315,8 +311,6 @@ class RoomService:
         """回傳該名字的 PIN 雜湊，讓呼叫端在執行緒池比對。"""
         self.require_room()
         self.lockouts.check(body.device_id, name, ip, self.now)
-        if body.device_id in self.banned:
-            raise GameError(ErrorCode.BANNED)
         player = self._player_by_name(name)
         if player is None:
             self.lockouts.fail(body.device_id, name, ip, self.now)
@@ -452,9 +446,6 @@ class RoomService:
         elif kind == "admin.seat":
             assert isinstance(frame, protocol.AdminSeat)
             self._admin_seat(conn, frame)
-        elif kind == "admin.kick":
-            assert isinstance(frame, protocol.PlayerRef)
-            self.kick(conn.session, frame.player)
         elif kind == "admin.start":
             self._admin_start(conn)
         elif kind == "admin.reset_pin":
@@ -637,9 +628,9 @@ class RoomService:
         return self._fit(self._decorate(message))
 
     @staticmethod
-    def _fit(message: dict[str, Any]) -> dict[str, Any]:
+    def _fit(message: dict[str, Any], key: str = "chat") -> dict[str, Any]:
         """單則不超過 64 KB（CODING_RULES N9）：太大就少帶舊聊天，用 chat.history 補。"""
-        chat = message.get("chat", [])
+        chat = message.get(key, [])
         while chat and len(json.dumps(message, ensure_ascii=False)) > config.WS_MAX_MESSAGE_BYTES:
             del chat[: max(1, len(chat) // 4)]
         return message
@@ -712,40 +703,6 @@ class RoomService:
         self.db.write([_player_statement(room.id, self.players[p]) for p in frame.order])
         self.broadcast_roster()
 
-    def kick(self, session: Session, player_id: str) -> None:
-        """踢人（SPEC A4、A5.6）：本房間內封鎖該裝置。"""
-        self._require_admin(session)
-        room = self.require_room()
-        player = self.players.get(player_id)
-        if player is None:
-            raise GameError(ErrorCode.INVALID_TARGET)
-        engine = self.engine
-        in_game = engine is not None and engine.state.has_player(player_id)
-        if in_game and room.state == _PLAYING:
-            assert engine is not None
-            if engine.state.player(player_id).alive:
-                actor = self._actor_of(session)
-                self._commit(
-                    lambda: engine.handle(actor, Action.ADMIN_KICK, {"player": player_id}, None)
-                )
-        self.banned.add(player.device_id)
-        statements = [
-            (
-                "INSERT INTO banned_device(room_id, device_id) VALUES(?,?)",
-                (room.id, player.device_id),
-            ),
-            ("DELETE FROM session WHERE player_id=?", (player_id,)),
-        ]
-        if not in_game:
-            del self.players[player_id]
-            statements.append(("DELETE FROM player WHERE id=?", (player_id,)))
-        self.db.write(statements)
-        for key, candidate in list(self.sessions.items()):
-            if candidate.player_id == player_id:
-                del self.sessions[key]
-                self._close_session_conns(candidate, "kicked")
-        self.broadcast_roster()
-
     def _admin_reset_pin(self, conn: Connection, frame: protocol.PlayerRef) -> None:
         """重設 PIN（SPEC A10）：清空後，他下次「我回來了」輸入的就是新 PIN。"""
         self._require_admin(conn.session)
@@ -771,7 +728,7 @@ class RoomService:
         if player_id is None or player_id not in self.players:
             return
         player = self.players[player_id]
-        player.prep = {"audio": frame.audio, "wakelock": frame.wakelock, "pwa": frame.pwa}
+        player.prep = {"wakelock": frame.wakelock, "pwa": frame.pwa}
         self.db.write([_player_statement(self.require_room().id, player)])
         self.broadcast_roster()
 
@@ -886,9 +843,8 @@ class RoomService:
             message = self._view_chat(_chat_row(row), conn.viewer)
             if message is not None:
                 visible.append(self._decorate(message))
-        conn.send(
-            {"t": "chat.history", "channel": frame.channel.value, "messages": visible}, self.now
-        )
+        page = {"t": "chat.history", "channel": frame.channel.value, "messages": visible}
+        conn.send(self._fit(page, "messages"), self.now)
 
     def _view_chat(self, row: ChatRow, viewer: views.Viewer) -> dict[str, Any] | None:
         if self.engine is None:
@@ -1141,8 +1097,6 @@ class RoomService:
             self.sessions[row["token_hash"]] = Session(
                 row["token_hash"], row["player_id"], bool(row["is_admin"]), row["device_id"]
             )
-        for row in self.db.rows("SELECT device_id FROM banned_device WHERE room_id=?", (room.id,)):
-            self.banned.add(row["device_id"])
 
     def _restore_chat_and_media(self, room: Room) -> None:
         for row in self.db.rows("SELECT * FROM media WHERE room_id=?", (room.id,)):
@@ -1182,7 +1136,9 @@ class RoomService:
             return
         engine = Engine.restore(events, self.clock, GameRng(room.seed), strict=self.strict)
         engine.chat_seq = self.chat_seq
-        engine.load_history(self.db.load_snapshots(room.game_id))
+        engine.load_history(
+            [(ts, upgrade_snapshot(raw)) for ts, raw in self.db.load_snapshots(room.game_id)]
+        )
         new_events = engine.log[len(events) :]
         if new_events:
             self.db.write(Database.event_statements(room.game_id, new_events))
@@ -1217,7 +1173,7 @@ def _room_statement(room: Room) -> tuple[str, tuple[Any, ...]]:
 def _player_statement(room_id: str, player: RoomPlayer) -> tuple[str, tuple[Any, ...]]:
     return (
         "INSERT OR REPLACE INTO player(id, room_id, device_id, name, avatar_media_id, pin_hash, "
-        "seat, is_spectator, kicked, prep_json, join_order) VALUES(?,?,?,?,?,?,?,?,0,?,?)",
+        "seat, is_spectator, prep_json, join_order) VALUES(?,?,?,?,?,?,?,?,?,?)",
         (
             player.id,
             room_id,

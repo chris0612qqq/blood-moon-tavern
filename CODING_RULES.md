@@ -47,7 +47,7 @@
 | L17 | 遺言名單為空 | 直接跳過 LAST_WORDS |
 | L18 | 發言順序內全員已死 | 不會發生（應已分出勝負）；若發生 → 系統暫停＋記錄 `invariant_broken` |
 | L19 | 被刀又被毒的同一人 | 算一人、死因為毒（SPEC A5.3） |
-| L20 | 步驟中有人被踢 | 依 SPEC A5.6 處理，並重新計算「全員完成」 |
+| L20 | 步驟中有人被手動判死 | 依 SPEC A5.6 處理，並重新計算「全員完成」 |
 | L21 | 名字含組合字元、全形字、emoji | 以字素（grapheme）計數，恰為 2 且字元類別合法才接受 |
 | L22 | 同一時間兩人改到同一座位 | 由 L1 序列化，後到者以新座位表為準 |
 | L23 | 回上一步跨越死亡 | 還原存活、千面狼期數、女巫用藥；聊天與輪替紀錄不回滾（SPEC A10） |
@@ -104,7 +104,6 @@
 | room_full / room_closed / no_room | 房間狀態 | 房間已滿／房間已關閉／還沒開房 |
 | name_invalid / name_taken | 名字問題 | 名字要剛好 2 個字／這個名字已經有人用了 |
 | wrong_password / wrong_pin / locked | 密碼問題 | 密碼不對／PIN 不對／錯太多次，請 X 秒後再試 |
-| banned | 被踢的裝置 | 你已被移出房間 |
 | rate_limited | 太頻繁 | 慢一點再送 |
 | storage_full / file_invalid / file_too_large | 上傳問題 | 伺服器空間不足／檔案格式不支援／檔案太大 |
 | internal_error | 伺服器錯誤 | 發生問題，已自動記錄 |
@@ -142,7 +141,7 @@
 | 協定訊息類型 | `名詞.動詞`，小寫 | `vote.cast`、`wolf.pick` |
 | 布林值 | `is_`／`has_`／`can_` 開頭 | `is_alive`、`can_shoot` |
 
-- **R1 用規則裡的詞**：角色、步驟、死因一律用固定英文代號（`wolf`、`faceless`、`villager`、`seer`、`witch`、`hunter`；`WOLF`、`SEER`…；`wolf`、`poison`、`vote`、`hunter`、`kick`），在 `server/enums.py` 與 `web/js/enums.js` 各定義一次，禁止在程式中直接寫字串常值。
+- **R1 用規則裡的詞**：角色、步驟、死因一律用固定英文代號（`wolf`、`faceless`、`villager`、`seer`、`witch`、`hunter`；`WOLF`、`SEER`…；`wolf`、`poison`、`vote`、`hunter`、`manual`），在 `server/enums.py` 與 `web/js/enums.js` 各定義一次，禁止在程式中直接寫字串常值。
 - **R2 中文只出現在文字檔**：介面文字集中在 `web/js/strings.js`，旁白台詞集中在 `server/narration.py`；程式邏輯裡不夾中文字串。
 
 ### 5.2 結構與模組化

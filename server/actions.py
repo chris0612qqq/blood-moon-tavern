@@ -349,21 +349,8 @@ def _chat_send(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
 # ---- 管理員 ----
 
 
-def _admin_kick(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
-    player_id = payload.get("player")
-    state = engine.state
-    if (
-        not isinstance(player_id, str)
-        or not state.has_player(player_id)
-        or not state.player(player_id).alive
-        or state.step is Step.END
-    ):
-        raise _fail(ErrorCode.INVALID_TARGET)
-    remove_player(engine, player_id, DeathCause.KICK)
-
-
 def remove_player(engine: Engine, player_id: str, cause: DeathCause) -> None:
-    """被踢或手動判死（SPEC A5.6）：公開角色、處理進行中的步驟、立即判定勝負。"""
+    """手動判死（SPEC A5.6）：公開角色、處理進行中的步驟、立即判定勝負。"""
     state = engine.state
     if state.nights:
         engine.emit(EventType.NIGHT_TARGET_CLEARED, player=player_id)
@@ -375,8 +362,6 @@ def remove_player(engine: Engine, player_id: str, cause: DeathCause) -> None:
     if state.step is Step.VOTE:
         engine.emit(EventType.VOTE_VOIDED, player=player_id)
     engine.kill(player_id, cause)
-    if state.narrator_id == player_id:
-        engine.emit(EventType.NARRATOR_SET, player=None)
     winner = rules.check_win(state)
     if winner is not None:
         engine.finish(winner)
@@ -601,7 +586,6 @@ HANDLERS: dict[Action, Handler] = {
     Action.BET_SET: _bet_set,
     Action.CHAT_SEND: _chat_send,
     Action.NARRATOR_TAKEOVER: _narrator_takeover,
-    Action.ADMIN_KICK: _admin_kick,
     Action.ADMIN_END: _admin_end,
     Action.ADMIN_PAUSE: _admin_pause,
     Action.ADMIN_RESUME: _admin_resume,

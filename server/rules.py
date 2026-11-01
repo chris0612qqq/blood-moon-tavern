@@ -230,7 +230,7 @@ def resolve_night(night: NightRecord) -> list[tuple[str, DeathCause]]:
 
 
 def can_shoot(cause: DeathCause) -> bool:
-    """獵人能否開槍：被毒、被踢、手動修正都不能（SPEC A5.2、A5.6）。"""
+    """獵人能否開槍：被毒、手動修正都不能（SPEC A5.2、A5.6）。"""
     return cause in (DeathCause.WOLF, DeathCause.VOTE, DeathCause.HUNTER)
 
 
@@ -271,12 +271,8 @@ def gets_last_words(round_no: int, context: DayContext) -> bool:
 
 
 def last_words_queue(state: GameState) -> list[str]:
-    """遺言順序依座位（SPEC A5.4）；被踢者不留遺言（L17 空名單由引擎跳過）。"""
-    queue = [
-        state.player(pid)
-        for pid in state.pending_last_words
-        if state.player(pid).death_cause is not DeathCause.KICK
-    ]
+    """遺言順序依座位（SPEC A5.4）；L17 空名單由引擎跳過。"""
+    queue = [state.player(pid) for pid in state.pending_last_words]
     return [p.id for p in sorted(queue, key=lambda p: p.seat)]
 
 
@@ -295,11 +291,9 @@ def can_wolf_mask(state: GameState, player_id: str) -> bool:
 
 
 def can_bet(state: GameState, player_id: str) -> bool:
-    """押注資格（SPEC A13）：已出局的好人陣營，被踢者不行。"""
+    """押注資格（SPEC A13）：已出局的好人陣營。"""
     player = state.player(player_id)
-    return (
-        not player.alive and not is_wolf(player.role) and player.death_cause is not DeathCause.KICK
-    )
+    return not player.alive and not is_wolf(player.role)
 
 
 def validate_bet(state: GameState, player_id: str, bet: Bet) -> None:

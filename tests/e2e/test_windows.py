@@ -27,7 +27,7 @@ from tests.e2e.test_full_game import (
     wait,
 )
 
-pytestmark = pytest.mark.e2e
+pytestmark = [pytest.mark.e2e, pytest.mark.watchdog(1500)]  # 一局就要跑約 18 分鐘
 GAME_LIMIT_SECONDS = 1100
 SECRET_WORDS = ("千面狼",)
 # SPEC A5.2：每個角色卡一定要講到的能力
@@ -105,7 +105,6 @@ def verify_log(
             "poison": "被女巫毒死",
             "vote": "被放逐",
             "hunter": "被獵人射死",
-            "kick": "被踢出局",
         }
         for player in state["players"]:
             if player["death_round"] == number and player["death_cause"] in plain:

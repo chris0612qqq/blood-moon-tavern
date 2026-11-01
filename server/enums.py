@@ -44,7 +44,6 @@ class DeathCause(StrEnum):
     POISON = "poison"
     VOTE = "vote"
     HUNTER = "hunter"
-    KICK = "kick"
     MANUAL = "manual"
 
 
@@ -105,7 +104,6 @@ class Action(StrEnum):
     BET_SET = "bet.set"
     CHAT_SEND = "chat.send"
     NARRATOR_TAKEOVER = "narrator.takeover"
-    ADMIN_KICK = "admin.kick"
     ADMIN_END = "admin.end"
     ADMIN_PAUSE = "admin.pause"
     ADMIN_RESUME = "admin.resume"

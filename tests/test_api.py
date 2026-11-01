@@ -575,43 +575,6 @@ def test_seat_change_and_validation(env: Env, client: TestClient) -> None:
     admin.close()
 
 
-def test_kick_in_lobby_bans_device(env: Env, client: TestClient) -> None:
-    open_room(env, client)
-    token, pid = player_tokens(client, 1)[0]
-    victim = Ws(client, token)
-    admin = Ws(client, env.admin_token)
-    assert admin.reply("admin.kick", player="nope")["code"] == "invalid_target"
-    assert admin.reply("admin.kick", player=pid)["t"] == "ack"
-    assert victim.until("kicked")["t"] == "kicked"
-    victim.close()
-    admin.close()
-    assert err(join(client, "XX", device=f"d-{NAMES[0]}")) == "banned"
-    res = client.post(
-        "/api/rejoin", json={"name": NAMES[0], "pin": "1111", "device_id": f"d-{NAMES[0]}"}
-    )
-    assert err(res) == "banned"
-
-
-def test_kick_in_game_kills_and_bans(env: Env, client: TestClient) -> None:
-    admin = start_game(env, client)
-    engine = env.service.engine
-    assert engine is not None
-    target = engine.state.players[0].id
-    assert admin.reply("admin.kick", player=target)["t"] == "ack"
-    assert not engine.state.player(target).alive
-    # 已死的人再踢一次只補封鎖，不會壞
-    assert admin.reply("admin.kick", player=target)["t"] == "ack"
-    admin.close()
-
-
-def test_kick_spectator_removes(env: Env, client: TestClient) -> None:
-    admin = start_game(env, client)
-    res = join(client, "ZZ")
-    assert admin.reply("admin.kick", player=res.json()["player_id"])["t"] == "ack"
-    assert res.json()["player_id"] not in env.service.players
-    admin.close()
-
-
 def test_start_needs_six(env: Env, client: TestClient) -> None:
     open_room(env, client)
     player_tokens(client, 5)
@@ -651,13 +614,13 @@ def test_engine_action_before_start_forbidden(env: Env, client: TestClient) -> N
 def test_prep_report_updates_roster(env: Env, client: TestClient) -> None:
     open_room(env, client)
     ws = Ws(client, join(client, "AA").json()["token"])
-    ws.send("prep.report", audio=True, wakelock=True, pwa=False)
+    ws.send("prep.report", wakelock=True, pwa=False)
     roster = ws.until("roster")
     for _ in range(5):
-        if roster["players"][0]["prep"].get("audio"):
+        if roster["players"][0]["prep"].get("wakelock"):
             break
         roster = ws.until("roster")
-    assert roster["players"][0]["prep"]["audio"] is True
+    assert roster["players"][0]["prep"]["wakelock"] is True
     ws.close()
 
 
@@ -921,13 +884,12 @@ def test_T5_E4_write_failure_reverts_memory(
     admin = start_game(env, client)
     engine = env.service.engine
     assert engine is not None
-    target = engine.state.players[0]
     with monkeypatch.context() as patch:
         _break_writes(env, patch)
-        reply = admin.reply("admin.kick", player=target.id)
+        reply = admin.reply("admin.end")
     assert reply["code"] == "internal_error"
     assert env.service.engine is not None
-    assert env.service.engine.state.player(target.id).alive
+    assert env.service.engine.state.step is not Step.END
     admin.close()
 
 
@@ -966,11 +928,11 @@ def test_write_rolls_back_whole_transaction(env: Env) -> None:
     with pytest.raises(sqlite3.Error):
         env.db.write(
             [
-                ("INSERT INTO banned_device(room_id, device_id) VALUES(?,?)", ("r", "d")),
+                ("INSERT INTO game(id, room_id, started_at) VALUES(?,?,?)", ("g", "r", 0)),
                 ("INSERT INTO no_such_table VALUES(?)", (1,)),
             ]
         )
-    assert env.db.rows("SELECT COUNT(*) AS c FROM banned_device")[0]["c"] == 0
+    assert env.db.rows("SELECT COUNT(*) AS c FROM game")[0]["c"] == 0
 
 
 def test_T5_restart_restores_game_and_sessions(env: Env) -> None:
@@ -1107,7 +1069,7 @@ def test_god_rollback_works_after_restart(env: Env) -> None:
 
 def test_E5_corrupt_db_restored_from_backup(tmp_path: Path) -> None:
     db = Database(tmp_path / "game.db")
-    db.write([("INSERT INTO banned_device(room_id, device_id) VALUES(?,?)", ("r", "d"))])
+    db.write([("INSERT INTO game(id, room_id, started_at) VALUES(?,?,?)", ("g", "r", 0))])
     backups = tmp_path / "backup"
     db.backup_to(backups / "1.db")
     (backups / "0.db").write_bytes(b"garbage" * 1000)
@@ -1115,7 +1077,7 @@ def test_E5_corrupt_db_restored_from_backup(tmp_path: Path) -> None:
     (tmp_path / "game.db").write_bytes(b"garbage" * 1000)
     assert not is_healthy(tmp_path / "game.db")
     assert restore_latest_backup(tmp_path / "game.db", backups)
-    assert Database(tmp_path / "game.db").rows("SELECT * FROM banned_device")
+    assert Database(tmp_path / "game.db").rows("SELECT * FROM game")
     assert not restore_latest_backup(tmp_path / "x.db", tmp_path / "none")
 
 
@@ -1477,3 +1439,50 @@ def test_P3_twenty_clients_play_a_full_game(
 
 
 _ = Engine
+
+
+def test_old_db_loses_kick_columns_and_can_still_save_players(tmp_path: Path) -> None:
+    """SPEC v4.16 拿掉踢人：舊資料庫檔開啟時要拆掉，否則 NOT NULL 欄位會讓加入失敗。"""
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE banned_device(room_id TEXT NOT NULL, device_id TEXT NOT NULL);"
+        "CREATE TABLE player(id TEXT PRIMARY KEY, room_id TEXT NOT NULL, device_id TEXT NOT NULL,"
+        " name TEXT NOT NULL, avatar_media_id TEXT, pin_hash TEXT NOT NULL, seat INTEGER NOT NULL,"
+        " is_spectator INTEGER NOT NULL, kicked INTEGER NOT NULL, prep_json TEXT NOT NULL,"
+        " join_order INTEGER NOT NULL);"
+    )
+    old.close()
+    db = Database(path)
+    assert "kicked" not in {row["name"] for row in db.rows("PRAGMA table_info(player)")}
+    assert not db.rows("SELECT name FROM sqlite_master WHERE name='banned_device'")
+    db.close()
+
+
+def test_old_saves_with_kick_cause_upgrade_to_manual() -> None:
+    """CODING_RULES G4：舊版存檔要轉得過來，不能讓還原在讀死因時爆掉。"""
+    raw = {
+        "schema_version": 1,
+        "type": "player_died",
+        "data": {"player": "p1", "cause": "kick"},
+        "players": [{"id": "p1", "death_cause": "kick"}, {"id": "p2", "death_cause": "wolf"}],
+    }
+    upgraded = upgrade_event(raw)
+    assert upgraded["schema_version"] == SCHEMA_VERSION
+    assert upgraded["data"]["cause"] == "manual"
+    assert [p["death_cause"] for p in upgraded["players"]] == ["manual", "wolf"]
+
+
+def test_N9_chat_history_page_stays_under_limit(
+    env: Env, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    open_room(env, client)
+    a = Ws(client, join(client, "AA").json()["token"])
+    for i in range(3):
+        a.reply("chat.send", channel="public", content=f"第{i}句" * 20)
+    monkeypatch.setattr(config, "WS_MAX_MESSAGE_BYTES", 500)
+    a.send("chat.history", channel="public", before_id=999)
+    page = a.until("chat.history")
+    assert 0 < len(page["messages"]) < 3
+    assert page["messages"][-1]["content"].startswith("第2句")  # 裁掉的是舊的，還能再往前翻
+    a.close()

@@ -2,11 +2,10 @@
 import { h } from '../dom.js';
 import { send, serverNow } from '../net.js';
 import { LIMITS } from '../protocol.js';
-import { unlockAudio } from '../narrator.js';
 import { changed, store } from '../store.js';
 import { deathLabel, LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
 import { actionButton, avatar, button, countdown, nameOf } from '../ui/common.js';
-import { lobbyAdmin, lobbyMenu } from './s5_lobby.js';
+import { lobbyAdmin, lobbyList, lobbyMenu, seated, voiceWarning } from './s5_lobby.js';
 
 export { lobbyMenu };
 
@@ -15,42 +14,16 @@ export function s20(server) {
   return hostGame(server);
 }
 
-/** 上帝手機就是旁白主機，一定要有測試聲音的入口（SPEC S24 的精簡版，完整版在 P6）。 */
-function soundPanel() {
-  const voice = store.voice;
-  if (!voice.supported) return h('p', { class: 'error-text', testid: 'sound-unsupported' }, t('voice.unsupported'));
-  return [
-    button(t('s20.soundTest'), () => {
-      unlockAudio(t('s5.soundTest'));
-      changed();
-    }, { testid: 'btn-sound-test' }),
-    h('p', { class: 'hint center' }, t('s20.soundHint')),
-    h('p', { class: 'hint center', testid: 'voice-status' }, t('voice.status', {
-      status: voice.last || t('voice.never'),
-      name: voice.name || t('voice.none'),
-      count: voice.voices,
-    })),
-  ];
-}
-
 function hostLobby(server) {
-  const players = (server.roster ?? []).filter((r) => !r.is_spectator).sort((a, b) => a.seat - b.seat);
+  const players = seated(server);
   const need = LIMITS.MIN_PLAYERS - players.length;
   return [
     h('h1', { testid: 'screen-s20' }, t('s20.title')),
     h('p', { testid: 'lobby-count' }, t('s5.count', { n: players.length, cap: server.room?.capacity })),
-    soundPanel(),
+    voiceWarning(true),
     lobbyAdmin(server, players, need),
     // 名單放最後：20 人時按鈕才不會被擠到要滑很遠
-    players.map((p) => h('div', { class: 'list-row', key: p.id },
-      h('span', {}, `#${p.seat}`),
-      avatar(server, p.id),
-      h('span', { class: 'grow' }, p.name),
-      p.offline ? h('span', { class: 'badge' }, t('s5.offlineTag')) : null,
-      button('⋯', () => {
-        store.ui.dialog = { kind: 'lobby-player', playerId: p.id };
-        changed();
-      }, { small: true }))),
+    h('div', {}, lobbyList(server, players, true)),
   ];
 }
 
@@ -194,15 +167,7 @@ function moreMenu(server) {
         kind: 'secondary',
         label: t('s20.reshow'),
         run: () => send('host.reshow_card', { player: p.id }),
-      }),
-      p.alive ? actionButton({
-        id: `host-kick-${p.id}`,
-        small: true,
-        kind: 'danger',
-        label: t('s5.kick'),
-        confirm: t('s5.kickConfirm', { name: p.name }),
-        run: () => send('admin.kick', { player: p.id }),
-      }) : null)),
+      }))),
     actionButton({
       id: 'btn-rollback',
       label: t('s20.rollback'),
@@ -217,7 +182,7 @@ function moreMenu(server) {
       confirm: t('s20.endConfirm'),
       run: () => send('admin.end'),
     }),
-    button(t('common.close'), () => { store.ui.hostMoreOpen = false; changed(); }));
+    button(t('common.close'), () => { store.ui.hostMoreOpen = false; changed(); }, { testid: 'btn-host-more-close' }));
 }
 
 function revealTab(server) {
@@ -262,7 +227,6 @@ function voiceTab(server) {
   return [
     h('p', { class: 'hint', testid: 'host-view-voice' }, t('s20.againHint')),
     lineButtons(server),
-    soundPanel(),
   ];
 }
 

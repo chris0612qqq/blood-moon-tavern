@@ -347,7 +347,7 @@ class Engine:
             return Step.NIGHT_START
         closing = dict(night_step_pairs()).get(step)
         if closing is not None:
-            # 已經念過睜眼就一定要念閉眼，即使行動者在步驟中被踢（SPEC A5.6）
+            # 已經念過睜眼就一定要念閉眼，即使行動者在步驟中被判死（SPEC A5.6）
             return closing
         sequence = night_sequence()
         if step in sequence and step is not Step.DAWN:
@@ -522,7 +522,7 @@ class Engine:
         state = self.state
         line_id = state.line_id
         assert line_id is not None
-        # 暫停時發言者被踢：沒有人可念，繼續後步驟會自己換下一位
+        # 暫停時發言者被判死：沒有人可念，繼續後步驟會自己換下一位
         if line_id in ("speak", "last_words") and state.current_speaker is None:
             return
         if line_id == "tie":
@@ -603,7 +603,7 @@ class Engine:
         )
         has_last_words = (
             context is not None
-            and cause not in (DeathCause.KICK, DeathCause.MANUAL)
+            and cause is not DeathCause.MANUAL
             and rules.gets_last_words(state.round_no, context)
         )
         self.emit(

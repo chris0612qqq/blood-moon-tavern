@@ -7,12 +7,33 @@ from typing import Any
 
 from server.state import SCHEMA_VERSION
 
+_KICK = "kick"
+_DEATH_FIELDS = frozenset({"cause", "death_cause"})
+
+
+def _kick_to_manual(value: Any) -> Any:
+    """v1 → v2（SPEC v4.16 拿掉踢人）：舊存檔裡的 kick 死因都當成手動判死。"""
+    if isinstance(value, list):
+        return [_kick_to_manual(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: "manual" if key in _DEATH_FIELDS and item == _KICK else _kick_to_manual(item)
+            for key, item in value.items()
+        }
+    return value
+
+
 # 舊版本號 → 把該版事件轉成下一版的函式
-MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {}
+MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {1: _kick_to_manual}
 
 
 class SchemaTooNew(Exception):
     """存檔版本比程式新或沒有升級路徑，管理員只能中途結束。"""
+
+
+def upgrade_snapshot(raw: dict[str, Any]) -> dict[str, Any]:
+    """快照和事件用同一套版本號，轉法也一樣。"""
+    return upgrade_event(raw)
 
 
 def upgrade_event(raw: dict[str, Any]) -> dict[str, Any]:

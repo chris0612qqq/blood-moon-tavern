@@ -28,7 +28,6 @@ _STATUS = {
     ErrorCode.BAD_REQUEST: 400,
     ErrorCode.UNAUTHORIZED: 401,
     ErrorCode.FORBIDDEN: 403,
-    ErrorCode.BANNED: 403,
     ErrorCode.NO_ROOM: 404,
     ErrorCode.FILE_TOO_LARGE: 413,
     ErrorCode.LOCKED: 423,

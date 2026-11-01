@@ -67,7 +67,6 @@ class Empty(ClientFrame):
 
 
 class PrepReport(ClientFrame):
-    audio: bool = False
     wakelock: bool = False
     pwa: bool = False
 
@@ -161,7 +160,6 @@ CLIENT_MESSAGES: Final[dict[str, type[ClientFrame]]] = {
     "vote.cast": OptionalTarget,
     "bet.set": BetSet,
     "admin.seat": AdminSeat,
-    "admin.kick": PlayerRef,
     "admin.start": Empty,
     "admin.end": Empty,
     "admin.pause": Empty,

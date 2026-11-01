@@ -17,6 +17,7 @@ import { chatTab, playersTab, roleTab, s18, s21, s26 } from './screens/tabs.js';
 const HEALTH_MS = 5000;
 const TOAST_MS = 3000;
 const ERROR_LOG_LIMIT = 50;
+const CHAT_STICK_PX = 40;
 const NIGHT_STEPS = new Set([STEP.NIGHT_START, STEP.WOLF, STEP.WOLF_END, STEP.SEER, STEP.SEER_END, STEP.WITCH, STEP.WITCH_END]);
 const SCREENS = {
   S0: s0, S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, S6: s6, S7: s7, S8: s8, S9: s9, S10: s10,
@@ -141,6 +142,25 @@ function mainContent(screen) {
   return [deadTag(server), s19(server), SCREENS[screen](server)];
 }
 
+// 看最新訊息時跟著捲到底；往上翻舊訊息時不打擾。是否在看最新只由使用者的捲動決定：
+// 鍵盤或轉向讓清單變矮時距離底部會變大，但人並沒有往上翻，不能在重繪時用幾何量
+let chatPinned = true;
+
+document.addEventListener('scroll', (e) => {
+  if (!e.target.matches?.('.chat__list')) return;
+  const list = e.target;
+  chatPinned = list.scrollHeight - list.scrollTop - list.clientHeight < CHAT_STICK_PX;
+}, { capture: true, passive: true });
+
+function settleChatScroll() {
+  const list = document.querySelector('.chat__list');
+  if (!list) chatPinned = true; // 下次打開聊天從最新開始看
+  else if (store.ui.chatRestore !== null) list.scrollTop += list.scrollHeight - store.ui.chatRestore;
+  else if (chatPinned || store.ui.chatStick) list.scrollTop = list.scrollHeight;
+  store.ui.chatRestore = null;
+  store.ui.chatStick = false;
+}
+
 function draw() {
   const screen = resolveScreen(store);
   const server = store.server;
@@ -157,6 +177,7 @@ function draw() {
     dialogLayer(server),
     toastLayer(),
     h('div', { class: 'rotate' }, t('rotate')));
+  settleChatScroll();
 }
 
 // 單一時鐘（UI_RULES Q5、U6）：每影格以 deadline − 校正後的伺服器時間重算，不用計數器
@@ -236,6 +257,7 @@ store.restart = () => {
 const KEYBOARD_MS = 300;
 window.visualViewport?.addEventListener('resize', () => {
   document.documentElement.style.setProperty('--app-h', `${window.visualViewport.height}px`);
+  settleChatScroll();
 });
 document.addEventListener('focusin', (e) => {
   if (e.target.matches('input, textarea')) {

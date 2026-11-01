@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from server import balance
+from server import actions, balance
 from server.clock import FakeClock
 from server.engine import ACTION_STEPS, TRANSITIONS, Engine, night_sequence
 from server.enums import Action, Channel, DeathCause, Mode, PauseReason, Role, Step, Winner
@@ -56,6 +56,11 @@ class Game:
     def act(self, who: str | Actor, action: Action, /, **payload: Any) -> list[Event]:
         actor = who if isinstance(who, Actor) else Actor(player_id=who)
         return self.engine.handle(actor, action, payload, self.state.step_seq)
+
+    def remove(self, player: str) -> list[Event]:
+        """有人中途出局（SPEC A5.6）。上帝模式由主持人手動判死，這裡兩種模式都直接測。"""
+        actions.remove_player(self.engine, player, DeathCause.MANUAL)
+        return self.engine.flush()
 
     def run(self, seconds: float) -> None:
         """讓時間前進並持續 tick。"""
@@ -269,7 +274,7 @@ class TestWolf:
         assert err.value.code is ErrorCode.INVALID_TARGET
 
     def test_last_wolf_biting_self_means_village_wins(self, game: Game) -> None:
-        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        game.remove("p5")
         game.to_wolf_step()
         game.night("p4")
         game.run(30)
@@ -297,16 +302,16 @@ class TestWolf:
         assert game.state.night().wolf_target in ("p1", None)
         assert game.state.night().wolf_decided
 
-    def test_L20_kicked_wolf_rechecks_consensus(self, game: Game) -> None:
+    def test_L20_removed_wolf_rechecks_consensus(self, game: Game) -> None:
         game.to_wolf_step()
         game.act("p4", Action.WOLF_PICK, target="p1")
-        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        game.remove("p5")
         assert game.state.timers.confirm_until is not None
 
-    def test_L20_kicked_target_clears_pick(self, game: Game) -> None:
+    def test_L20_removed_target_clears_pick(self, game: Game) -> None:
         game.to_wolf_step()
         game.act("p4", Action.WOLF_PICK, target="p1")
-        game.act(ADMIN, Action.ADMIN_KICK, player="p1")
+        game.remove("p1")
         assert "p4" not in game.state.night().wolf_picks
 
 
@@ -623,81 +628,71 @@ class TestVote:
         assert game.state.vote_round().exiled is None
         assert all(p.alive for p in game.state.players)
 
-    def test_D4_24_kick_voids_votes(self, game: Game) -> None:
+    def test_D4_24_removed_voids_votes(self, game: Game) -> None:
         self._at_vote(game)
         game.act("p1", Action.VOTE_CAST, target="p2")
         game.act("p2", Action.VOTE_CAST, target="p1")
-        game.act(ADMIN, Action.ADMIN_KICK, player="p2")
+        game.remove("p2")
         ballots = game.state.vote_round().ballots
         assert "p2" not in ballots and ballots["p1"] is None
 
-    def test_kick_last_missing_voter_starts_grace(self, game: Game) -> None:
+    def test_removed_last_missing_voter_starts_grace(self, game: Game) -> None:
         self._at_vote(game)
         game.vote_all("p2", skip=("p8",))
-        game.act(ADMIN, Action.ADMIN_KICK, player="p8")
+        game.remove("p8")
         assert game.state.timers.grace_until is not None
 
 
 class TestKickAndWin:
-    def test_D4_45_kick_reveals_and_checks_win(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_D4_45_removed_reveals_and_checks_win(self, monkeypatch: pytest.MonkeyPatch) -> None:
         game = Game(monkeypatch)
-        game.act(ADMIN, Action.ADMIN_KICK, player="p4")
-        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        game.remove("p4")
+        game.remove("p5")
         assert game.state.step is Step.END and game.state.winner is Winner.VILLAGE
 
-    def test_kicked_hunter_cannot_shoot(self, game: Game) -> None:
+    def test_removed_hunter_cannot_shoot(self, game: Game) -> None:
         game.to_wolf_step()
-        game.act(ADMIN, Action.ADMIN_KICK, player="p6")
+        game.remove("p6")
         assert game.state.hunter_pending is None
 
-    def test_kick_speaker_moves_on(self, game: Game) -> None:
+    def test_removed_speaker_moves_on(self, game: Game) -> None:
         game.to_wolf_step()
         game.night(None)
         game.wait_for(Step.DAY_SPEAK)
         speaker = game.state.current_speaker
         assert speaker is not None
-        game.act(ADMIN, Action.ADMIN_KICK, player=speaker)
+        game.remove(speaker)
         game.run(1)
         assert game.state.current_speaker != speaker
 
-    def test_kick_narrator_falls_back_to_admin(self, game: Game) -> None:
-        game.act(ADMIN, Action.ADMIN_KICK, player="p1")
-        assert game.state.narrator_id is None
-
-    def test_kick_disguise_target_redraws(self, game: Game) -> None:
+    def test_removed_disguise_target_redraws(self, game: Game) -> None:
         disguise = game.state.disguise
         assert disguise is not None
         target = disguise.target_id
         assert target is not None
-        game.act(ADMIN, Action.ADMIN_KICK, player=target)
+        game.remove(target)
         assert game.state.disguise is not None
         assert game.state.disguise.target_id != target
         assert game.state.disguise.periods[0].to_round is not None
 
-    def test_kick_rules(self, game: Game) -> None:
-        with pytest.raises(GameError):
-            game.act(ADMIN, Action.ADMIN_KICK, player="nope")
-        with pytest.raises(GameError):
-            game.act("p1", Action.ADMIN_KICK, player="p2")
-
     @pytest.mark.parametrize("step", [Step.WOLF, Step.SEER, Step.WITCH])
-    def test_L20_kick_actor_mid_step_still_closes(self, game: Game, step: Step) -> None:
-        # 壓力測試抓到的 bug：行動者被踢後不能跳過閉眼
+    def test_L20_removed_actor_mid_step_still_closes(self, game: Game, step: Step) -> None:
+        # 壓力測試抓到的 bug：行動者被判死後不能跳過閉眼
         game.ack_all()
         if step is not Step.WOLF:
             game.wait_for(Step.WOLF)
             game.wolves_kill("p1")
         game.wait_for(step)
         if step is Step.WOLF:
-            game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+            game.remove("p5")
             game.act("p4", Action.WOLF_PICK, target="p1")
         else:
-            game.act(ADMIN, Action.ADMIN_KICK, player=game.state.actors[0])
+            game.remove(game.state.actors[0])
         closing = {Step.WOLF: Step.WOLF_END, Step.SEER: Step.SEER_END, Step.WITCH: Step.WITCH_END}
         game.wait_for(closing[step], limit=120)
 
-    def test_kick_during_deal_then_acks(self, game: Game) -> None:
-        game.act(ADMIN, Action.ADMIN_KICK, player="p8")
+    def test_removed_during_deal_then_acks(self, game: Game) -> None:
+        game.remove("p8")
         assert "p8" not in game.state.actors
         game.ack_all()
         game.wait_for(Step.NIGHT_START)
@@ -768,15 +763,15 @@ class TestPause:
         with pytest.raises(GameError):
             game.act(ADMIN, Action.ADMIN_PAUSE)
 
-    def test_kick_speaker_while_paused_then_resume(self, game: Game) -> None:
-        # 機器人抽樣抓到：重念「請 ○○ 發言」時那個人已被踢，tick 會一直當掉
+    def test_removed_speaker_while_paused_then_resume(self, game: Game) -> None:
+        # 機器人抽樣抓到：重念「請 ○○ 發言」時那個人已被判死，tick 會一直當掉
         game.to_wolf_step()
         game.night(None)
         game.wait_for(Step.DAY_SPEAK)
         speaker = game.state.current_speaker
         assert speaker is not None
         game.act(ADMIN, Action.ADMIN_PAUSE)
-        game.act(ADMIN, Action.ADMIN_KICK, player=speaker)
+        game.remove(speaker)
         game.act(ADMIN, Action.ADMIN_RESUME)
         game.run(balance.RESUME_COUNTDOWN_SECONDS + 1)
         assert game.state.pause is None
@@ -855,7 +850,7 @@ class TestChat:
 
     def test_dead_wolf_channel_read_only(self, game: Game) -> None:
         game.to_wolf_step()
-        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        game.remove("p5")
         with pytest.raises(GameError):
             self._chat(game, "p5", channel=Channel.WOLF)
 
@@ -905,7 +900,7 @@ class TestWolfMask:
             self._mask(game, "late")  # 旁觀者
         with pytest.raises(GameError):
             self._mask(game, "p5", channel=Channel.WOLF)  # 狼人頻道一律本名
-        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        game.remove("p5")
         with pytest.raises(GameError):
             self._mask(game, "p5")  # 已死
 
@@ -929,9 +924,8 @@ class TestBets:
         game.act("p1", Action.BET_SET, wolves=["p5"], faceless=None)
         assert game.state.bets["p1"].wolves == ["p5"]
 
-    def test_alive_wolf_kicked_cannot_bet(self, game: Game) -> None:
+    def test_alive_and_outsider_cannot_bet(self, game: Game) -> None:
         game.to_wolf_step()
-        game.act(ADMIN, Action.ADMIN_KICK, player="p1")
         for who in ("p2", "p1", "late"):
             with pytest.raises(GameError):
                 game.act(who, Action.BET_SET, wolves=[], faceless=None)

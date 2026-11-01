@@ -30,6 +30,14 @@ SMALLEST = {"width": 320, "height": 568}  # iPhone SE 第一代：撐得住這�
 PLAYERS = 12
 GAME_LIMIT_SECONDS = 540
 MIN_TAP = 44  # 手指點得到的最小高度（SPEC C7）
+# UI_RULES Q3 的目標是 50 ms；灰盒在 4 倍降速下偶爾有一次到 80 ms（見 UI_CHECKLIST），先防惡化
+LONG_TASK_LIMIT_MS = 150
+LONG_TASKS_JS = """
+window.__longTasks = [];
+new PerformanceObserver((list) => {
+  for (const e of list.getEntries()) window.__longTasks.push(Math.round(e.duration));
+}).observe({ entryTypes: ['longtask'] });
+"""
 
 AUDIT_JS = """() => {
   const found = [];
@@ -67,7 +75,8 @@ AUDIT_JS = """() => {
       const overlap = Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1
         && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
       // 不同區塊（內容區捲到分頁列後面）不算重疊，畫面上看不到也按不到
-      const region = (el) => el.closest('.overlay, .main, .tabs, .status');
+      const region = (el) => el.closest(
+        '.overlay, .host-pinned, .host-content, .main, .tabs, .status');
       if (overlap && region(tappable[i]) === region(tappable[j])) {
         found.push(`按鈕重疊：${label(tappable[i])} / ${label(tappable[j])}`);
       }
@@ -131,6 +140,12 @@ def walk_host(host: Page, audit: Audit, note: str) -> None:
         if has(host, tab):
             press(host, tab)
             audit.look(host, f"{note}_{tab}")
+            # 「更多」只在部分分頁、而且畫面隨時會換，點得到才量
+            if "host_more" not in audit.seen and tap(host, "btn-host-more"):
+                audit.seen.add("host_more")
+                audit.look(host, f"{note}_more")
+                if not tap(host, "btn-host-more-close"):
+                    host.evaluate("window.__bmt.ui.hostMoreOpen = false")
 
 
 def test_every_screen_fits_the_smallest_phone() -> None:
@@ -163,6 +178,12 @@ def test_every_screen_fits_the_smallest_phone() -> None:
             join_form(page, f"玩{chr(65 + i)}", password)  # 名字恰 2 字
         audit.look(pages[0], "lobby")
         audit.look(host, "lobby_full")
+        # 管理員那列最擠：同時有標籤、把手和選單
+        first = store(host, "s.server.roster[0].id")
+        press(host, f"lobby-menu-{first}")
+        wait(host, f"btn-reset-pin-{first}")
+        audit.look(host, "lobby_menu")
+        host.evaluate("window.__bmt.ui.dialog = null")
         press(host, "btn-start")
         wait(host, "dialog-confirm")
         audit.look(host, "start_confirm")
@@ -205,3 +226,33 @@ def test_every_screen_fits_the_smallest_phone() -> None:
             json.dump(audit.problems, out, ensure_ascii=False, indent=1)
     assert errors == []
     assert audit.problems == {}
+
+
+def test_ut5_no_long_tasks_on_a_slow_phone() -> None:
+    """UI_RULES UT5：CPU 降速 4 倍玩完整局，主執行緒沒有卡頓。上限見 LONG_TASK_LIMIT_MS。"""
+    with running_server(6) as url, sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=SMALLEST).new_page()
+        page.add_init_script(LONG_TASKS_JS)
+        page.goto(url)
+        page.context.new_cdp_session(page).send("Emulation.setCPUThrottlingRate", {"rate": 4})
+        admin_open_room(page, "auto")
+        press(page, "btn-to-join")
+        join_form(page, "管理", None)
+        press(page, "btn-add-bots")
+        page.wait_for_function("window.__bmt.server.roster.length >= 6")
+        press(page, "btn-start")
+        press(page, "dialog-confirm")
+        page.wait_for_function("window.__bmt.server.phase === 'game'")
+        # UT5 看的是玩的時候；載入程式的那一下不算，只發生一次而且沒人在操作
+        print("startup tasks ms:", page.evaluate("window.__longTasks"))
+        page.evaluate("window.__longTasks = []")
+        deadline = time.time() + GAME_LIMIT_SECONDS
+        while store(page, "s.server && s.server.step") != "END":
+            assert time.time() < deadline, store(page, "s.server.step")
+            act(page)
+            page.wait_for_timeout(200)
+        tasks = page.evaluate("window.__longTasks")
+        browser.close()
+    print("long tasks ms:", sorted(tasks)[-10:], "count", len(tasks))
+    assert not [ms for ms in tasks if ms > LONG_TASK_LIMIT_MS], sorted(tasks)[-10:]

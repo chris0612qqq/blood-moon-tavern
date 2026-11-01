@@ -56,7 +56,7 @@ def test_same_seed_same_game() -> None:
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", list(Mode))
 def test_full_500_games_per_mode(mode: Mode) -> None:
-    """DEV_PLAN P2 通關：兩模式合計 1000 局，涵蓋 6–20 人，一半含踢人、暫停、回上一步。"""
+    """DEV_PLAN P2 通關：兩模式合計 1000 局、6–20 人，一半含暫停（上帝局另有判死、回上一步）。"""
     for seed in range(500):
         players = 6 + seed % 15
         _check(players, mode, seed=seed, chaos=seed % 2 == 1)

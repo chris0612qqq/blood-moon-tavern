@@ -1,7 +1,6 @@
 // 非遊戲分頁與共用畫面：聊天、狼人頻道、我的角色、玩家、S18 結算、S21 設定、S26 規則速查。
 import { h } from '../dom.js';
 import { api, send } from '../net.js';
-import { speak } from '../narrator.js';
 import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
 import { causeJoke, causePlain, deathLabel, roleName, t } from '../strings.js';
@@ -11,6 +10,7 @@ import { roleCard } from './night.js';
 
 const CHAT_MAX = 500;
 const CHAT_WARN = 50;
+const FIRST_CHAT_ID = 1;
 const NIGHT_STEPS = new Set(['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END']);
 
 function displayName(server, msg) {
@@ -57,6 +57,23 @@ function sendLabel(fake, masked, targetName) {
   return t('chat.send');
 }
 
+// 一開始只帶最近一頁（CODING_RULES P6）。訊息 id 全房從 1 連號，不能用則數判斷：
+// 看不到的狼人訊息和 64 KB 裁切都會讓則數變少。最舊的不是 1 號就可能還有更舊的
+function olderButton(channel, messages) {
+  if (!messages.length || messages[0].id <= FIRST_CHAT_ID || store.ui.chatEnd[channel]) return null;
+  return actionButton({
+    id: 'chat-older',
+    small: true,
+    kind: 'secondary',
+    label: t('chat.older'),
+    run: () => {
+      // 記下高度：舊訊息插到上面時，畫面要停在原本看的地方（iPhone 不會自己維持）
+      store.ui.chatHeight = document.querySelector('.chat__list')?.scrollHeight ?? null;
+      return send('chat.history', { channel, before_id: messages[0].id });
+    },
+  });
+}
+
 export function chatTab(server, channel) {
   const messages = (server.chat ?? []).filter((m) => m.channel === channel);
   const block = postBlock(server, channel);
@@ -70,6 +87,7 @@ export function chatTab(server, channel) {
   const target = server.me?.disguise_info?.target;
   return h('div', { class: 'chat' },
     h('div', { class: 'chat__list', testid: `chat-list-${channel}` },
+      olderButton(channel, messages),
       messages.length ? messages.map((m) => bubble(server, m)) : h('p', { class: 'hint center' }, t('chat.empty'))),
     canFake || canMask ? h('div', { class: 'row' },
       asButton(t('chat.asSelf'), 'self', !fake && !masked),
@@ -118,8 +136,7 @@ export function playersTab(server) {
   const list = server.players ?? server.roster ?? [];
   const offline = new Set((server.roster ?? []).filter((r) => r.offline).map((r) => r.id));
   const canPause = server.is_admin && !server.host && !server.paused && server.phase === 'game' && !NIGHT_STEPS.has(server.step) && server.step !== 'END';
-  const canManage = server.is_admin && !server.host && server.phase === 'game' && server.step !== 'END';
-  const managing = canManage && store.ui.playersManage;
+  const canEnd = server.is_admin && !server.host && server.phase === 'game' && server.step !== 'END';
   return [
     h('h1', { testid: 'view-players' }, t('players.title')),
     [...list].sort((a, b) => a.seat - b.seat).map((p) => h('div', { class: 'list-row', key: p.id },
@@ -128,31 +145,8 @@ export function playersTab(server) {
       h('span', { class: 'grow' }, p.name),
       offline.has(p.id) ? h('span', { class: 'badge' }, t('s5.offlineTag')) : null,
       p.alive === false ? h('span', { class: 'hint', testid: `player-cause-${p.id}` }, causePlain(p.death_cause)) : null,
-      p.alive === false ? h('span', { class: 'badge' }, `☠ ${roleName(p.public_role ?? p.role)}`.trim()) : null,
-      managing && p.alive !== false
-        ? actionButton({
-          id: `kick-${p.id}`,
-          small: true,
-          kind: 'danger',
-          label: t('s5.kick'),
-          confirm: t('s5.kickConfirm', { name: p.name }),
-          run: () => send('admin.kick', { player: p.id }),
-        })
-        : null)),
+      p.alive === false ? h('span', { class: 'badge' }, `☠ ${roleName(p.public_role ?? p.role)}`.trim()) : null)),
     canPause ? actionButton({ id: 'btn-pause', label: t('s16.pause'), kind: 'secondary', run: () => send('admin.pause') }) : null,
-    canManage ? button(t('players.manage'), () => {
-      store.ui.playersManage = !managing;
-      changed();
-    }, { testid: 'btn-players-manage' }) : null,
-    managing
-      ? actionButton({
-        id: 'btn-admin-end',
-        label: t('s20.end'),
-        kind: 'danger',
-        confirm: t('s20.endConfirm'),
-        run: () => send('admin.end'),
-      })
-      : null,
     (server.history ?? []).length ? h('h2', {}, t('players.log')) : null,
     (server.history ?? []).map((row) => h('div', { class: 'panel', key: `round${row.round_no}` },
       h('b', {}, t('players.round', { n: row.round_no })),
@@ -164,6 +158,15 @@ export function playersTab(server) {
       row.saved ? h('div', { testid: `log-saved-${row.round_no}` }, t('players.saved', { name: nameOf(server, row.saved) })) : null,
       row.ballots ? Object.entries(row.ballots).map(([from, to]) => h('div', { class: 'hint', key: from },
         t('s15.ballot', { from: nameOf(server, from), to: to ? nameOf(server, to) : t('s14.abstain') }))) : null)),
+    canEnd
+      ? h('div', { class: 'far-apart' }, actionButton({
+        id: 'btn-admin-end',
+        label: t('s20.end'),
+        kind: 'danger',
+        confirm: t('s20.endConfirm'),
+        run: () => send('admin.end'),
+      }))
+      : null,
   ];
 }
 
@@ -219,7 +222,7 @@ function nightPanel(server, truth, night, name) {
   const dead = (causes) => Object.entries(truth.death_causes ?? {})
     .filter(([id, cause]) => truth.death_rounds?.[id] === n && causes.includes(cause));
   const dawn = dead(['bite', 'poison']);
-  const dayOut = dead(['vote', 'hunter', 'kick', 'manual']);
+  const dayOut = dead(['vote', 'hunter', 'manual']);
   const label = ([id, cause]) => t('s18.deathRow', { name: name(id), cause: causePlain(cause) });
   const shots = (truth.hunter_shots ?? []).filter((shot) => shot.round_no === n);
   const votes = (truth.votes ?? []).find((v) => v.round_no === n);
@@ -316,7 +319,6 @@ export function s21() {
     server?.me && server.room?.mode === 'auto'
       ? actionButton({ id: 'btn-takeover', label: t('s21.takeover'), run: () => send('narrator.takeover') })
       : null,
-    button(t('s21.test'), () => speak(t('s5.soundTest')), { testid: 'btn-test-voice' }),
     h('p', { class: 'hint center', testid: 'voice-status' }, t('voice.status', {
       status: store.voice.last || t('voice.never'),
       name: store.voice.name || t('voice.none'),
