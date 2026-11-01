@@ -12,13 +12,15 @@ import { s5 } from './screens/s5_lobby.js';
 import { s10, s19, s6, s7, s8, s9 } from './screens/night.js';
 import { s11, s12, s13, s14, s15, s16, s17, s22, s27 } from './screens/day.js';
 import { lobbyMenu, s20 } from './screens/host.js';
-import { chatTab, playersTab, roleTab, s18, s21, s26 } from './screens/tabs.js';
+import { broadcastTab } from './screens/broadcast.js';
+import { chatTab, NIGHT_STEPS, playersTab, roleTab, s18, s21, s26 } from './screens/tabs.js';
 
 const HEALTH_MS = 5000;
 const TOAST_MS = 3000;
 const ERROR_LOG_LIMIT = 50;
 const CHAT_STICK_PX = 40;
-const NIGHT_STEPS = new Set([STEP.NIGHT_START, STEP.WOLF, STEP.WOLF_END, STEP.SEER, STEP.SEER_END, STEP.WITCH, STEP.WITCH_END]);
+const UNREAD_MAX = 99;
+const CHANNEL_OF_TAB = Object.freeze({ chat: 'public', wolf: 'wolf' });
 const SCREENS = {
   S0: s0, S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, S6: s6, S7: s7, S8: s8, S9: s9, S10: s10,
   S11: s11, S12: s12, S13: s13, S14: s14, S15: s15, S17: s17, S18: s18, S20: s20, S21: s21,
@@ -82,12 +84,21 @@ function tabs(server) {
   }
   if (server.me?.role) list.push(['role', t('tab.role')]);
   list.push(['players', t('tab.players')]);
-  return h('div', { class: 'tabs' }, list.map(([id, label]) => h('button', {
-    class: `tab ${store.ui.tab === id ? 'tab--on' : ''}`,
-    key: id,
-    testid: `tab-${id}`,
-    onclick: () => { store.ui.tab = id; changed(); },
-  }, label)));
+  if (server.is_admin) list.push(['broadcast', t('tab.broadcast')]);
+  return h('div', { class: 'tabs' }, list.map(([id, label]) => {
+    const channel = CHANNEL_OF_TAB[id];
+    const unread = channel ? store.ui.unread[channel] ?? 0 : 0;
+    return h('button', {
+      class: `tab ${store.ui.tab === id ? 'tab--on' : ''}`,
+      key: id,
+      testid: `tab-${id}`,
+      onclick: () => {
+        store.ui.tab = id;
+        if (channel) store.ui.unread = { ...store.ui.unread, [channel]: 0 };
+        changed();
+      },
+    }, label, unread ? h('span', { class: 'tab__unread', testid: `unread-${id}` }, unread > UNREAD_MAX ? `${UNREAD_MAX}+` : String(unread)) : null);
+  }));
 }
 
 function tabContent(server) {
@@ -96,6 +107,7 @@ function tabContent(server) {
     case 'wolf': return chatTab(server, 'wolf');
     case 'role': return roleTab(server);
     case 'players': return playersTab(server);
+    case 'broadcast': return broadcastTab(server);
     default: return null;
   }
 }
@@ -127,8 +139,12 @@ function dialogLayer(server) {
 function toastLayer() {
   const toast = store.ui.toast;
   if (!toast) return null;
-  clearTimeout(store.toastTimer);
-  store.toastTimer = setTimeout(() => { store.ui.toast = null; changed(); }, TOAST_MS);
+  // 只有換了新的提示才重新計時：控制台每秒重畫，每次都重算就永遠消不掉
+  if (store.toastShown !== toast) {
+    store.toastShown = toast;
+    clearTimeout(store.toastTimer);
+    store.toastTimer = setTimeout(() => { store.ui.toast = null; changed(); }, toast.ms ?? TOAST_MS);
+  }
   return h('div', { class: 'toast', testid: 'toast' }, t(toast.key, toast.params));
 }
 
@@ -156,7 +172,10 @@ function settleChatScroll() {
   const list = document.querySelector('.chat__list');
   if (!list) chatPinned = true; // 下次打開聊天從最新開始看
   else if (store.ui.chatRestore !== null) list.scrollTop += list.scrollHeight - store.ui.chatRestore;
-  else if (chatPinned || store.ui.chatStick) list.scrollTop = list.scrollHeight;
+  else if ((chatPinned || store.ui.chatStick) && list.scrollTop + list.clientHeight < list.scrollHeight) {
+    // 已經在底就不要再設：控制台每秒重畫，一直設會打斷 iPhone 的慣性捲動
+    list.scrollTop = list.scrollHeight;
+  }
   store.ui.chatRestore = null;
   store.ui.chatStick = false;
 }

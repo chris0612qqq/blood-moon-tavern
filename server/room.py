@@ -14,7 +14,7 @@ import shutil
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypeVar
@@ -106,6 +106,7 @@ class RoomService:
         self.room: Room | None = None
         self.engine: Engine | None = None
         self.players: dict[str, RoomPlayer] = {}
+        self.pending_broadcasts: list[tuple[float, str, dict[str, Any]]] = []
         self.sessions: dict[str, Session] = {}
         self.admin_tokens: set[str] = set()
         self.conns: list[Connection] = []
@@ -230,6 +231,7 @@ class RoomService:
         self.room = None
         self.engine = None
         self.players = {}
+        self.pending_broadcasts = []
         self.sessions = {
             key: session for key, session in self.sessions.items() if key in self.admin_tokens
         }
@@ -446,6 +448,16 @@ class RoomService:
         elif kind == "admin.seat":
             assert isinstance(frame, protocol.AdminSeat)
             self._admin_seat(conn, frame)
+        elif kind == "admin.broadcast":
+            assert isinstance(frame, protocol.AdminBroadcast)
+            self._require_admin(conn.session)
+            self.broadcast_to(
+                frame.targets,
+                frame.text,
+                speak=frame.speak,
+                sound=frame.sound,
+                interval_s=frame.interval_s,
+            )
         elif kind == "admin.start":
             self._admin_start(conn)
         elif kind == "admin.reset_pin":
@@ -703,6 +715,46 @@ class RoomService:
         self.db.write([_player_statement(room.id, self.players[p]) for p in frame.order])
         self.broadcast_roster()
 
+    def broadcast_to(
+        self,
+        targets: Sequence[str],
+        text: str,
+        *,
+        speak: bool = True,
+        sound: str | None = None,
+        interval_s: float = 0.0,
+    ) -> None:
+        """定向廣播（SPEC C4）：只送到指定玩家的手機，interval_s > 0 時依序一支接一支。
+
+        管理員分頁與之後的遊戲場景都呼叫這裡。不影響遊戲狀態，所以不記事件；
+        排隊中的廣播在伺服器重啟後就不送了，反正已經過時。對象不存在拋 invalid_target。
+        夜晚只對部分玩家發可能洩漏身分，自動呼叫時要自己注意（SPEC A7）。
+        """
+        self.require_room()
+        ordered = list(dict.fromkeys(targets))
+        if any(player_id not in self.players for player_id in ordered):
+            raise GameError(ErrorCode.INVALID_TARGET)
+        message = views.broadcast_message(text, speak, sound)
+        now = self.now
+        for index, player_id in enumerate(ordered):
+            if index and interval_s:
+                due = now + index * interval_s
+                self.pending_broadcasts.append((due, player_id, message))
+            else:
+                self._send_broadcast(player_id, message)
+
+    def _send_broadcast(self, player_id: str, message: dict[str, Any]) -> None:
+        for conn in self.conns:
+            if conn.session.player_id == player_id:
+                conn.send(message, self.now)
+
+    def _flush_broadcasts(self, now: float) -> None:
+        due = [item for item in self.pending_broadcasts if item[0] <= now]
+        if due:
+            self.pending_broadcasts = [i for i in self.pending_broadcasts if i[0] > now]
+            for _, player_id, message in due:
+                self._send_broadcast(player_id, message)
+
     def _admin_reset_pin(self, conn: Connection, frame: protocol.PlayerRef) -> None:
         """重設 PIN（SPEC A10）：清空後，他下次「我回來了」輸入的就是新 PIN。"""
         self._require_admin(conn.session)
@@ -891,6 +943,7 @@ class RoomService:
         if room is None:
             return
         now = self.now
+        self._flush_broadcasts(now)
         if room.closes_at is not None and now >= room.closes_at:
             self.close_room()
             return

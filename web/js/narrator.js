@@ -103,3 +103,8 @@ function isNarrator(server) {
 export function onNarrate(msg) {
   if (msg.speak && isNarrator(store.server)) speak(msg.text);
 }
+
+/** 收到定向廣播：伺服器只送給被指定的手機，所以不看是不是旁白主機。音效（msg.sound）P8 才接。 */
+export function onBroadcast(msg) {
+  if (msg.speak) speak(msg.text);
+}

@@ -1486,3 +1486,72 @@ def test_N9_chat_history_page_stays_under_limit(
     assert 0 < len(page["messages"]) < 3
     assert page["messages"][-1]["content"].startswith("第2句")  # 裁掉的是舊的，還能再往前翻
     a.close()
+
+
+def _saw_broadcast_before_ack(ws: Ws) -> bool:
+    """送一個 ping 當分界：ack 之前有沒有收到廣播。"""
+    wanted = ws.send("ping")
+    saw = False
+    for _ in range(200):
+        message = json.loads(ws.ws.receive_text())
+        saw = saw or message["t"] == "broadcast"
+        if message["t"] == "ack" and message["msg_id"] == wanted:
+            return saw
+    raise AssertionError("no ack")
+
+
+def test_broadcast_reaches_only_targets(env: Env, client: TestClient) -> None:
+    open_room(env, client)
+    (token_a, id_a), (token_b, _), (token_c, id_c) = player_tokens(client, 3)
+    a, b, c = Ws(client, token_a), Ws(client, token_b), Ws(client, token_c)
+    admin = Ws(client, env.admin_token)
+    reply = admin.reply("admin.broadcast", targets=[id_a, id_c], text=" 嗷嗚 ", speak=True)
+    assert reply["t"] == "ack"
+    got = a.until("broadcast")
+    assert got["text"] == "嗷嗚" and got["speak"] is True and got["sound"] is None
+    assert c.until("broadcast")["text"] == "嗷嗚"
+    assert not _saw_broadcast_before_ack(b)
+    for ws in (a, b, c, admin):
+        ws.close()
+
+
+def test_broadcast_rules(env: Env, client: TestClient) -> None:
+    open_room(env, client)
+    token, player = player_tokens(client, 1)[0]
+    ws = Ws(client, token)
+    admin = Ws(client, env.admin_token)
+    assert ws.reply("admin.broadcast", targets=[player], text="x")["code"] == "forbidden"
+    assert admin.reply("admin.broadcast", targets=["nope"], text="x")["code"] == "invalid_target"
+    assert admin.reply("admin.broadcast", targets=[], text="x")["code"] == "bad_request"
+    assert admin.reply("admin.broadcast", targets=[player], text="   ")["code"] == "bad_request"
+    too_long = "字" * (config.CHAT_MAX_CHARS + 1)
+    assert admin.reply("admin.broadcast", targets=[player], text=too_long)["code"] == "bad_request"
+    too_slow = config.BROADCAST_MAX_INTERVAL_SECONDS + 1
+    reply = admin.reply("admin.broadcast", targets=[player], text="x", interval_s=too_slow)
+    assert reply["code"] == "bad_request"
+    ws.close()
+    admin.close()
+
+
+def test_broadcast_one_phone_after_another_and_cleared_on_close(
+    env: Env, client: TestClient
+) -> None:
+    open_room(env, client)
+    (token_a, id_a), (token_b, id_b), (_, id_c) = player_tokens(client, 3)
+    a, b = Ws(client, token_a), Ws(client, token_b)
+    admin = Ws(client, env.admin_token)
+    reply = admin.reply("admin.broadcast", targets=[id_a, id_b, id_c], text="嗷", interval_s=5)
+    assert reply["t"] == "ack"
+    assert a.until("broadcast")["text"] == "嗷"  # 第一支馬上收到
+    assert not _saw_broadcast_before_ack(b)
+    env.service.tick()
+    assert not _saw_broadcast_before_ack(b)  # 還沒到時間
+    env.clock.advance(5)
+    env.service.tick()
+    assert b.until("broadcast")["text"] == "嗷"
+    assert [item[1] for item in env.service.pending_broadcasts] == [id_c]
+    a.close()
+    b.close()
+    admin.close()
+    env.service.close_room()
+    assert env.service.pending_broadcasts == []

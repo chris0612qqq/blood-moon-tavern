@@ -2,7 +2,7 @@
 
 import { PROTOCOL_VERSION } from './protocol.js';
 import { applyMessage, changed, currentStepSeq, store } from './store.js';
-import { onNarrate } from './narrator.js';
+import { onBroadcast, onNarrate } from './narrator.js';
 import { randomId } from './storage.js';
 
 const TIMEOUT_MS = 8000;
@@ -110,6 +110,7 @@ function onMessage(ws, event) {
   if (msg.t === 'error' && !msg.msg_id) failAuth(msg.code);
   applyMessage(msg);
   if (msg.t === 'narrate') onNarrate(msg);
+  if (msg.t === 'broadcast') onBroadcast(msg);
 }
 
 function failAuth(code) {

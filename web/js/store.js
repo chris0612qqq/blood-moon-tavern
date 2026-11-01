@@ -39,10 +39,17 @@ export const store = {
     chatStick: false,
     /** 拖曳排座位中：{ id, order }。 */
     seatDrag: null,
+    /** 各頻道沒看的訊息數。 */
+    unread: {},
+    /** 廣播分頁選的對象與要不要念出來。 */
+    broadcastTargets: [],
+    broadcastSpeak: true,
   },
   version: 0,
 };
 
+const BROADCAST_SHOW_MS = 8000;
+const TAB_OF_CHANNEL = Object.freeze({ public: 'chat', wolf: 'wolf' });
 const listeners = new Set();
 let scheduled = false;
 
@@ -167,6 +174,9 @@ const HANDLERS = {
     s.chat = s.chat ?? [];
     if (!s.chat.some((m) => m.id === msg.id)) s.chat.push(msg);
     if (msg.mine) store.ui.chatStick = true;
+    else if (store.ui.tab !== TAB_OF_CHANNEL[msg.channel]) {
+      store.ui.unread = { ...store.ui.unread, [msg.channel]: (store.ui.unread[msg.channel] ?? 0) + 1 };
+    }
   },
   'chat.history'(msg) {
     const s = store.server;
@@ -176,6 +186,9 @@ const HANDLERS = {
     if (!msg.messages.length) store.ui.chatEnd = { ...store.ui.chatEnd, [msg.channel]: true };
     store.ui.chatRestore = store.ui.chatHeight;
     store.ui.chatHeight = null;
+  },
+  broadcast(msg) {
+    store.ui.toast = { key: 'broadcast.show', params: { text: msg.text }, ms: BROADCAST_SHOW_MS };
   },
   'host.progress'(msg) {
     if (store.server) store.server.host = msg;
@@ -211,6 +224,11 @@ function enterStep(previous, step) {
   if (previous === step) return;
   store.ui.picks = {};
   if (step === 'NIGHT_START') store.ui.tab = 'game';
+  // 要投票的人如果還在聊天或看規則，會錯過投票（使用者要求）。已出局、旁觀、主持人不用投，不打擾
+  if (step === 'VOTE' && store.server?.me?.alive) {
+    store.ui.tab = 'game';
+    store.ui.overlay = null;
+  }
   store.ui.cardHeld = false;
 }
 

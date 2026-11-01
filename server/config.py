@@ -19,7 +19,7 @@ VERSION: Final = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 HOST: Final = "127.0.0.1"
 PORT: Final = 8765
-PROTOCOL_VERSION: Final = 3
+PROTOCOL_VERSION: Final = 4
 
 DEV_MODE: Final = os.environ.get("DEV_MODE") == "1"
 TIME_SCALE: Final = float(os.environ.get("TIME_SCALE", "1")) if DEV_MODE else 1.0
@@ -65,6 +65,7 @@ LOCK_SECONDS: Final = 60
 IP_MAX_FAILS_PER_MINUTE: Final = 60
 CHAT_PER_SECOND: Final = 3
 CHAT_MAX_CHARS: Final = 500
+BROADCAST_MAX_INTERVAL_SECONDS: Final = 30
 SCRYPT_N: Final = 2**14
 SCRYPT_R: Final = 8
 SCRYPT_P: Final = 1

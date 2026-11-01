@@ -18,6 +18,7 @@ from tests.e2e.test_full_game import (
 )
 
 pytestmark = pytest.mark.e2e
+SMALLEST = {"width": 320, "height": 568}
 
 
 def admin_in_lobby(page: Page, url: str) -> None:
@@ -252,5 +253,109 @@ def test_drag_works_with_a_finger(server_url: str) -> None:  # noqa: F811
         cdp.send(touch, {"type": "touchEnd", "touchPoints": []})
         page.wait_for_function(
             "(id) => window.__bmt.server.roster.find((r) => r.id === id).seat === 3", arg=first
+        )
+        browser.close()
+
+
+STORE_MESSAGE = """async (msg) => {
+  const { applyMessage } = await import('/js/store.js');
+  applyMessage(msg);
+}"""
+
+
+def test_vote_switches_voters_back_to_the_game_tab(server_url: str) -> None:  # noqa: F811
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        admin_in_lobby(page, server_url)
+        press(page, "tab-chat")
+        page.evaluate("window.__bmt.server.me.alive = true; window.__bmt.ui.overlay = 'S26'")
+        page.evaluate(STORE_MESSAGE, {"t": "step", "step": "VOTE"})
+        assert store(page, "s.ui.tab") == "game"
+        assert store(page, "s.ui.overlay") is None
+        # 已出局的人不用投，正在看押注或聊天就不打擾
+        page.evaluate(STORE_MESSAGE, {"t": "step", "step": "DAY_SPEAK"})
+        page.evaluate("window.__bmt.server.me.alive = false; window.__bmt.ui.tab = 'chat'")
+        page.evaluate(STORE_MESSAGE, {"t": "step", "step": "VOTE"})
+        assert store(page, "s.ui.tab") == "chat"
+        browser.close()
+
+
+def test_unread_badges_on_chat_and_wolf_tabs(server_url: str) -> None:  # noqa: F811
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        admin_in_lobby(page, server_url)
+        message = {"t": "chat.msg", "id": 500, "channel": "public", "content": "嗨"}
+        page.evaluate(STORE_MESSAGE, message)
+        wait(page, "unread-chat")
+        assert page.locator('[data-testid="unread-chat"]').inner_text() == "1"
+        page.evaluate(STORE_MESSAGE, {**message, "id": 501})
+        page.wait_for_function(
+            "document.querySelector('[data-testid=\"unread-chat\"]').textContent === '2'"
+        )
+        # 自己發的、正在看的頻道都不算未讀
+        page.evaluate(STORE_MESSAGE, {**message, "id": 502, "mine": True})
+        assert store(page, "s.ui.unread.public") == 2
+        press(page, "tab-chat")
+        page.wait_for_timeout(100)
+        assert not has(page, "unread-chat")
+        page.evaluate(STORE_MESSAGE, {**message, "id": 503})
+        assert store(page, "s.ui.unread.public") == 0
+        # 狼人頻道分開算；這支手機沒有狼人分頁就不會有標記可看，數字仍獨立
+        page.evaluate(STORE_MESSAGE, {**message, "id": 504, "channel": "wolf"})
+        assert store(page, "s.ui.unread.wolf") == 1
+        browser.close()
+
+
+def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa: F811
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        admin = browser.new_context(viewport=SMALLEST).new_page()
+        admin_in_lobby(admin, server_url)
+        player = browser.new_context(viewport=MOBILE).new_page()
+        player.add_init_script(
+            "window.__spoken = []; speechSynthesis.speak = (u) => window.__spoken.push(u.text);"
+        )
+        player.goto(server_url)
+        fill(player, "input-join_password", "1234")
+        join_form(player, "玩甲", None)
+        other = browser.new_context(viewport=MOBILE).new_page()
+        other.goto(server_url)
+        fill(other, "input-join_password", "1234")
+        join_form(other, "玩乙", None)
+        assert not has(player, "tab-broadcast")  # 只有管理員有這個分頁
+        press(admin, "tab-broadcast")
+        wait(admin, "view-broadcast")
+        assert admin.locator('[data-testid="btn-broadcast-send"]').is_disabled()
+        target = store(player, "s.server.me.id")
+        press(admin, f"broadcast-target-{target}")
+        fill(admin, "input-broadcast_text", "狼嚎來了")
+        press(admin, "btn-broadcast-send")
+        wait(player, "toast")
+        assert "狼嚎來了" in player.locator('[data-testid="toast"]').inner_text()
+        player.wait_for_function("window.__spoken.includes('狼嚎來了')")
+        other.wait_for_timeout(300)
+        assert not has(other, "toast")
+        # 管理員剛好是狼人時下方有 6 個分頁，最小手機也要放得下
+        admin.evaluate(
+            """() => {
+              const s = window.__bmt;
+              s.server.me.role = 'wolf';
+              s.server.me.wolf_pack = { picks: {} };
+              document.querySelector('[data-testid="tab-broadcast"]').click();
+            }"""
+        )
+        admin.wait_for_timeout(100)
+        tabs = admin.locator(".tab")
+        assert tabs.count() == 6
+        assert admin.evaluate(
+            "[...document.querySelectorAll('.tab')].every((t) => t.scrollWidth <= t.clientWidth)"
+        )
+        press(admin, "broadcast-all")
+        press(admin, "broadcast-speak")
+        admin.wait_for_function(
+            "document.querySelector('[data-testid=\"btn-broadcast-send\"]').textContent"
+            ".includes('3')"
         )
         browser.close()
