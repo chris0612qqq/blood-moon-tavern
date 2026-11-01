@@ -27,12 +27,10 @@ CREATE TABLE IF NOT EXISTS room(
   id TEXT PRIMARY KEY, mode TEXT NOT NULL, name TEXT NOT NULL, password TEXT NOT NULL,
   settings_json TEXT NOT NULL, admin_player_id TEXT, state TEXT NOT NULL,
   created_at REAL NOT NULL, ended_at REAL, seed INTEGER, narrator_id TEXT);
-CREATE TABLE IF NOT EXISTS banned_device(room_id TEXT NOT NULL, device_id TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS idx_banned_room ON banned_device(room_id);
 CREATE TABLE IF NOT EXISTS player(
   id TEXT PRIMARY KEY, room_id TEXT NOT NULL, device_id TEXT NOT NULL, name TEXT NOT NULL,
   avatar_media_id TEXT, pin_hash TEXT NOT NULL, seat INTEGER NOT NULL,
-  is_spectator INTEGER NOT NULL, kicked INTEGER NOT NULL, prep_json TEXT NOT NULL,
+  is_spectator INTEGER NOT NULL, prep_json TEXT NOT NULL,
   join_order INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_player_room ON player(room_id);
 CREATE TABLE IF NOT EXISTS session(
@@ -62,7 +60,7 @@ CREATE TABLE IF NOT EXISTS snapshot(
   state_json TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_snapshot_game ON snapshot(game_id);
 """
-_ROOM_TABLES = ("banned_device", "player", "session", "game", "chat_message", "media", "room")
+_ROOM_TABLES = ("player", "session", "game", "chat_message", "media", "room")
 
 
 class Database:
@@ -82,6 +80,11 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE chat_message ADD COLUMN is_wolf_mask INTEGER NOT NULL DEFAULT 0"
             )
+        # 舊資料庫檔還留著踢人的欄位與表（SPEC v4.16 拿掉）
+        self.conn.execute("DROP TABLE IF EXISTS banned_device")
+        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(player)")}
+        if "kicked" in columns:
+            self.conn.execute("ALTER TABLE player DROP COLUMN kicked")
 
     def close(self) -> None:
         self.conn.close()

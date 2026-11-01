@@ -17,7 +17,7 @@ from server.enums import (
     Winner,
 )
 
-SCHEMA_VERSION: Final = 1
+SCHEMA_VERSION: Final = 2
 
 
 class PlayerState(BaseModel):

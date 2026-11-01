@@ -9,7 +9,6 @@ from tests.e2e.test_full_game import (
     MOBILE,
     admin_open_room,
     fill,
-    has,
     press,
     server_url,  # noqa: F401
     store,
@@ -158,7 +157,7 @@ def test_k14_back_button_keeps_you_in_game(server_url: str) -> None:  # noqa: F8
         browser.close()
 
 
-def test_k6_kick_hidden_until_manage(server_url: str) -> None:  # noqa: F811
+def test_k6_end_button_below_the_log(server_url: str) -> None:  # noqa: F811
     with sync_playwright() as driver:
         browser = driver.chromium.launch()
         page = browser.new_context(viewport=MOBILE).new_page()
@@ -176,12 +175,10 @@ def test_k6_kick_hidden_until_manage(server_url: str) -> None:  # noqa: F811
         press(page, "dialog-confirm")
         page.wait_for_function("window.__bmt.server.phase === 'game'")
         press(page, "tab-players")
-        wait(page, "btn-players-manage")
-        assert page.locator('[data-testid^="kick-"]').count() == 0
-        assert not has(page, "btn-admin-end")
-        press(page, "btn-players-manage")
         wait(page, "btn-admin-end")
-        assert page.locator('[data-testid^="kick-"]').count() >= 6
+        assert page.locator('[data-testid^="kick-"]').count() == 0
+        press(page, "btn-admin-end")
+        wait(page, "dialog-text")  # 不可逆，一定先確認（UI_RULES K5）
         browser.close()
 
 

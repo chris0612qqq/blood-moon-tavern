@@ -219,7 +219,7 @@ class BotBrain:
 
 
 class Simulation:
-    """一局模擬。`chaos` 開啟時會隨機踢人、暫停、回上一步，用來壓測引擎。"""
+    """一局模擬。`chaos` 開啟時會隨機暫停（上帝模式另有判死、回上一步），用來壓測引擎。"""
 
     def __init__(
         self,
@@ -357,11 +357,7 @@ class Simulation:
             if state.pause.resume_at is None and self._roll(0.01):
                 self._try(admin, Action.ADMIN_RESUME)
             return
-        if self._roll(0.0005):
-            alive = [p.id for p in state.players if p.alive]
-            if alive:
-                self._try(admin, Action.ADMIN_KICK, {"player": self._pick(alive)})
-        elif self._roll(0.001):
+        if self._roll(0.001):
             self._try(admin, Action.ADMIN_PAUSE)
         elif self._roll(0.0005):
             self._observe(self.engine.system_pause(PauseReason.PRESENCE))

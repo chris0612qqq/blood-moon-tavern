@@ -30,6 +30,7 @@ testpaths = ["tests"]
 addopts = "-q"
 markers = [
   "slow: 完整版統計或大量整局，CI 預設略過，階段結束時跑（-m slow）",
+  "watchdog(seconds): 這個測試的時間上限，超過就結束整輪（tests/conftest.py）",
   "e2e: 真實瀏覽器（Playwright），CI 預設略過，階段結束時跑（-m e2e）",
 ]
 

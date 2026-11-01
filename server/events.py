@@ -137,7 +137,7 @@ def _witch_acted(state: GameState, data: dict[str, Any]) -> None:
 
 
 def _night_target_cleared(state: GameState, data: dict[str, Any]) -> None:
-    # SPEC A5.6：目標在步驟中被踢除 → 該選擇清空
+    # SPEC A5.6：目標在步驟中被判死 → 該選擇清空
     night = state.night()
     player_id = data["player"]
     if night.wolf_target == player_id:
@@ -154,7 +154,7 @@ def _vote_cast(state: GameState, data: dict[str, Any]) -> None:
 
 
 def _vote_voided(state: GameState, data: dict[str, Any]) -> None:
-    # SPEC A5.6：被踢者的票作廢；投給他的票改為棄票
+    # SPEC A5.6：被判死者的票作廢；投給他的票改為棄票
     round_votes = state.vote_round()
     player_id = data["player"]
     round_votes.ballots.pop(player_id, None)

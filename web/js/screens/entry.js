@@ -1,7 +1,8 @@
-// S0 等待開局、S1 管理員登入、S2 管理員選單、S3 開房完成、S4 加入、S25 已移出。
+// S0 等待開局、S1 管理員登入、S2 管理員選單、S3 開房完成、S4 加入、S25 已結束。
 // 這幾個畫面都在進遊戲之前，內容簡單，放同一檔的理由是它們共用登入流程。
 import { h } from '../dom.js';
 import { api, connect } from '../net.js';
+import { speak } from '../narrator.js';
 import { LIMITS } from '../protocol.js';
 import {
   clearAdminToken, clearPlayerToken, lastName, loadTokens, saveAdminToken, saveLastName, savePlayerToken,
@@ -9,12 +10,22 @@ import {
 import { changed, store } from '../store.js';
 import { deviceId } from '../storage.js';
 import { t } from '../strings.js';
+import { qrDataUrl } from '../ui/qr.js';
 import {
   actionButton, button, cleanName, clearFormError, copyText, errorLine, field, graphemeCount,
   nameIsValid, setFormError, toast,
 } from '../ui/common.js';
 
 const form = () => store.ui.form;
+
+/** 進房前測一次聲音就好，進房後第一次點擊會自動解鎖旁白（narrator.js）。 */
+function soundCheck() {
+  if (!store.voice.supported) return h('p', { class: 'error-text', testid: 'sound-unsupported' }, t('voice.unsupported'));
+  return [
+    button(t('sound.test'), () => { speak(t('sound.line')); }, { testid: 'btn-sound-test' }),
+    h('p', { class: 'hint center' }, t('sound.hint')),
+  ];
+}
 const adminToken = () => loadTokens().admin;
 
 export function s0() {
@@ -229,10 +240,13 @@ export function s3() {
   const room = store.adminRoom;
   if (!room) return s2();
   const url = inviteUrl(room);
+  const qr = qrDataUrl(url);
   return [
     h('h1', { testid: 'screen-s3' }, t('s3.title')),
     h('p', {}, t('s3.password')),
     h('div', { class: 'big center', testid: 'room-password' }, room.password),
+    qr ? h('img', { class: 'qr', src: qr, alt: t('s3.qr'), testid: 'invite-qr' }) : null,
+    qr ? h('p', { class: 'hint center' }, t('s3.qr')) : null,
     h('p', {}, t('s3.link')),
     h('div', { class: 'panel selectable', testid: 'invite-url', style: 'overflow-wrap:anywhere' }, url),
     button(t('s3.copy'), async () => {
@@ -246,6 +260,7 @@ export function s3() {
         changed();
       }, { kind: 'suggest', testid: 'btn-to-control' })
       : joinAsPlayerButton(room),
+    soundCheck(),
   ];
 }
 
@@ -305,6 +320,7 @@ function joinForm() {
       },
     }),
     button(t('s4.rejoin'), () => { f.rejoinMode = true; changed(); }, { testid: 'btn-rejoin-mode' }),
+    soundCheck(),
   ];
 }
 
@@ -335,12 +351,13 @@ function rejoinForm() {
       },
     }),
     button(t('s4.back'), () => { f.rejoinMode = false; changed(); }),
+    soundCheck(),
   ];
 }
 
 export function s25() {
   const reason = store.ended;
-  const text = reason === 'kicked' ? 's25.kicked' : (reason === 'replaced' ? 's25.replaced' : 's25.closed');
+  const text = reason === 'replaced' ? 's25.replaced' : 's25.closed';
   return h('div', { class: 'center' },
     h('h1', { testid: 'screen-s25' }, t(text)),
     reason === 'closed' ? h('p', { class: 'hint' }, t('s25.wait')) : null,

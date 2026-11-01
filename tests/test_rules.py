@@ -240,7 +240,6 @@ class TestResolveNight:
             (DeathCause.WOLF, True),
             (DeathCause.VOTE, True),
             (DeathCause.POISON, False),
-            (DeathCause.KICK, False),
             (DeathCause.MANUAL, False),
         ],
     )
@@ -312,11 +311,9 @@ class TestLastWords:
         assert not rules.gets_last_words(2, DayContext.DAWN)
         assert rules.gets_last_words(2, DayContext.REVEAL)
 
-    def test_L17_queue_by_seat_without_kicked(self) -> None:
-        state = make_state(
-            EIGHT, dead={2: DeathCause.WOLF, 1: DeathCause.HUNTER, 3: DeathCause.KICK}
-        )
-        state.pending_last_words = ["p2", "p1", "p3"]
+    def test_L17_queue_by_seat(self) -> None:
+        state = make_state(EIGHT, dead={2: DeathCause.WOLF, 1: DeathCause.HUNTER})
+        state.pending_last_words = ["p2", "p1"]
         assert rules.last_words_queue(state) == ["p1", "p2"]
         state.pending_last_words = []
         assert rules.last_words_queue(state) == []
@@ -376,12 +373,11 @@ def test_bitten_hunter_public_only_when_shooting() -> None:
 
 
 class TestBets:
-    def test_can_bet_only_dead_village_not_kicked(self) -> None:
-        state = make_state(EIGHT, dead={1: DeathCause.WOLF, 4: DeathCause.VOTE, 7: DeathCause.KICK})
+    def test_can_bet_only_dead_village(self) -> None:
+        state = make_state(EIGHT, dead={1: DeathCause.WOLF, 4: DeathCause.VOTE})
         assert rules.can_bet(state, "p1")
         assert not rules.can_bet(state, "p2")  # 還活著
         assert not rules.can_bet(state, "p4")  # 狼陣營
-        assert not rules.can_bet(state, "p7")  # 被踢
 
     @pytest.mark.parametrize(
         "bet",

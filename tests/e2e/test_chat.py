@@ -32,11 +32,13 @@ pytestmark = pytest.mark.e2e
 
 
 # 好人繞過畫面，直接送匿名狼人訊息
-FORGE_MASK_JS = """() => new Promise((resolve) => {
+FORGE_MASK_JS = """async () => {
+  const { PROTOCOL_VERSION } = await import('/js/protocol.js');
+  return new Promise((resolve) => {
   const device = new URLSearchParams(location.search).get('dev_device');
   const token = JSON.parse(localStorage.getItem(`bmt.${device}.player_token`));
   const ws = new WebSocket(location.origin.replace('http', 'ws') + '/ws');
-  ws.onopen = () => ws.send(JSON.stringify({t: 'auth', token, client_version: 2}));
+  ws.onopen = () => ws.send(JSON.stringify({t: 'auth', token, client_version: PROTOCOL_VERSION}));
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'state') {
@@ -49,7 +51,9 @@ FORGE_MASK_JS = """() => new Promise((resolve) => {
       resolve(m.code ?? m.t);
     }
   };
-})"""
+  ws.onclose = () => resolve('closed');  // 被拒絕也要結束，evaluate 沒有逾時
+  });
+}"""
 
 
 def shot(page: Page, name: str) -> None:
@@ -344,7 +348,6 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
 
         # ---- 結算：全部揭曉 ----
         press(admin, "tab-players")
-        press(admin, "btn-players-manage")  # 危險操作收在管理裡（UI_RULES K6）
         press(admin, "btn-admin-end")
         press(admin, "dialog-confirm")
         wait_step(bystander, "END")

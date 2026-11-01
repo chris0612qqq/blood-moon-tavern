@@ -21,7 +21,6 @@ class ErrorCode(StrEnum):
     WRONG_PASSWORD = "wrong_password"
     WRONG_PIN = "wrong_pin"
     LOCKED = "locked"
-    BANNED = "banned"
     RATE_LIMITED = "rate_limited"
     STORAGE_FULL = "storage_full"
     FILE_INVALID = "file_invalid"

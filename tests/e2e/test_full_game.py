@@ -337,12 +337,12 @@ def test_narrator_speaks_on_host_phone_after_first_tap(server_url: str) -> None:
         # 第一次點擊就解鎖：無聲（音量 0），不必等使用者找到測試鈕
         first = spoken()[0]
         assert first["volume"] == 0
-        press(host, "btn-to-control")
-        wait(host, "screen-s20")
-        wait(host, "btn-sound-test")  # 控制台一定有測試聲音的入口
+        # 測試聲音在進房前，進房後就不再出現
         press(host, "btn-sound-test")
         host.wait_for_function("window.__spoken.some((s) => s.volume === 1)")
-        assert "voice-status" in host.content()
+        press(host, "btn-to-control")
+        wait(host, "screen-s20")
+        assert not has(host, "btn-sound-test")
         press(host, "btn-add-bots")
         host.wait_for_function("window.__bmt.server.roster.length >= 6")
         press(host, "btn-start")

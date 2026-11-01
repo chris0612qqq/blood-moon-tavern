@@ -43,7 +43,7 @@ class TestBuild:
         assert '"seer"' not in text(view) and '"faceless"' not in text(view)
 
     def test_dead_shows_public_role_only(self, game: Game) -> None:
-        game.act(ADMIN, Action.ADMIN_KICK, player="p4")
+        game.remove("p4")
         view = views.build(game.state, player("p1"))
         row = next(p for p in view["players"] if p["id"] == "p4")
         assert row["public_role"] == "wolf"
@@ -86,7 +86,7 @@ class TestBuild:
         game.act("p4", Action.WOLF_PICK, target="p1")
         assert views.build(game.state, player("p5"))["me"]["wolf_pack"]["picks"] == {"p4": "p1"}
         assert "wolf_pack" not in views.build(game.state, player("p2"))["me"]
-        game.act(ADMIN, Action.ADMIN_KICK, player="p5")
+        game.remove("p5")
         assert "picks" not in views.build(game.state, player("p5"))["me"]["wolf_pack"]
 
     def test_wolf_decision_stays_visible_after_step_ends(self, game: Game) -> None:
@@ -403,19 +403,19 @@ class TestEvents:
         assert views.filter_event(events[0], player("p2"), game.state)[0]["t"] == "me"
 
     def test_death_event_no_cause(self, game: Game) -> None:
-        events = game.act(ADMIN, Action.ADMIN_KICK, player="p4")
+        events = game.remove("p4")
         died = next(e for e in events if e.type is EventType.PLAYER_DIED)
         msg = views.filter_event(died, player("p1"), game.state)[0]
         assert msg == {
             "t": "death",
-            "players": [{"id": "p4", "public_role": "wolf", "cause": "kick"}],
+            "players": [{"id": "p4", "public_role": "wolf", "cause": "manual"}],
         }
 
     def test_disguise_change_routing(self, game: Game) -> None:
         assert game.state.disguise is not None
         target = game.state.disguise.target_id
         assert target is not None
-        events = game.act(ADMIN, Action.ADMIN_KICK, player=target)
+        events = game.remove(target)
         change = next(e for e in events if e.type is EventType.DISGUISE_CHANGED)
         assert views.filter_event(change, player("p5"), game.state) == []
         msg = views.filter_event(change, player("p4"), game.state)[0]
@@ -424,7 +424,7 @@ class TestEvents:
     def test_disguise_change_at_night_is_silent(self, game: Game) -> None:
         game.to_wolf_step()
         assert game.state.disguise is not None
-        events = game.act(ADMIN, Action.ADMIN_KICK, player=str(game.state.disguise.target_id))
+        events = game.remove(str(game.state.disguise.target_id))
         change = next(e for e in events if e.type is EventType.DISGUISE_CHANGED)
         assert views.filter_event(change, player("p4"), game.state)[0]["silent"] is True
 
@@ -526,7 +526,7 @@ class TestLeakScanner:
 
     def test_own_role_and_dead_public_role_allowed(self, game: Game) -> None:
         scan_for_leaks({"x": "villager"}, game.engine, player("p1"))
-        game.act(ADMIN, Action.ADMIN_KICK, player="p2")
+        game.remove("p2")
         scan_for_leaks({"x": "seer"}, game.engine, player("p1"))
         assert allowed_tokens(game.engine, HOST_VIEWER) is None
 
@@ -551,7 +551,7 @@ def test_viewer_for_mode() -> None:
 
 def test_night_plan_drops_dead_roles(game: Game) -> None:
     assert views.night_plan(game.state) == ["WOLF", "SEER", "WITCH"]
-    game.act(ADMIN, Action.ADMIN_KICK, player="p2")
+    game.remove("p2")
     assert views.night_plan(game.state) == ["WOLF", "WITCH"]
 
 

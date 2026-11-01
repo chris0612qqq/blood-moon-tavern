@@ -19,9 +19,7 @@ class Actor:
     is_host: bool = False
 
 
-_ADMIN_ACTIONS = frozenset(
-    {Action.ADMIN_KICK, Action.ADMIN_END, Action.ADMIN_PAUSE, Action.ADMIN_RESUME}
-)
+_ADMIN_ACTIONS = frozenset({Action.ADMIN_END, Action.ADMIN_PAUSE, Action.ADMIN_RESUME})
 _HOST_ACTIONS = frozenset(
     {
         Action.HOST_LINE,

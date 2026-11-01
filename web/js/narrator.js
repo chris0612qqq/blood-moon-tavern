@@ -73,12 +73,6 @@ export function speak(text) {
   }
 }
 
-/** 使用者按「測試聲音」：一定在點擊當下，聽不到就是靜音鍵或音量。 */
-export function unlockAudio(testText) {
-  store.audioUnlocked = speak(testText);
-  return store.audioUnlocked;
-}
-
 function unlockOnFirstTap() {
   if (store.voice.unlocked || !window.speechSynthesis) return;
   try {
@@ -90,7 +84,7 @@ function unlockOnFirstTap() {
     current = utterance;
     window.speechSynthesis.speak(utterance);
   } catch {
-    // 解鎖失敗就等下一次點擊，也可以按測試聲音
+    // 解鎖失敗就等下一次點擊
   }
 }
 

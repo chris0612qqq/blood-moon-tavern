@@ -115,7 +115,7 @@ P0 環境與骨架
   2. `auth.py`：管理員帳密（`python -m server.setup_admin` 產生 `admin.local.json`；P7 的 `setup.bat` 會呼叫同一個指令）、房間密碼、PIN、token、鎖定以裝置計（N13）。
   3. `protocol.py`：pydantic 訊息模型與外框（`msg_id`、`step_seq`、`seq`、`server_ts`）；`scripts/gen_protocol.py` 產生前端版。
   4. `main.py`：HTTP 路由（B7）、WebSocket（auth、ping、`state.request`、ack／error）、單一房間 worker（L1）、`msg_id` 去重（L3）、送出佇列與逾時（N8）。
-  5. `room.py`：開房、關房（刪資料與 log）、10 分鐘結算、被踢裝置封鎖。
+  5. `room.py`：開房、關房（刪資料與 log）、10 分鐘結算。
   6. `presence.py`：心跳、離線判定、一半以上離線自動暫停與自動繼續。
   7. 重啟還原：讀快照＋事件重播 → 系統暫停。
 - **交付**：`uvicorn server.main:app` 可啟動；`tests/test_api.py` 用多個 WebSocket 客戶端跑完整局（並把 `test_api.py` 補進 SPEC B2 的 tests 清單）。

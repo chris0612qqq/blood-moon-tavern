@@ -11,7 +11,7 @@ export const store = {
   /** 公開的 /api/health 結果。 */
   health: null,
   healthFailed: false,
-  /** 被踢、換裝置、關房等終止原因。 */
+  /** 換裝置、關房等終止原因。 */
   ended: null,
   closesAt: null,
   lastReveal: null,
@@ -30,6 +30,15 @@ export const store = {
     hostMoreOpen: false,
     witchStage: {},
     chatAs: 'self',
+    /** 哪些頻道已經翻到最舊。 */
+    chatEnd: {},
+    /** 按下載入舊訊息時的清單高度；收到後換到 chatRestore，重繪時補回捲動位置。 */
+    chatHeight: null,
+    chatRestore: null,
+    /** 自己發的訊息一定要看得到，下次重繪捲到底。 */
+    chatStick: false,
+    /** 拖曳排座位中：{ id, order }。 */
+    seatDrag: null,
   },
   version: 0,
 };
@@ -63,6 +72,7 @@ const HANDLERS = {
   state(msg) {
     const previous = store.server;
     store.server = msg;
+    store.ui.chatEnd = {}; // 完整狀態只帶最近的訊息，舊的又可以往回翻
     if (msg.closes_at) store.closesAt = msg.closes_at;
     enterStep(previous?.step, msg.step);
   },
@@ -156,12 +166,16 @@ const HANDLERS = {
     if (!s) return;
     s.chat = s.chat ?? [];
     if (!s.chat.some((m) => m.id === msg.id)) s.chat.push(msg);
+    if (msg.mine) store.ui.chatStick = true;
   },
   'chat.history'(msg) {
     const s = store.server;
     if (!s) return;
     const known = new Set((s.chat ?? []).map((m) => m.id));
     s.chat = [...msg.messages.filter((m) => !known.has(m.id)), ...(s.chat ?? [])];
+    if (!msg.messages.length) store.ui.chatEnd = { ...store.ui.chatEnd, [msg.channel]: true };
+    store.ui.chatRestore = store.ui.chatHeight;
+    store.ui.chatHeight = null;
   },
   'host.progress'(msg) {
     if (store.server) store.server.host = msg;
@@ -174,10 +188,6 @@ const HANDLERS = {
   },
   'room.closed'() {
     store.ended = 'closed';
-    store.server = null;
-  },
-  kicked() {
-    store.ended = 'kicked';
     store.server = null;
   },
   replaced() {
