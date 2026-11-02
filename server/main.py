@@ -163,6 +163,7 @@ def _install_bot_route(app: FastAPI) -> None:
         _require_admin(request)
         service = _service(request)
         return {"added": await service.submit(lambda: service.add_bots(count))}
+
     _install_media_routes(app)
 
 

@@ -16,6 +16,7 @@ import uuid
 from collections import deque
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -442,6 +443,11 @@ class RoomService:
         elif kind == "chat.send":
             assert isinstance(frame, protocol.ChatSend)
             self._chat(conn, frame)
+        elif kind == "wolf.schedule":
+            assert isinstance(frame, protocol.WolfScheduleFrame)
+            payload = {"slot": frame.slot, "due": next_clock_time(frame.time, self.wall()),
+                       "text": frame.text}  # fmt: skip
+            self._to_engine(conn, Action.WOLF_SCHEDULE, payload, None)
         elif kind == "chat.history":
             assert isinstance(frame, protocol.ChatHistory)
             self._chat_history(conn, frame)
@@ -966,6 +972,9 @@ class RoomService:
         if engine is not None and not room.unrestorable:
             try:
                 self._commit(engine.tick)
+                if engine.state.wolf_schedules:
+                    wall = self.wall()
+                    self._commit(lambda: engine.send_wolf_schedules(wall))
             except GameError:
                 log.warning("tick not persisted")
         if self.bot_ids:
@@ -1243,6 +1252,16 @@ def _room_statement(room: Room) -> tuple[str, tuple[Any, ...]]:
             room.narrator_id,
         ),
     )
+
+
+def next_clock_time(hhmm: str, wall: float) -> float:
+    """「22:35」換成下一次到這個時刻的 epoch 秒；今天已經過了就是明天（家裡電腦的時區）。"""
+    hour, minute = (int(part) for part in hhmm.split(":"))
+    now = datetime.fromtimestamp(wall)
+    due = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if due.timestamp() <= wall:
+        due += timedelta(days=1)
+    return due.timestamp()
 
 
 def _is_bot(player: RoomPlayer) -> bool:

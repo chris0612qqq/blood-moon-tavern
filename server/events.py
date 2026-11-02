@@ -18,6 +18,7 @@ from server.state import (
     PauseState,
     Timers,
     VoteRound,
+    WolfSchedule,
 )
 
 
@@ -54,6 +55,8 @@ class EventType(StrEnum):
     CARD_RESHOWN = "card_reshown"
     GAME_ENDED = "game_ended"
     ROLLED_BACK = "rolled_back"
+    WOLF_SCHEDULE_SET = "wolf_schedule_set"
+    WOLF_SCHEDULE_CLEARED = "wolf_schedule_cleared"
 
 
 class Event(BaseModel):
@@ -186,6 +189,7 @@ def _dawn_announced(state: GameState, data: dict[str, Any]) -> None:
 def _player_died(state: GameState, data: dict[str, Any]) -> None:
     player_id = data["player"]
     player = state.player(player_id)
+    state.wolf_schedules.pop(player_id, None)  # 死人不能說話，沒發的定時電子音取消
     player.alive = False
     player.death_cause = DeathCause(data["cause"])
     player.death_round = state.round_no
@@ -261,6 +265,20 @@ def _narrator_set(state: GameState, data: dict[str, Any]) -> None:
     state.narrator_id = data["player"]
 
 
+def _wolf_schedule_set(state: GameState, data: dict[str, Any]) -> None:
+    others = [s for s in state.wolf_schedules.get(data["player"], []) if s.slot != data["slot"]]
+    item = WolfSchedule(slot=data["slot"], due=data["due"], text=data["text"])
+    state.wolf_schedules[data["player"]] = sorted([*others, item], key=lambda s: s.slot)
+
+
+def _wolf_schedule_cleared(state: GameState, data: dict[str, Any]) -> None:
+    left = [s for s in state.wolf_schedules.get(data["player"], []) if s.slot != data["slot"]]
+    if left:
+        state.wolf_schedules[data["player"]] = left
+    else:
+        state.wolf_schedules.pop(data["player"], None)
+
+
 def _chat_sent(state: GameState, data: dict[str, Any]) -> None:
     # 聊天內容不放進狀態（CODING_RULES L23 不回滾、避免狀態膨脹），這裡只記遺言已用
     if data["is_last_words"]:
@@ -322,6 +340,8 @@ _APPLIERS: dict[EventType, Callable[[GameState, dict[str, Any]], None]] = {
     EventType.NARRATE: _no_state_change,
     EventType.NARRATOR_SET: _narrator_set,
     EventType.CHAT_SENT: _chat_sent,
+    EventType.WOLF_SCHEDULE_SET: _wolf_schedule_set,
+    EventType.WOLF_SCHEDULE_CLEARED: _wolf_schedule_cleared,
     EventType.CARD_RESHOWN: _no_state_change,
     EventType.GAME_ENDED: _game_ended,
     EventType.ROLLED_BACK: _rolled_back,
