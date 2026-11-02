@@ -315,8 +315,7 @@ function statusTab(server) {
 
 function voiceTab(server) {
   return [
-    h('p', { class: 'hint', testid: 'host-view-voice' }, t('s20.cardsHint')),
-    cardGrid((card) => speakAfter(cardText(card))),
+    h('div', { testid: 'host-view-voice' }, cardGrid((card) => speakAfter(cardText(card)))),
     SHOW_LINE_MENU ? lineButtons(server) : null,
   ];
 }
@@ -327,11 +326,11 @@ const HOST_TABS = [
 ];
 
 function hostGame(server) {
-  const current = store.ui.hostTab ?? 'voice';
+  const current = store.ui.hostTab ?? 'status';
   const view = HOST_TABS.find(([id]) => id === current)[2];
   return h('div', { class: 'host-screen' },
-    // 常用操作固定在上方，切到哪個標籤都按得到
-    h('div', { class: 'host-pinned' },
+    // 流程按鈕固定在上方；語音選單收起來，字卡才有滿版的位置（使用者要求）
+    current === 'voice' ? null : h('div', { class: 'host-pinned' },
       h('div', { class: 'row' },
         h('h1', { class: 'grow', testid: 'screen-s20-game' }, stepName(server.step)),
         // 天黑、閉眼這類步驟沒有人要行動，不顯示倒數，免得看起來像逾時
