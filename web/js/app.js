@@ -1,8 +1,9 @@
 // 進入點：畫面外框、單一時鐘、健康檢查。畫面內容由 router 依狀態決定（CODING_RULES V1）。
 import { h, render } from './dom.js';
 import { api, connect, retryNow, serverNow } from './net.js';
-import { ROLE_TABLE, STEP } from './protocol.js';
+import { STEP } from './protocol.js';
 import { resolveScreen } from './router.js';
+import './wake.js';
 import { clearAdminToken, clearPlayerToken, loadTokens } from './session.js';
 import { changed, store, subscribe } from './store.js';
 import { stepName, t } from './strings.js';
@@ -10,7 +11,7 @@ import { button, deadTag } from './ui/common.js';
 import { refreshAdminRoom, s0, s1, s2, s25, s3, s4 } from './screens/entry.js';
 import { s5 } from './screens/s5_lobby.js';
 import { s10, s19, s6, s7, s8, s9 } from './screens/night.js';
-import { s11, s12, s13, s14, s15, s16, s17, s22, s27 } from './screens/day.js';
+import { s11, s12, s13, s14, s15, s16, s17, s22 } from './screens/day.js';
 import { lobbyMenu, s20 } from './screens/host.js';
 import { broadcastTab } from './screens/broadcast.js';
 import { chatTab, NIGHT_STEPS, pauseButton, playersTab, roleTab, s18, s21, s26 } from './screens/tabs.js';
@@ -24,11 +25,10 @@ const CHANNEL_OF_TAB = Object.freeze({ chat: 'public', wolf: 'wolf' });
 const SCREENS = {
   S0: s0, S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, S6: s6, S7: s7, S8: s8, S9: s9, S10: s10,
   S11: s11, S12: s12, S13: s13, S14: s14, S15: s15, S17: s17, S18: s18, S20: s20, S21: s21,
-  S22: s22, S25: s25, S26: s26, S27: s27,
+  S22: s22, S25: s25, S26: s26,
 };
-const OVERLAY_SCREENS = new Set(['S1', 'S2', 'S3', 'S21', 'S26', 'S27']);
+const OVERLAY_SCREENS = new Set(['S1', 'S2', 'S3', 'S21', 'S26']);
 
-store.wolfCount = (n) => ROLE_TABLE[n]?.[0] ?? 1;
 store.errorLog = [];
 
 /** 狀態列標題，一行一件事，窄手機也不會斷在字中間。 */

@@ -65,12 +65,10 @@ class TestBuild:
         assert "me" not in view and "host" not in view
         assert views.build(game.state, Viewer(ViewerKind.PLAYER, "late")).get("me") is None
 
-    def test_host_sees_everything_except_bets(self, god: Game) -> None:
-        god.state.bets["p1"] = __import__("server.state").state.Bet(wolves=["p4"])
+    def test_host_sees_everything(self, god: Game) -> None:
         view = views.build(god.state, HOST_VIEWER)
         assert view["host"]["disguise"]["faceless_id"] == "p4"
         assert {p["role"] for p in view["host"]["players"]} >= {"faceless", "seer"}
-        assert "bets" not in view["host"] and "my_bet" not in text(view)
 
     def test_night_clock_hidden_from_non_actors(self, game: Game) -> None:
         game.to_wolf_step()
@@ -184,22 +182,13 @@ class TestBuild:
         assert mine == {"target": "p2", "can_change": True}
         assert views.build(game.state, HOST_VIEWER)["host"]["votes"][0]["ballots"] == {"p1": "p2"}
 
-    def test_bet_only_own(self, game: Game) -> None:
-        game.to_wolf_step()
-        game.night("p1")
-        game.act("p1", Action.BET_SET, wolves=["p4"], faceless="p5")
-        assert views.build(game.state, player("p1"))["me"]["my_bet"]["faceless_guess"] == "p5"
-        assert "my_bet" not in views.build(game.state, player("p2"))["me"]
-
     def test_end_reveals_truth_to_all(self, game: Game) -> None:
         game.to_wolf_step()
         game.night("p1")
-        game.act("p1", Action.BET_SET, wolves=["p4"], faceless="p4")
         game.act(ADMIN, Action.ADMIN_END)
         view = views.build(game.state, OBSERVER_VIEWER)
         assert view["truth"]["roles"]["p4"] == "faceless"
         assert view["truth"]["death_causes"]["p1"] == "bite"
-        assert view["truth"]["bets"][0]["score"] == 3
         assert next(p for p in view["players"] if p["id"] == "p4")["role"] == "faceless"
 
     def test_truth_limits_to_seven_nights(self, game: Game) -> None:
@@ -539,13 +528,6 @@ class TestEvents:
         assert views.filter_event(events[0], player("p3"), game.state) == [
             {"t": "roster.narrator", "player": "p2"}
         ]
-
-    def test_bet_event_private(self, game: Game) -> None:
-        game.to_wolf_step()
-        game.night("p1")
-        events = game.act("p1", Action.BET_SET, wolves=[], faceless=None)
-        assert views.filter_event(events[0], player("p2"), game.state) == []
-        assert views.filter_event(events[0], player("p1"), game.state)[0]["t"] == "me"
 
     def test_actor_done_goes_to_actor(self, game: Game) -> None:
         events = game.act("p1", Action.DEAL_ACK)

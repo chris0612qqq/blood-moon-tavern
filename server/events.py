@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from server.enums import DayContext, DeathCause, DisguiseEnd, PauseReason, Step, Winner
 from server.state import (
     SCHEMA_VERSION,
-    Bet,
     DisguisePeriod,
     GameState,
     HunterShot,
@@ -51,7 +50,6 @@ class EventType(StrEnum):
     RESUMED = "resumed"
     NARRATE = "narrate"
     NARRATOR_SET = "narrator_set"
-    BET_SET = "bet_set"
     CHAT_SENT = "chat_sent"
     CARD_RESHOWN = "card_reshown"
     GAME_ENDED = "game_ended"
@@ -263,10 +261,6 @@ def _narrator_set(state: GameState, data: dict[str, Any]) -> None:
     state.narrator_id = data["player"]
 
 
-def _bet_set(state: GameState, data: dict[str, Any]) -> None:
-    state.bets[data["player"]] = Bet(wolves=data["wolves"], faceless=data["faceless"])
-
-
 def _chat_sent(state: GameState, data: dict[str, Any]) -> None:
     # 聊天內容不放進狀態（CODING_RULES L23 不回滾、避免狀態膨脹），這裡只記遺言已用
     if data["is_last_words"]:
@@ -327,7 +321,6 @@ _APPLIERS: dict[EventType, Callable[[GameState, dict[str, Any]], None]] = {
     EventType.RESUMED: _resumed,
     EventType.NARRATE: _no_state_change,
     EventType.NARRATOR_SET: _narrator_set,
-    EventType.BET_SET: _bet_set,
     EventType.CHAT_SENT: _chat_sent,
     EventType.CARD_RESHOWN: _no_state_change,
     EventType.GAME_ENDED: _game_ended,

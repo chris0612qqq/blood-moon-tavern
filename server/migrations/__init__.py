@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from server.state import SCHEMA_VERSION
 
 _KICK = "kick"
 _DEATH_FIELDS = frozenset({"cause", "death_cause"})
+_REMOVED_EVENTS = frozenset({"bet_set"})  # SPEC v4.20 拿掉押注
 
 
 def _kick_to_manual(value: Any) -> Any:
@@ -34,6 +35,11 @@ class SchemaTooNew(Exception):
 def upgrade_snapshot(raw: dict[str, Any]) -> dict[str, Any]:
     """快照和事件用同一套版本號，轉法也一樣。"""
     return upgrade_event(raw)
+
+
+def upgrade_events(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """整局事件升版，已經拿掉的事件直接略過（它們只影響已拿掉的功能）。"""
+    return [upgrade_event(raw) for raw in rows if raw.get("type") not in _REMOVED_EVENTS]
 
 
 def upgrade_event(raw: dict[str, Any]) -> dict[str, Any]:

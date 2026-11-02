@@ -273,7 +273,7 @@ def test_vote_switches_voters_back_to_the_game_tab(server_url: str) -> None:  # 
         page.evaluate(STORE_MESSAGE, {"t": "step", "step": "VOTE"})
         assert store(page, "s.ui.tab") == "game"
         assert store(page, "s.ui.overlay") is None
-        # 已出局的人不用投，正在看押注或聊天就不打擾
+        # 已出局的人不用投，正在看聊天就不打擾
         page.evaluate(STORE_MESSAGE, {"t": "step", "step": "DAY_SPEAK"})
         page.evaluate("window.__bmt.server.me.alive = false; window.__bmt.ui.tab = 'chat'")
         page.evaluate(STORE_MESSAGE, {"t": "step", "step": "VOTE"})
@@ -337,6 +337,21 @@ def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa:
         player.wait_for_function("window.__spoken.includes('狼嚎來了')")
         other.wait_for_timeout(300)
         assert not has(other, "toast")
+        # 字卡：按下去選到的手機馬上念；連按排隊念完，不互相打斷
+        player.evaluate(
+            "window.__spoken = []; window.__cancelled = false;"
+            "speechSynthesis.cancel = () => { window.__cancelled = true; }; null;"
+        )
+        for card in ("card-please", "card-you", "card-say"):
+            press(admin, card)
+        player.wait_for_function("window.__spoken.join('') === '請你說'")
+        assert player.evaluate("window.__cancelled") is False
+        assert admin.locator('[data-testid^="card-"]').count() == 21
+        assert not has(other, "toast")
+        press(admin, f"broadcast-target-{target}")
+        admin.wait_for_function(
+            "document.querySelector('[data-testid=\"card-quiet\"]').disabled"
+        )  # 沒選人不能按
         # 管理員剛好是狼人時下方有 6 個分頁，最小手機也要放得下
         admin.evaluate(
             """() => {
@@ -409,6 +424,51 @@ def test_reveal_shows_counts_when_first_round_decides(server_url: str) -> None: 
         browser.close()
 
 
+FAKE_WAKE_LOCK_JS = """
+window.__wake = { requests: 0, sentinels: [] };
+Object.defineProperty(navigator, 'wakeLock', { value: { request: async () => {
+  window.__wake.requests += 1;
+  const listeners = [];
+  const sentinel = {
+    addEventListener: (_, fn) => listeners.push(fn),
+    release: async () => listeners.forEach((fn) => fn()),
+  };
+  window.__wake.sentinels.push(sentinel);
+  return sentinel;
+} } });
+"""
+
+
+def test_keeps_screen_awake_and_hints_when_it_cannot(server_url: str) -> None:  # noqa: F811
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        admin = browser.new_context(viewport=MOBILE).new_page()
+        admin_in_lobby(admin, server_url)
+        page = browser.new_context(viewport=MOBILE).new_page()
+        page.add_init_script(FAKE_WAKE_LOCK_JS)
+        page.goto(server_url)
+        fill(page, "input-join_password", "1234")
+        join_form(page, "玩甲", None)
+        press(page, "tab-players")
+        page.wait_for_function("window.__wake.requests === 1")
+        assert not has(page, "wake-hint")
+        # 切到背景鎖會被放掉，回來要重新要
+        page.evaluate("window.__wake.sentinels[0].release()")
+        page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        page.wait_for_function("window.__wake.requests === 2")
+        # 不是 HTTPS 時瀏覽器沒有這個功能，大廳提示手動設定
+        plain = browser.new_context(viewport=MOBILE).new_page()
+        plain.add_init_script(
+            "Object.defineProperty(navigator, 'wakeLock', { value: undefined });"
+        )
+        plain.goto(server_url)
+        fill(plain, "input-join_password", "1234")
+        join_form(plain, "玩乙", None)
+        wait(plain, "wake-hint")
+        assert "自動鎖定" in plain.locator('[data-testid="wake-hint"]').inner_text()
+        browser.close()
+
+
 def test_host_briefing_wall(server_url: str) -> None:  # noqa: F811
     with sync_playwright() as driver:
         browser = driver.chromium.launch()
@@ -440,6 +500,7 @@ def test_host_briefing_wall(server_url: str) -> None:  # noqa: F811
               s.round_no = 1;
               s.host.nights = [{ round_no: 1, wolf_picks: { [wolf]: target }, wolf_decided: true,
                 wolf_target: target, seer_target: null, witch_saved: false, witch_poison: null }];
+              s.history = [{ round_no: 1, deaths: [wolf], causes: { [wolf]: 'manual' } }];
             }""",
             [first, second],
         )
@@ -447,8 +508,16 @@ def test_host_briefing_wall(server_url: str) -> None:  # noqa: F811
         host.wait_for_function(  # 天黑時簡報牆就在，要等重繪後的內容
             "(row) => document.querySelector('[data-testid=\"act-wolf\"]')"
             "?.textContent.includes(row)",
-            arg=f"{names[0]} 選 {names[1]}",
+            arg=f"→ 咬 {names[1]}",
         )
+        wolves = store(
+            host,
+            "s.server.host.players.filter((p) => ['wolf', 'faceless'].includes(p.role))"
+            ".map((p) => s.server.players.find((x) => x.id === p.id).name)",
+        )
+        wolf_row = host.locator('[data-testid="act-wolf"]').inner_text()
+        assert all(name in wolf_row for name in wolves) and " 選 " not in wolf_row
+        assert names[0] in host.locator('[data-testid="act-manual"]').inner_text()
         host.evaluate(
             STORE_MESSAGE,
             {"t": "progress", "done": 1, "total": 6, "suspect_picks": {first: second}},

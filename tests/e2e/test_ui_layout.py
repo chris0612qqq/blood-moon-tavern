@@ -136,7 +136,7 @@ def walk_tabs(page: Page, audit: Audit, who: str) -> None:
 
 
 def walk_host(host: Page, audit: Audit, note: str) -> None:
-    for tab in ("host-tab-reveal", "host-tab-status", "host-tab-voice"):
+    for tab in ("host-tab-status", "host-tab-voice"):
         if has(host, tab):
             press(host, tab)
             audit.look(host, f"{note}_{tab}")
