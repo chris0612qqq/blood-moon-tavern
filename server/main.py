@@ -7,10 +7,10 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -83,12 +83,6 @@ def create_app(service: RoomService | None = None, dev: bool = config.DEV_MODE) 
 
 
 def _install_dev_routes(app: FastAPI) -> None:
-    @app.post("/dev/bots")
-    async def add_bots(request: Request, count: int) -> dict[str, list[str]]:
-        _require_admin(request)
-        service = _service(request)
-        return {"added": await service.submit(lambda: service.add_bots(count))}
-
     @app.get("/dev/state")
     async def dev_state(request: Request) -> dict[str, Any]:
         service = _service(request)
@@ -156,6 +150,19 @@ def _install_routes(app: FastAPI) -> None:
     _install_public_routes(app)
     _install_admin_routes(app)
     _install_player_routes(app)
+    _install_bot_route(app)
+
+
+def _install_bot_route(app: FastAPI) -> None:
+    """管理員在大廳加機器人：正式店也開放，方便一個人測試（使用者決定，SPEC v4.23）。"""
+
+    @app.post("/api/admin/bots")
+    async def add_bots(
+        request: Request, count: Annotated[int, Query(ge=1, le=config.ROOM_CAPACITY)]
+    ) -> dict[str, list[str]]:
+        _require_admin(request)
+        service = _service(request)
+        return {"added": await service.submit(lambda: service.add_bots(count))}
     _install_media_routes(app)
 
 

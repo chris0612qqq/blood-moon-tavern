@@ -978,7 +978,7 @@ class RoomService:
         if now >= self.next_backup:
             self._request_backup()
 
-    # ---- 開發工具（CODING_RULES D1、S8）：只有 DEV_MODE 的路由會呼叫 ----
+    # ---- 機器人：管理員在大廳加（SPEC v4.23 起正式店也開放） ----
 
     def add_bots(self, count: int) -> list[str]:
         """加入 N 個機器人。名字用「機」加一個字元，符合 2 字規則。"""
