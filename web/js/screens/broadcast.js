@@ -16,7 +16,7 @@ function everyone(server) {
 
 function targetCell(player, chosen) {
   return h('button', {
-    class: `cell ${chosen.includes(player.id) ? 'cell--on' : ''}`,
+    class: `cell cell--target ${chosen.includes(player.id) ? 'cell--on' : ''}`,
     key: player.id,
     testid: `broadcast-target-${player.id}`,
     onclick: () => {
@@ -58,7 +58,7 @@ export function broadcastTab(server) {
     h('div', { class: 'grid' }, players.map((p) => targetCell(p, chosen))),
     partlyAtNight ? h('p', { class: 'error-text', testid: 'broadcast-night-warn' }, t('broadcast.nightWarn')) : null,
     h('h2', {}, t('broadcast.cards')),
-    cardGrid((card) => sendCard(card, ordered), !chosen.length || store.conn !== 'online'),
+    cardGrid((card) => sendCard(card, ordered), { disabled: !chosen.length || store.conn !== 'online', compact: true }),
     h('h2', {}, t('broadcast.free')),
     field('broadcast_text', t('broadcast.text'), { maxlength: LIMITS.CHAT_MAX_CHARS }),
     button(store.ui.broadcastSpeak ? t('broadcast.speakOn') : t('broadcast.speakOff'), () => {

@@ -329,22 +329,23 @@ function hostGame(server) {
   const current = store.ui.hostTab ?? 'status';
   const view = HOST_TABS.find(([id]) => id === current)[2];
   return h('div', { class: 'host-screen' },
-    // 流程按鈕固定在上方；語音選單收起來，字卡才有滿版的位置（使用者要求）
-    current === 'voice' ? null : h('div', { class: 'host-pinned' },
-      h('div', { class: 'row' },
-        h('h1', { class: 'grow', testid: 'screen-s20-game' }, stepName(server.step)),
-        // 天黑、閉眼這類步驟沒有人要行動，不顯示倒數，免得看起來像逾時
-        server.host.actors.length ? countdown(server, overdue(server) ? t('s20.overdue') : null) : null,
-        pauseToggle(server)),
-      witchWaitHint(server),
-      voiceControls(server)),
-    h('div', { class: 'host-layout' },
-      h('div', { class: 'host-rail' }, HOST_TABS.map(([id, label]) => h('button', {
-        class: `host-tab ${current === id ? 'host-tab--on' : ''}`,
-        key: id,
-        testid: `host-tab-${id}`,
-        onclick: () => { store.ui.hostTab = id; changed(); },
-      // 兩個字一行（使用者試玩回饋）
-      }, t(label).match(/.{1,2}/gu).map((part) => h('span', { class: 'host-tab__line' }, part))))),
+    // 標籤固定在左邊，切到哪一頁位置都不變（使用者要求）
+    h('div', { class: 'host-rail' }, HOST_TABS.map(([id, label]) => h('button', {
+      class: `host-tab ${current === id ? 'host-tab--on' : ''}`,
+      key: id,
+      testid: `host-tab-${id}`,
+      onclick: () => { store.ui.hostTab = id; changed(); },
+    // 兩個字一行（使用者試玩回饋）
+    }, t(label).match(/.{1,2}/gu).map((part) => h('span', { class: 'host-tab__line' }, part))))),
+    h('div', { class: 'host-main' },
+      // 流程按鈕固定在上方；語音選單收起來，字卡才有滿版的位置（使用者要求）
+      current === 'voice' ? null : h('div', { class: 'host-pinned' },
+        h('div', { class: 'row' },
+          h('h1', { class: 'grow', testid: 'screen-s20-game' }, stepName(server.step)),
+          // 天黑、閉眼這類步驟沒有人要行動，不顯示倒數，免得看起來像逾時
+          server.host.actors.length ? countdown(server, overdue(server) ? t('s20.overdue') : null) : null,
+          pauseToggle(server)),
+        witchWaitHint(server),
+        voiceControls(server)),
       h('div', { class: 'host-content' }, view(server))));
 }

@@ -41,6 +41,8 @@ export const store = {
     seatDrag: null,
     /** 各頻道沒看的訊息數。 */
     unread: {},
+    /** 聊天分頁正在看哪個頻道；狼人頻道收在聊天分頁裡，下方不多一個分頁（使用者要求）。 */
+    chatChannel: 'public',
     /** 廣播分頁選的對象與要不要念出來。 */
     broadcastTargets: [],
     broadcastSpeak: true,
@@ -49,7 +51,6 @@ export const store = {
 };
 
 const BROADCAST_SHOW_MS = 8000;
-const TAB_OF_CHANNEL = Object.freeze({ public: 'chat', wolf: 'wolf' });
 const listeners = new Set();
 let scheduled = false;
 
@@ -177,7 +178,7 @@ const HANDLERS = {
     s.chat = s.chat ?? [];
     if (!s.chat.some((m) => m.id === msg.id)) s.chat.push(msg);
     if (msg.mine) store.ui.chatStick = true;
-    else if (store.ui.tab !== TAB_OF_CHANNEL[msg.channel]) {
+    else if (store.ui.tab !== 'chat' || store.ui.chatChannel !== msg.channel) {
       store.ui.unread = { ...store.ui.unread, [msg.channel]: (store.ui.unread[msg.channel] ?? 0) + 1 };
     }
   },

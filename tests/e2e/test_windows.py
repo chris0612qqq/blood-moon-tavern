@@ -137,10 +137,10 @@ def check_tabs(
 ) -> None:
     """走過這個視窗的每個分頁。結算後所有人都能看狼人頻道（SPEC A7）。"""
     is_wolf = ended or role in ("wolf", "faceless")
-    if has(page, "tab-wolf") != is_wolf:
-        problems.append(f"{label}: 狼人頻道分頁 應{'有' if is_wolf else '無'}")
     press(page, "tab-chat")
     wait(page, "chat-list-public")
+    if has(page, "tab-wolf") != is_wolf:
+        problems.append(f"{label}: 狼人頻道按鈕 應{'有' if is_wolf else '無'}")
     if snap:
         shot(page, f"{label}_chat")
     if is_wolf:
