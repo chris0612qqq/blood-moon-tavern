@@ -340,7 +340,7 @@ def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa:
         # 字卡：按下去選到的手機馬上念；連按排隊念完，不互相打斷
         player.evaluate(
             "window.__spoken = []; window.__cancelled = false;"
-            "speechSynthesis.cancel = () => { window.__cancelled = true; };"
+            "speechSynthesis.cancel = () => { window.__cancelled = true; }; null;"
         )
         for card in ("card-please", "card-you", "card-say"):
             press(admin, card)
