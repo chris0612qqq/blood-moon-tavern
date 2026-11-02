@@ -4,10 +4,10 @@ import { h } from '../dom.js';
 import { t } from '../strings.js';
 
 const CARD_GROUPS = Object.freeze([
-  { id: 'compose', cards: [{ id: 'please' }, { id: 'you' }, { id: 'me' }, { id: 'say' }, { id: 'let' }, { id: 'no' }] },
+  { id: 'compose', cards: [{ id: 'please' }, { id: 'you' }, { id: 'me' }, { id: 'say' }, { id: 'let' }, { id: 'no' }, { id: 'good' }, { id: 'bad' }, { id: 'awesome' }] },
   { id: 'control', cards: [{ id: 'hurry' }, { id: 'quiet' }, { id: 'gan' }] },
   { id: 'react', cards: [{ id: 'ha' }, { id: 'lol' }, { id: 'stunned' }] },
-  { id: 'tease', cards: [{ id: 'great' }, { id: 'comfy' }, { id: 'rascal' }, { id: 'fairy' }, { id: 'handsome' }] },
+  { id: 'tease', cards: [{ id: 'comfy' }, { id: 'rascal' }, { id: 'fairy' }, { id: 'handsome' }, { id: 'schemer' }, { id: 'oldFox' }] },
 ]);
 
 export const cardText = (card) => t(`card.${card.id}`);

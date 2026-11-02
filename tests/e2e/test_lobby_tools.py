@@ -346,7 +346,7 @@ def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa:
             press(admin, card)
         player.wait_for_function("window.__spoken.join('') === '請你說'")
         assert player.evaluate("window.__cancelled") is False
-        assert admin.locator('[data-testid^="card-"]').count() == 17
+        assert admin.locator('[data-testid^="card-"]').count() == 21
         assert not has(other, "toast")
         press(admin, f"broadcast-target-{target}")
         admin.wait_for_function(

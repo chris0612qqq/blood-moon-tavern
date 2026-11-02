@@ -33,9 +33,13 @@ pytestmark = pytest.mark.e2e
 
 
 def _free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return int(probe.getsockname()[1])
+    # 瀏覽器會擋一些埠（ERR_UNSAFE_PORT），最大是 10080；系統可能隨機給到
+    while True:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = int(probe.getsockname()[1])
+        if port > 10080:
+            return port
 
 
 @contextlib.contextmanager
