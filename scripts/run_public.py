@@ -15,6 +15,7 @@ import ctypes
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -77,13 +78,13 @@ def start_server() -> subprocess.Popen[bytes]:
 class Tunnel:
     """一條 Cloudflare 臨時通道。網址只有這個程式活著時有效。"""
 
-    def __init__(self) -> None:
+    def __init__(self, port: int = PORT) -> None:
         command = [
             cloudflared_path(),
             "tunnel",
             "--no-autoupdate",
             "--url",
-            f"http://127.0.0.1:{PORT}",
+            f"http://127.0.0.1:{port}",
         ]
         self.process = subprocess.Popen(
             command, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True, encoding="utf-8"
@@ -154,8 +155,20 @@ def open_tunnel() -> Tunnel:
             time.sleep(10)
 
 
+def already_open(port: int = PORT) -> bool:
+    """這個埠被占用代表已經開著一間店；再開一間會有兩條通道搶著發布網址。"""
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return True
+    return False
+
+
 def main() -> None:
     refuse_dev_mode(dict(os.environ))
+    if already_open():
+        raise SystemExit("酒館已經開著了（另一個黑色視窗），不用再開一次。")
     sys.path.insert(0, str(ROOT))
     from server import auth, config
 
