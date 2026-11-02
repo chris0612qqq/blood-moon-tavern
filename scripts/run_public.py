@@ -33,7 +33,8 @@ TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 TUNNEL_START_SECONDS = 60
 PUBLISH_TIMEOUT_SECONDS = 300
 POLL_SECONDS = 5
-HEALTH_EVERY_SECONDS = 30
+# 遊戲中通道掛了要在 2 分鐘內接回（DEV_PLAN P7），發布本身就要 1 分鐘多，偵測要快
+HEALTH_EVERY_SECONDS = 10
 # 連續幾次從外面打不通才換通道：一次失敗可能只是網路抖一下
 TUNNEL_FAILS_BEFORE_RESTART = 3
 RESTART_DELAY_SECONDS = 2
@@ -165,6 +166,11 @@ def already_open(port: int = PORT) -> bool:
     return False
 
 
+def needs_new_tunnel(alive: bool, fails: int) -> bool:
+    """cloudflared 死了馬上換；還活著但打不通，連續幾次才換，免得網路抖一下就換網址。"""
+    return not alive or fails >= TUNNEL_FAILS_BEFORE_RESTART
+
+
 def main() -> None:
     refuse_dev_mode(dict(os.environ))
     if already_open():
@@ -193,8 +199,9 @@ def main() -> None:
                 server = start_server()
                 continue
             assert tunnel.url is not None
-            fails = 0 if tunnel.alive() and healthy(tunnel.url) else fails + 1
-            if fails >= TUNNEL_FAILS_BEFORE_RESTART:
+            alive = tunnel.alive()
+            fails = 0 if alive and healthy(tunnel.url) else fails + 1
+            if needs_new_tunnel(alive, fails):
                 # 手機斷線時伺服器會自動暫停（SPEC A11），換好網址會自己連回來
                 print("外面連不進來，換一條通道…")
                 tunnel.close()
