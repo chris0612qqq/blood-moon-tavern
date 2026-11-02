@@ -395,6 +395,20 @@ def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa:
         player.wait_for_function("window.__spoken.join('') === '請你說'")
         assert player.evaluate("window.__cancelled") is False
         assert admin.locator('[data-testid^="card-"]').count() == 21
+        # 字卡也照間隔送（伺服器怎麼排程見 test_api 的間隔測試）
+        admin.evaluate(
+            "window.__sent = []; const real = WebSocket.prototype.send;"
+            "WebSocket.prototype.send = function (d) {"
+            " window.__sent.push(d); return real.call(this, d); };"
+            "null;"
+        )
+        fill(admin, "input-broadcast_gap", "2")
+        press(admin, "card-ha")
+        admin.wait_for_function(
+            "window.__sent.some((d) => d.includes('admin.broadcast')"
+            " && d.includes('\"interval_s\":2'))"
+        )
+        fill(admin, "input-broadcast_gap", "")
         assert admin.locator('[data-testid="card-quiet"]').bounding_box()["height"] < 50  # 矮一半
         assert not has(other, "toast")
         press(admin, f"broadcast-target-{target}")
