@@ -1,7 +1,8 @@
 """效能基準（CODING_RULES T6）：20 人房間、每秒 20 則聊天，量伺服器 CPU、記憶體、廣播延遲。
 
 用法：python scripts/bench_t6.py --minutes 30
-伺服器跑在獨立程序，資料放暫存資料夾，不碰正式的 data/。
+      python scripts/bench_t6.py --minutes 5 --tunnel   經 Cloudflare 臨時通道從外面連（P7）
+伺服器跑在獨立程序，資料放暫存資料夾，不碰正式的 data/。走通道時帳密每次隨機產生。
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import argparse
 import asyncio
 import json
 import os
+import secrets
 import socket
 import statistics
 import subprocess
@@ -27,6 +29,7 @@ import websockets
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from scripts.run_public import Tunnel  # noqa: E402
 from server.auth import AdminStore  # noqa: E402
 from server.config import PROTOCOL_VERSION  # noqa: E402
 
@@ -36,6 +39,9 @@ CPU_LIMIT = 20.0
 LATENCY_LIMIT_MS = 100.0
 # 前 1/3 與後 1/3 平均 RSS 的差異上限；超過視為持續成長
 GROWTH_LIMIT_MB = 20.0
+# 經通道多了網路來回，延遲上限放寬；每則訊息都要收到
+TUNNEL_LATENCY_LIMIT_MS = 1000.0
+DRAIN_SECONDS = 2.0
 
 
 def free_port() -> int:
@@ -44,24 +50,23 @@ def free_port() -> int:
         return int(probe.getsockname()[1])
 
 
-async def wait_ready(base: str) -> None:
+async def wait_ready(base: str, seconds: float = 10) -> None:
+    deadline = time.monotonic() + seconds
     async with httpx.AsyncClient(base_url=base) as http:
-        for _ in range(100):
+        while time.monotonic() < deadline:
             try:
                 if (await http.get("/api/health")).status_code == 200:
                     return
             except httpx.TransportError:
                 pass
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
     raise RuntimeError("server did not start")
 
 
-async def setup(base: str) -> tuple[str, list[str]]:
+async def setup(base: str, password: str) -> tuple[str, list[str]]:
     """上帝模式、發牌後主持人不推進：遊戲留在 DEAL，公共頻道可發言，事件走完整的引擎路徑。"""
     async with httpx.AsyncClient(base_url=base, timeout=30) as http:
-        res = await http.post(
-            "/api/admin/login", json={"username": "boss", "password": "password1"}
-        )
+        res = await http.post("/api/admin/login", json={"username": "boss", "password": password})
         admin = res.json()["token"]
         headers = {"Authorization": f"Bearer {admin}"}
         body = {"mode": "god", "name": "bench", "password": "1234"}
@@ -84,14 +89,17 @@ async def open_socket(url: str, token: str) -> Any:
     return ws
 
 
-async def run(minutes: float, port: int, proc: psutil.Process) -> dict[str, Any]:
-    base = f"http://127.0.0.1:{port}"
-    url = f"ws://127.0.0.1:{port}/ws"
-    await wait_ready(base)
+async def run(
+    minutes: float, port: int, proc: psutil.Process, password: str, public: str | None
+) -> dict[str, Any]:
+    await wait_ready(f"http://127.0.0.1:{port}")
+    base = public or f"http://127.0.0.1:{port}"
+    url = f"{base.replace('http', 'ws', 1)}/ws"
+    await wait_ready(base, 120)  # 新的通道網址要過一會兒才查得到
     # Windows 虛擬環境的 python.exe 是轉接程序，真正的伺服器是它的子程序
     children = proc.children(recursive=True)
     proc = children[-1] if children else proc
-    admin, tokens = await setup(base)
+    admin, tokens = await setup(base, password)
     host = await open_socket(url, admin)
     sockets = [await open_socket(url, token) for token in tokens]
     await host.send(json.dumps({"t": "admin.start", "msg_id": "start"}))
@@ -141,6 +149,8 @@ async def run(minutes: float, port: int, proc: psutil.Process) -> dict[str, Any]
             rss_samples.append(proc.memory_info().rss / 1024 / 1024)
             next_sample = now + 10
         await asyncio.sleep(max(0.0, start + count * interval - time.perf_counter()))
+    # 最後幾則還在路上，等它們到了再停，不然會被誤算成掉訊息
+    await asyncio.sleep(DRAIN_SECONDS)
     ping_task.cancel()
     for task in readers:
         task.cancel()
@@ -167,11 +177,14 @@ async def run(minutes: float, port: int, proc: psutil.Process) -> dict[str, Any]
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--minutes", type=float, default=30.0)
+    parser.add_argument("--tunnel", action="store_true")
     args = parser.parse_args()
     port = free_port()
+    # 走通道時外面的人也連得到，不能用固定帳密
+    password = secrets.token_urlsafe(16) if args.tunnel else "password1"
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         admin_file = Path(tmp) / "admin.json"
-        AdminStore(admin_file).save("boss", "password1")
+        AdminStore(admin_file).save("boss", password)
         env = {**os.environ, "BMT_DATA_DIR": tmp, "BMT_ADMIN_FILE": str(admin_file)}
         server = subprocess.Popen(
             [
@@ -187,9 +200,15 @@ def main() -> int:
             cwd=ROOT,
             env=env,
         )
+        tunnel = Tunnel(port) if args.tunnel else None
         try:
-            result = asyncio.run(run(args.minutes, port, psutil.Process(server.pid)))
+            public = tunnel.url if tunnel else None
+            result = asyncio.run(
+                run(args.minutes, port, psutil.Process(server.pid), password, public)
+            )
         finally:
+            if tunnel:
+                tunnel.close()
             for child in psutil.Process(server.pid).children(recursive=True):
                 child.terminate()
             server.terminate()
@@ -198,7 +217,9 @@ def main() -> int:
     passed = (
         result["cpu_mean_percent_of_one_core"] < CPU_LIMIT
         and result["rss_late_mb"] - result["rss_early_mb"] < GROWTH_LIMIT_MB
-        and result["latency_p99_ms"] < LATENCY_LIMIT_MS
+        and result["latency_p99_ms"]
+        < (TUNNEL_LATENCY_LIMIT_MS if args.tunnel else LATENCY_LIMIT_MS)
+        and result["chats_acked"] == result["chats_sent"]
     )
     print("PASS" if passed else "FAIL")
     return 0 if passed else 1
