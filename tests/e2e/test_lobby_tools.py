@@ -325,6 +325,8 @@ def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa:
         fill(other, "input-join_password", "1234")
         join_form(other, "玩乙", None)
         assert not has(player, "tab-broadcast")  # 只有管理員有這個分頁
+        wait(player, "status-name")
+        assert player.locator('[data-testid="status-name"]').inner_text() == "玩甲"
         press(admin, "tab-broadcast")
         wait(admin, "view-broadcast")
         assert admin.locator('[data-testid="btn-broadcast-send"]').is_disabled()

@@ -421,7 +421,7 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
         folder = os.environ.get("BMT_SHOTS")
         if folder:
             host.screenshot(path=f"{folder}/host_voice_tab.png")
-        # 三個側邊標籤一點就切；常用按鈕切到哪都在（試玩回饋）
+        # 側邊標籤一點就切；流程按鈕在行動狀態，語音選單收起來讓字卡滿版（使用者要求）
         press(host, "host-tab-status")
         wait(host, "host-view-status")
         assert has(host, "btn-host-next") and has(host, "line-current")
@@ -432,7 +432,7 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
         press(host, "host-tab-voice")
         wait(host, "card-quiet")
         assert not has(host, "line-wolf_open")  # 舊的台詞按鈕先藏起來
-        assert has(host, "btn-speak-toggle")  # 旁白開關在固定區
+        assert not has(host, "btn-host-next") and not has(host, "btn-speak-toggle")
         host.evaluate(
             "window.__spokenCard = []; const real = speechSynthesis.speak.bind(speechSynthesis);"
             "speechSynthesis.speak = (u) => { window.__spokenCard.push(u.text); real(u); }; null;"
@@ -441,6 +441,9 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
         press(host, "card-quiet")
         host.wait_for_function("window.__spokenCard.includes('安靜')")
         assert store(host, "s.server.step_seq") == step_before  # 字卡不影響流程
+        press(host, "host-tab-status")
+        wait(host, "btn-host-next")
+        assert has(host, "btn-speak-toggle") and has(host, "host-wall")
         label = host.locator('[data-testid="btn-host-next"]').inner_text()
         assert "預言家請睜眼" in label or "女巫請睜眼" in label
         browser.close()

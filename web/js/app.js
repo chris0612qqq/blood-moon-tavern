@@ -7,7 +7,7 @@ import './wake.js';
 import { clearAdminToken, clearPlayerToken, loadTokens } from './session.js';
 import { changed, store, subscribe } from './store.js';
 import { stepName, t } from './strings.js';
-import { button, deadTag } from './ui/common.js';
+import { button, deadTag, nameOf } from './ui/common.js';
 import { refreshAdminRoom, s0, s1, s2, s25, s3, s4 } from './screens/entry.js';
 import { s5 } from './screens/s5_lobby.js';
 import { s10, s19, s6, s7, s8, s9 } from './screens/night.js';
@@ -42,13 +42,20 @@ function statusTitle(server) {
 function statusBar() {
   const server = store.server;
   const conn = store.conn;
+  const myName = server?.me ? nameOf(server, server.me.id) : null;
   return h('div', { class: 'status' },
     h('span', { class: 'status__title', testid: 'status-title' },
       statusTitle(server).map((line) => h('span', { class: 'status__line' }, line))),
-    server ? h('span', { class: `conn conn--${conn}`, testid: 'conn-light' }, t(`conn.${conn}`)) : null,
-    iconButton('?', 'S26', 'btn-rules'),
-    iconButton('⚙', 'S21', 'btn-settings'),
-    iconButton('🔑', 'admin', 'btn-admin-key'));
+    h('div', { class: 'status__side' },
+      h('div', { class: 'status__icons' },
+        iconButton('?', 'S26', 'btn-rules'),
+        iconButton('⚙', 'S21', 'btn-settings'),
+        iconButton('🔑', 'admin', 'btn-admin-key')),
+      server
+        ? h('div', { class: 'status__who' },
+          myName ? h('span', { class: 'status__name', testid: 'status-name' }, myName) : null,
+          h('span', { class: `conn conn--${conn}`, testid: 'conn-light' }, t(`conn.${conn}`)))
+        : null));
 }
 
 function iconButton(label, target, testid) {
