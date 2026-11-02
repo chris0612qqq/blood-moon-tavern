@@ -13,7 +13,27 @@ const OFFLINE_AFTER_ATTEMPTS = 6;
 const SAMPLE_COUNT = 5;
 
 const params = new URLSearchParams(location.search);
-export const apiBase = params.get('server') ?? '';
+const FIXED_SERVER = params.has('server');
+export let apiBase = params.get('server') ?? '';
+const RELOOKUP_EVERY = 3;
+
+/**
+ * SPEC B1、CODING_RULES N4：畫面放在 GitHub Pages 時，伺服器位址寫在 server.json，每次開店會換。
+ * 伺服器自己提供畫面時沒有這個檔，就連同一個網址。讀不到就沿用舊的位址。
+ */
+export async function findServer() {
+  if (FIXED_SERVER) return;
+  try {
+    const res = await fetch(`server.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (typeof data.api === 'string' && data.api.startsWith('https://')) {
+      apiBase = data.api.replace(/\/+$/, '');
+    }
+  } catch {
+    // 離線或檔案壞掉：下次再讀
+  }
+}
 
 let socket = null;
 let token = null;
@@ -165,7 +185,9 @@ function scheduleRetry() {
   changed();
   const base = BACKOFF_MS[store.attempts - 1] ?? BACKOFF_MAX_MS;
   // N2：加隨機抖動，避免熱點恢復時全部手機同一秒重連
-  retryTimer = setTimeout(() => {
+  retryTimer = setTimeout(async () => {
+    // N4：連續連不上可能是通道換了網址
+    if (store.attempts % RELOOKUP_EVERY === 0) await findServer();
     if (token) open();
   }, base + Math.random() * 1000);
 }
