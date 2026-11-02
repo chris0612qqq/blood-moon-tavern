@@ -77,6 +77,14 @@ class HunterShot(BaseModel):
     target: str | None = None
 
 
+class WolfSchedule(BaseModel):
+    """狼人定時電子音（SPEC v4.24）：時間是現實時間（epoch 秒），只有本人看得到。"""
+
+    slot: int
+    due: float
+    text: str
+
+
 class Timers(BaseModel):
     """目前步驟的時間點。全部用同一個時鐘；暫停時換算成剩餘秒數（CODING_RULES L5）。"""
 
@@ -116,6 +124,7 @@ class GameState(BaseModel):
     nights: list[NightRecord] = Field(default_factory=list)
     votes: list[VoteRound] = Field(default_factory=list)
     disguise: DisguiseState | None = None
+    wolf_schedules: dict[str, list[WolfSchedule]] = Field(default_factory=dict)
 
     day_context: DayContext | None = None
     dawn_deaths: list[str] = Field(default_factory=list)

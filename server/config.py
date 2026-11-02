@@ -19,7 +19,7 @@ VERSION: Final = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 HOST: Final = "127.0.0.1"
 PORT: Final = 8765
-PROTOCOL_VERSION: Final = 7
+PROTOCOL_VERSION: Final = 8
 
 DEV_MODE: Final = os.environ.get("DEV_MODE") == "1"
 TIME_SCALE: Final = float(os.environ.get("TIME_SCALE", "1")) if DEV_MODE else 1.0

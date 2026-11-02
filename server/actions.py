@@ -273,6 +273,52 @@ def _can_post(state: GameState, actor: Actor, channel: Channel, kind: ChatKind) 
     return player.alive or is_last_words_turn(state, player_id, kind)
 
 
+def _wolf_schedule(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
+    """狼人排定時電子音（SPEC v4.24）。時間已由 room 換算成現實時間（epoch 秒）。"""
+    state = engine.state
+    player_id = actor.player_id
+    if player_id is None or not state.has_player(player_id) or state.step is Step.END:
+        raise _fail(ErrorCode.FORBIDDEN)
+    player = state.player(player_id)
+    if not (player.alive and is_wolf(player.role)):
+        raise _fail(ErrorCode.FORBIDDEN)
+    slot = payload["slot"]
+    if not 0 <= slot < balance.WOLF_SCHEDULE_SLOTS:
+        raise _fail(ErrorCode.INVALID_TARGET)
+    engine.emit(
+        EventType.WOLF_SCHEDULE_SET,
+        player=player_id,
+        slot=slot,
+        due=float(payload["due"]),
+        text=payload["text"],
+    )
+
+
+def _wolf_unschedule(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
+    player_id = actor.player_id
+    slots = {s.slot for s in engine.state.wolf_schedules.get(player_id or "", [])}
+    if player_id is None or payload["slot"] not in slots:
+        raise _fail(ErrorCode.INVALID_TARGET)
+    engine.emit(EventType.WOLF_SCHEDULE_CLEARED, player=player_id, slot=payload["slot"])
+
+
+def send_wolf_schedules(engine: Engine, wall: float) -> None:
+    """時間到的定時電子音用匿名狼人身分發到公共頻道（SPEC v4.24）。
+
+    晚上或暫停中先不發，等到能發言時再發；狼人死了在 PLAYER_DIED 時就已取消。
+    """
+    state = engine.state
+    if state.pause is not None or state.step is Step.END:
+        return
+    for player_id, items in list(state.wolf_schedules.items()):
+        if not rules.can_wolf_mask(state, player_id):
+            continue
+        for item in [s for s in items if s.due <= wall]:
+            payload = {"channel": "public", "as": "wolf", "kind": "tts", "content": item.text}
+            _chat_send(engine, Actor(player_id=player_id), payload)
+            engine.emit(EventType.WOLF_SCHEDULE_CLEARED, player=player_id, slot=item.slot)
+
+
 def is_last_words_turn(state: GameState, player_id: str, kind: ChatKind) -> bool:
     """遺言中的死者可發一則文字（SPEC A5.4）。"""
     return (
@@ -576,6 +622,8 @@ HANDLERS: dict[Action, Handler] = {
     Action.SPEAK_END: _speak_end,
     Action.VOTE_CAST: _vote_cast,
     Action.CHAT_SEND: _chat_send,
+    Action.WOLF_SCHEDULE: _wolf_schedule,
+    Action.WOLF_UNSCHEDULE: _wolf_unschedule,
     Action.NARRATOR_TAKEOVER: _narrator_takeover,
     Action.ADMIN_END: _admin_end,
     Action.ADMIN_PAUSE: _admin_pause,
