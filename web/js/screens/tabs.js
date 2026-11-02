@@ -4,9 +4,11 @@ import { api, send } from '../net.js';
 import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
 import { causeJoke, causePlain, deathLabel, roleName, t } from '../strings.js';
-import { actionButton, avatar, button, nameOf, pauseToggle } from '../ui/common.js';
+import { actionButton, avatar, button, field, nameOf, pauseToggle } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { roleCard } from './night.js';
+import { speak, VOICE_STYLE } from '../narrator.js';
+import { photoBubble, sendPhoto } from '../ui/media.js';
 
 const DAY_STEPS = new Set(['DAWN', 'HUNTER', 'LAST_WORDS', 'DAY_SPEAK', 'SUSPECT_VOTE', 'DEFENSE', 'VOTE', 'REVEAL']);
 const CHAT_MAX = 500;
@@ -30,7 +32,60 @@ function bubble(server, msg) {
       msg.disguised_by_me ? ` ${t('chat.fakeMark', { name: displayName(server, msg) })}` : '',
       msg.masked_by_me ? ` ${t('chat.wolfMark')}` : '',
       msg.real_author ? ` ← ${nameOf(server, msg.real_author)}` : ''),
-    msg.content);
+    messageBody(msg));
+}
+
+function messageBody(msg) {
+  if (msg.kind === 'photo') return photoBubble(msg);
+  if (msg.kind === 'tts') {
+    // 點一下才念：白天大家講話時，收到就念會很吵（使用者決定）
+    return h('button', {
+      class: 'tts',
+      testid: `chat-tts-${msg.id}`,
+      onclick: () => speak(msg.content, msg.is_wolf_mask ? VOICE_STYLE.wolf : VOICE_STYLE.normal),
+    }, `🔊 ${msg.content}`);
+  }
+  return msg.content;
+}
+
+function clockText(due) {
+  return new Date(due * 1000).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+/** 狼人定時電子音（SPEC v4.24）：只有自己看得到，最多兩則，時間到伺服器用「狼人」身分發。 */
+function schedulePanel(server) {
+  const me = server.me;
+  if (!me?.wolf_pack || !me.alive || server.phase !== 'game' || server.step === 'END') return null;
+  if (!store.ui.scheduleOpen) {
+    return button(t('sched.open'), () => { store.ui.scheduleOpen = true; changed(); }, { small: true, kind: 'secondary', testid: 'sched-open' });
+  }
+  const form = store.ui.form;
+  const saved = new Map((me.wolf_schedules ?? []).map((s) => [s.slot, s]));
+  return h('div', { class: 'panel', testid: 'sched-panel' },
+    h('p', { class: 'hint' }, t('sched.hint')),
+    [0, 1].map((slot) => {
+      const item = saved.get(slot);
+      if (item) {
+        return h('div', { class: 'row', key: `s${slot}`, testid: `sched-saved-${slot}` },
+          h('span', { class: 'grow' }, t('sched.row', { time: clockText(item.due), text: item.text })),
+          actionButton({ id: `sched-del-${slot}`, small: true, kind: 'secondary', label: t('sched.delete'),
+            run: () => send('wolf.unschedule', { slot }) }));
+      }
+      const time = form[`sched_time_${slot}`] ?? '';
+      const text = (form[`sched_text_${slot}`] ?? '').trim();
+      return h('div', { key: `s${slot}` },
+        h('div', { class: 'row' },
+          field(`sched_time_${slot}`, t('sched.time'), { type: 'time' }),
+          field(`sched_text_${slot}`, t('sched.text'), { maxlength: CHAT_MAX })),
+        actionButton({ id: `sched-save-${slot}`, small: true, label: t('sched.save'),
+          disabled: time && text ? null : ' ',
+          run: async () => {
+            const result = await send('wolf.schedule', { slot, time, text });
+            if (result.ok) { form[`sched_time_${slot}`] = ''; form[`sched_text_${slot}`] = ''; }
+            return result;
+          } }));
+    }),
+    button(t('common.close'), () => { store.ui.scheduleOpen = false; changed(); }, { small: true, kind: 'secondary', testid: 'sched-close' }));
 }
 
 function postBlock(server, channel) {
@@ -112,6 +167,7 @@ export function chatTab(server) {
       asButton(t('chat.asSelf'), 'self', !fake && !masked),
       canMask ? asButton(t('chat.asWolf'), 'wolf', masked) : null,
       canFake ? asButton(t('chat.asFake', { name: nameOf(server, target) }), 'fake', fake) : null) : null,
+    channel === 'public' ? schedulePanel(server) : null,
     !block && CHAT_MAX - draft.length <= CHAT_WARN
       ? h('p', { class: 'hint', testid: 'chat-left' }, t('chat.left', { n: CHAT_MAX - draft.length }))
       : null,
@@ -123,23 +179,50 @@ export function chatTab(server) {
         value: draft,
         oninput: (e) => { store.ui.drafts[draftKey] = e.target.value; changed(); },
       }),
-      h('div', { style: 'width:110px' }, actionButton({
+      h('div', { style: 'width:64px' }, actionButton({
         id: `chat-send-${channel}-${(server.chat ?? []).length}`,
         small: true,
         label: sendLabel(fake, masked, nameOf(server, target)),
         disabled: draft.trim() ? null : ' ',
-        run: async () => {
-          const fields = { channel, kind: 'text', content: draft };
-          if (fake) fields.as = 'disguise';
-          if (masked) fields.as = 'wolf';
-          const result = await send('chat.send', fields);
-          if (result.ok) {
-            store.ui.drafts[draftKey] = '';
-            changed();
-          }
-          return result;
-        },
-      }))));
+        run: () => sendDraft('text'),
+      })),
+      // 電子音：同一段文字改成點一下會念出來的訊息（SPEC v4.24）
+      h('div', { style: 'width:44px' }, actionButton({
+        id: `chat-tts-send-${channel}-${(server.chat ?? []).length}`,
+        small: true,
+        label: t('chat.ttsSend'),
+        disabled: draft.trim() ? null : ' ',
+        run: () => sendDraft('tts'),
+      })),
+      channel === 'public'
+        ? h('label', { class: 'btn btn--secondary btn--small chat__photo', testid: 'chat-photo-btn' }, t('chat.photo'),
+          h('input', {
+            type: 'file',
+            accept: 'image/*',
+            testid: 'chat-photo-input',
+            onchange: (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) sendPhoto(file, identity());
+            },
+          }))
+        : null));
+
+  function identity() {
+    const fields = { channel };
+    if (fake) fields.as = 'disguise';
+    if (masked) fields.as = 'wolf';
+    return fields;
+  }
+
+  async function sendDraft(kind) {
+    const result = await send('chat.send', { ...identity(), kind, content: draft });
+    if (result.ok) {
+      store.ui.drafts[draftKey] = '';
+      changed();
+    }
+    return result;
+  }
 }
 
 export function roleTab(server) {

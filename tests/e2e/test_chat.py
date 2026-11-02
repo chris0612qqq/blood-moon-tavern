@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import time
 from typing import Any
 
 import pytest
@@ -338,6 +339,21 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
         assert forged == "forbidden"
 
         # 夜晚匿名身分關閉：切換器消失，也不會誤用舊身分（另有單元測試涵蓋夜晚拒絕）
+
+        # ---- 狼人定時電子音：只有自己看得到，可以取消（SPEC v4.24） ----
+        press(faceless, "tab-chat")
+        press(faceless, "sched-open")
+        later = time.strftime("%H:%M", time.localtime(time.time() + 7200))  # 測試中不會到時間
+        fill(faceless, "input-sched_time_0", later)
+        fill(faceless, "input-sched_text_0", "排程秘密")
+        press(faceless, "sched-save-0")
+        wait(faceless, "sched-saved-0")
+        assert later in faceless.locator('[data-testid="sched-saved-0"]').inner_text()
+        for other in (ally, bystander):
+            assert "排程秘密" not in json.dumps(store(other, "s.server"), ensure_ascii=False)
+        press(faceless, "sched-del-0")
+        faceless.wait_for_function("!document.querySelector('[data-testid=\"sched-saved-0\"]')")
+        press(faceless, "sched-close")
 
         # ---- 白天狼人頻道仍是本名，好人仍收不到 ----
         press(faceless, "tab-chat")
