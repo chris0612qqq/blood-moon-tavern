@@ -14,6 +14,7 @@ from server.enums import (
     DisguiseEnd,
     Mode,
     PauseReason,
+    Role,
     Step,
     Winner,
 )
@@ -259,7 +260,7 @@ def _maybe_start_vote_grace(engine: Engine) -> None:
 def _can_post(state: GameState, actor: Actor, channel: Channel, kind: ChatKind) -> bool:
     """發言權限（SPEC A9）。夜晚判斷看步驟，所以夜晚暫停也算夜晚。"""
     if actor.is_host:
-        return channel is Channel.PUBLIC
+        return True  # 上帝主持人兩個頻道都能發言（SPEC v4.25）
     player_id = actor.player_id
     if state.step is Step.END:
         return channel is Channel.PUBLIC
@@ -317,6 +318,30 @@ def send_wolf_schedules(engine: Engine, wall: float) -> None:
             payload = {"channel": "public", "as": "wolf", "kind": "tts", "content": item.text}
             _chat_send(engine, Actor(player_id=player_id), payload)
             engine.emit(EventType.WOLF_SCHEDULE_CLEARED, player=player_id, slot=item.slot)
+
+
+def post_intro(engine: Engine) -> None:
+    """開局系統訊息（SPEC v4.25）：狼頻道說明狼人的特殊功能，公共頻道營造氣氛。"""
+    has_faceless = any(p.role is Role.FACELESS for p in engine.state.players)
+    for channel, key in (
+        (Channel.WOLF, "intro.wolfFaceless" if has_faceless else "intro.wolf"),
+        (Channel.PUBLIC, "intro.public"),
+    ):
+        engine.chat_seq += 1
+        engine.emit(
+            EventType.CHAT_SENT,
+            id=engine.chat_seq,
+            channel=channel.value,
+            real_author=None,
+            display=None,
+            is_host=False,
+            disguise_period=None,
+            is_wolf_mask=False,
+            kind=ChatKind.SYSTEM.value,
+            content=key,
+            media_id=None,
+            is_last_words=False,
+        )
 
 
 def is_last_words_turn(state: GameState, player_id: str, kind: ChatKind) -> bool:

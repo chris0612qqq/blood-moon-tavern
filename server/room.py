@@ -854,6 +854,7 @@ class RoomService:
         self.engine = engine
         for other in self.conns:
             self._send_state(other)
+        self._commit(engine.post_intro)
 
     # ---- 聊天 ----
 

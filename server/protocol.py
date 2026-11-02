@@ -224,6 +224,8 @@ def parse_client(raw: Any) -> ClientFrame:
 
 
 def _check_chat(msg: ChatSend) -> None:
+    if msg.kind is ChatKind.SYSTEM:
+        raise GameError(ErrorCode.BAD_REQUEST)
     if msg.kind in (ChatKind.TEXT, ChatKind.TTS):
         if not msg.content or len(msg.content) > config.CHAT_MAX_CHARS or msg.media_id:
             raise GameError(ErrorCode.BAD_REQUEST)

@@ -234,6 +234,10 @@ class Engine:
         actions.dispatch(self, actor, action, dict(payload or {}), step_seq)
         return self.flush()
 
+    def post_intro(self) -> list[Event]:
+        actions.post_intro(self)
+        return self.flush()
+
     def send_wolf_schedules(self, wall: float) -> list[Event]:
         """房間每次時間推進都呼叫：時間到的定時電子音發出去（SPEC v4.24）。"""
         actions.send_wolf_schedules(self, wall)

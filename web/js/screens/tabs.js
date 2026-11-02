@@ -17,6 +17,7 @@ const FIRST_CHAT_ID = 1;
 export const NIGHT_STEPS = new Set(['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END']);
 
 function displayName(server, msg) {
+  if (msg.kind === 'system') return t('chat.system');
   if (msg.is_host_msg) return t('chat.host');
   if (msg.is_wolf_mask) return t('chat.wolfName');
   return nameOf(server, msg.display_player_id);
@@ -26,24 +27,27 @@ function bubble(server, msg) {
   // 假扮和匿名訊息不放到右邊：旁人瞄到畫面也不會立刻看出是他發的
   const mine = msg.mine && !msg.disguised_by_me && !msg.masked_by_me;
   const classes = ['bubble', mine ? 'bubble--mine' : '', msg.is_host_msg ? 'bubble--host' : '',
-    msg.is_wolf_mask ? 'bubble--wolf' : ''];
+    msg.is_wolf_mask ? 'bubble--wolf' : '', msg.kind === 'system' ? 'bubble--system' : ''];
   return h('div', { class: classes.join(' '), key: `m${msg.id}`, testid: `chat-${msg.id}` },
     h('div', { class: 'bubble__who' }, displayName(server, msg),
       msg.disguised_by_me ? ` ${t('chat.fakeMark', { name: displayName(server, msg) })}` : '',
       msg.masked_by_me ? ` ${t('chat.wolfMark')}` : '',
       msg.real_author ? ` ← ${nameOf(server, msg.real_author)}` : ''),
-    messageBody(msg));
+    messageBody(server, msg));
 }
 
-function messageBody(msg) {
+function messageBody(server, msg) {
   if (msg.kind === 'photo') return photoBubble(msg);
+  if (msg.kind === 'system') return t(msg.content);
   if (msg.kind === 'tts') {
-    // 點一下才念：白天大家講話時，收到就念會很吵（使用者決定）
+    // 點一下才念：白天大家講話時，收到就念會很吵（使用者決定）。
+    // 只能用聽的：發的人、上帝主持人、結算後才看得到原文（SPEC v4.25）
+    const showText = msg.mine || server.host || server.step === 'END';
     return h('button', {
       class: 'tts',
       testid: `chat-tts-${msg.id}`,
       onclick: () => speak(msg.content, msg.is_wolf_mask ? VOICE_STYLE.wolf : VOICE_STYLE.normal),
-    }, `🔊 ${msg.content}`);
+    }, showText ? `🔊 ${msg.content}` : t('chat.ttsHidden'));
   }
   return msg.content;
 }
@@ -90,7 +94,7 @@ function schedulePanel(server) {
 
 function postBlock(server, channel) {
   const me = server.me;
-  if (server.host) return channel === 'wolf' ? t('chat.wolfDead') : null;
+  if (server.host) return null;  // 上帝主持人兩個頻道都能發言（SPEC v4.25）
   if (server.phase === 'lobby' || server.step === 'END') return null;
   if (!me) return t('chat.spectator');
   if (channel === 'wolf') return me.alive ? null : t('chat.wolfDead');
