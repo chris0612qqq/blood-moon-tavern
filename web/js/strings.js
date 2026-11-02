@@ -225,6 +225,7 @@ const TEXT = Object.freeze({
   's20.speakSelf': '旁白：我自己念',
   's20.replay': '重念',
   's20.next': '下一步',
+  's20.resumeFirst': '暫停中，先按繼續',
   's20.nextLine': '下一句：{line}',
   's20.witchWait': '建議等待',
   's20.witchWaitUnit': '秒，免得太快按洩漏女巫沒藥',

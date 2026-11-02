@@ -98,6 +98,8 @@ function voiceControls(server) {
         id: 'btn-host-next',
         label: t('s20.nextLine', { line: lineLabel(nextLine) }),
         kind: nextIsReady(server) ? 'suggest' : 'secondary',
+        // 暫停中伺服器不讓換步驟，先講清楚，免得按了只看到「不能」（使用者回報）
+        disabled: server.paused ? t('s20.resumeFirst') : null,
         confirm: unfinishedWarning(server),
         run: () => send('host.line', { line_id: nextLine, speak }),
       })
@@ -105,6 +107,7 @@ function voiceControls(server) {
         id: 'btn-host-skip',
         label: t('s20.next'),
         kind: 'secondary',
+        disabled: server.paused ? t('s20.resumeFirst') : null,
         run: () => send('host.next'),
       }),
   ];
