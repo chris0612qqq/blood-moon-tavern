@@ -1010,6 +1010,23 @@ def test_old_database_gets_mask_column(tmp_path: Path) -> None:
     assert "is_wolf_mask" in columns
 
 
+def test_restart_remembers_bots(env: Env) -> None:
+    """重啟後要認回機器人，否則被當成斷線的真人，斷線暫停解不開（使用者回報）。"""
+    with TestClient(env.app) as client:
+        open_room(env, client)
+        tokens = player_tokens(client, 1)
+        bots = env.service.add_bots(7)
+        admin = Ws(client, env.admin_token)
+        admin.reply("admin.start")
+        admin.close()
+    service = env.make_service()
+    with TestClient(create_app(service)):
+        assert sorted(service.bot_ids) == sorted(bots)
+        assert service.bot_brain is not None
+        assert tokens[0][1] in service._offline_ids()
+        assert not set(bots) & service._offline_ids()
+
+
 def test_restart_lobby_room(env: Env) -> None:
     with TestClient(env.app) as client:
         open_room(env, client)

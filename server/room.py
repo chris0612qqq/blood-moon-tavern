@@ -980,13 +980,9 @@ class RoomService:
 
     # ---- 機器人：管理員在大廳加（SPEC v4.23 起正式店也開放） ----
 
-    def add_bots(self, count: int) -> list[str]:
-        """加入 N 個機器人。名字用「機」加一個字元，符合 2 字規則。"""
+    def _ensure_bot_brain(self, room: Room) -> None:
         from server.dev.bots import BotBrain
 
-        room = self.require_room()
-        if room.state != _LOBBY:
-            raise GameError(ErrorCode.FORBIDDEN)
         if self.bot_brain is None:
             self.bot_brain = BotBrain(
                 GameRng(room.seed),
@@ -995,6 +991,13 @@ class RoomService:
                 speak_rate=0.05,
                 chat_rate=0.0005,
             )
+
+    def add_bots(self, count: int) -> list[str]:
+        """加入 N 個機器人。名字用「機」加一個字元，符合 2 字規則。"""
+        room = self.require_room()
+        if room.state != _LOBBY:
+            raise GameError(ErrorCode.FORBIDDEN)
+        self._ensure_bot_brain(room)
         added = []
         alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         taken = {p.name for p in self.players.values()}
@@ -1161,6 +1164,10 @@ class RoomService:
                 avatar_media_id=row["avatar_media_id"],
                 prep=json.loads(row["prep_json"]),
             )
+        # 機器人名單只在記憶體：重啟後要認回來，否則被當成斷線的真人，觸發斷線暫停且解不開
+        self.bot_ids = [p.id for p in self.players.values() if _is_bot(p)]
+        if self.bot_ids:
+            self._ensure_bot_brain(room)
         for row in self.db.rows("SELECT * FROM session WHERE room_id=?", (room.id,)):
             self.sessions[row["token_hash"]] = Session(
                 row["token_hash"], row["player_id"], bool(row["is_admin"]), row["device_id"]
@@ -1236,6 +1243,11 @@ def _room_statement(room: Room) -> tuple[str, tuple[Any, ...]]:
             room.narrator_id,
         ),
     )
+
+
+def _is_bot(player: RoomPlayer) -> bool:
+    """機器人沒有 PIN；真人加入一定要設 PIN，所以光改裝置 ID 冒充不了。"""
+    return player.pin_hash == "" and player.device_id.startswith("bot-")
 
 
 def _player_statement(room_id: str, player: RoomPlayer) -> tuple[str, tuple[Any, ...]]:
