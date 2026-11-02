@@ -230,7 +230,6 @@ const TEXT = Object.freeze({
   's20.witchWaitUnit': '秒，免得太快按洩漏女巫沒藥',
   's20.again': '再念一次：{line}',
   's20.againPlain': '再念一次',
-  's20.cardsHint': '按了這支手機就念，隨時都能按，不影響流程',
   's20.unfinished': '還有 {n} 人未完成，確定略過？',
   's20.skipSpeaker': '跳過發言',
   's20.extend': '延長 30 秒',
