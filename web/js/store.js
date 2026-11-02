@@ -182,6 +182,11 @@ const HANDLERS = {
       store.ui.unread = { ...store.ui.unread, [msg.channel]: (store.ui.unread[msg.channel] ?? 0) + 1 };
     }
   },
+  'media.url'(msg) {
+    for (const m of store.server?.chat ?? []) {
+      if (m.media_id === msg.media_id) m.media_url = msg.url;
+    }
+  },
   'chat.history'(msg) {
     const s = store.server;
     if (!s) return;

@@ -4,6 +4,7 @@ import { api, connect, findServer, retryNow, serverNow } from './net.js';
 import { STEP } from './protocol.js';
 import { resolveScreen } from './router.js';
 import './wake.js';
+import { lightboxLayer } from './ui/media.js';
 import { clearAdminToken, clearPlayerToken, loadTokens } from './session.js';
 import { changed, store, subscribe } from './store.js';
 import { stepName, t } from './strings.js';
@@ -200,6 +201,7 @@ function draw() {
     h('div', { class: 'main', testid: `screen-${screen}` }, mainContent(screen)),
     showTabs ? tabs(server) : null,
     dialogLayer(server),
+    lightboxLayer(),
     toastLayer(),
     h('div', { class: 'rotate' }, t('rotate')));
   settleChatScroll();

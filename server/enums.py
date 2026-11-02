@@ -70,6 +70,8 @@ class ChatKind(StrEnum):
     TEXT = "text"
     PHOTO = "photo"
     VOICE = "voice"
+    # 打字轉電子音（SPEC v4.24）：沒有錄音，點一下用手機語音念出來
+    TTS = "tts"
 
 
 class DisguiseEnd(StrEnum):
@@ -104,6 +106,8 @@ class Action(StrEnum):
     SPEAK_END = "speak.end"
     VOTE_CAST = "vote.cast"
     CHAT_SEND = "chat.send"
+    WOLF_SCHEDULE = "wolf.schedule"
+    WOLF_UNSCHEDULE = "wolf.unschedule"
     NARRATOR_TAKEOVER = "narrator.takeover"
     ADMIN_END = "admin.end"
     ADMIN_PAUSE = "admin.pause"

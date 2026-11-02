@@ -8,6 +8,11 @@ import { LIMITS } from './protocol.js';
 import { changed, store } from './store.js';
 
 const PITCH = 0.9;
+// 電子音訊息（SPEC v4.24）：一般玩家正常音調；狼人身分很低又慢，一聽就分得出來
+export const VOICE_STYLE = Object.freeze({
+  normal: { pitch: 1.1, rate: 1.0 },
+  wolf: { pitch: 0.5, rate: 0.8 },
+});
 const CANCEL_SETTLE_MS = 60;
 const UNLOCK_TEXT = '。';
 // 留住目前的語音物件：有些瀏覽器會把沒人參照的語音回收掉，念到一半就停
@@ -32,11 +37,11 @@ function zhVoice() {
   return null;
 }
 
-function build(text, volume) {
+function build(text, volume, style = null) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'zh-TW';
-  utterance.rate = LIMITS.NARRATION_RATE;
-  utterance.pitch = PITCH;
+  utterance.rate = style?.rate ?? LIMITS.NARRATION_RATE;
+  utterance.pitch = style?.pitch ?? PITCH;
   utterance.volume = volume;
   const voice = zhVoice();
   if (voice) {
@@ -47,11 +52,11 @@ function build(text, volume) {
 }
 
 /** 念一句。不支援或失敗都只是沒聲音，字幕照常（CODING_RULES E11）。 */
-export function speak(text) {
+export function speak(text, style = null) {
   const synth = window.speechSynthesis;
   if (!synth) return false;
   try {
-    const utterance = build(text, 1);
+    const utterance = build(text, 1, style);
     utterance.onstart = () => {
       store.voice.unlocked = true;
       report('started');

@@ -84,6 +84,26 @@ class ChatSend(ClientFrame):
         return None if value is None else clean_text(value)
 
 
+class WolfScheduleFrame(ClientFrame):
+    """狼人定時電子音：時間用 HH:MM，伺服器換成下一次到的現實時間（SPEC v4.24）。"""
+
+    slot: int = Field(ge=0, lt=balance.WOLF_SCHEDULE_SLOTS)
+    time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    text: str = Field(min_length=1, max_length=config.CHAT_MAX_CHARS * 2)
+
+    @field_validator("text")
+    @classmethod
+    def _clean(cls, value: str) -> str:
+        cleaned = clean_text(value)
+        if not cleaned or len(cleaned) > config.CHAT_MAX_CHARS:
+            raise ValueError("empty")
+        return cleaned
+
+
+class SlotRef(ClientFrame):
+    slot: int = Field(ge=0, lt=balance.WOLF_SCHEDULE_SLOTS)
+
+
 class AdminBroadcast(ClientFrame):
     targets: list[Id] = Field(min_length=1, max_length=config.ROOM_CAPACITY)
     text: str = Field(min_length=1, max_length=config.CHAT_MAX_CHARS)
@@ -160,6 +180,8 @@ CLIENT_MESSAGES: Final[dict[str, type[ClientFrame]]] = {
     "prep.report": PrepReport,
     "narrator.takeover": Empty,
     "chat.send": ChatSend,
+    "wolf.schedule": WolfScheduleFrame,
+    "wolf.unschedule": SlotRef,
     "chat.history": ChatHistory,
     "media.refresh": MediaRefresh,
     "wolf.pick": WolfPick,
@@ -202,7 +224,7 @@ def parse_client(raw: Any) -> ClientFrame:
 
 
 def _check_chat(msg: ChatSend) -> None:
-    if msg.kind is ChatKind.TEXT:
+    if msg.kind in (ChatKind.TEXT, ChatKind.TTS):
         if not msg.content or len(msg.content) > config.CHAT_MAX_CHARS or msg.media_id:
             raise GameError(ErrorCode.BAD_REQUEST)
     elif msg.media_id is None or msg.content:

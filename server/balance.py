@@ -58,6 +58,8 @@ WITCH_MIN_SECONDS_HIGH: Final = 15
 VOTE_ALL_CAST_GRACE_SECONDS: Final = 5
 # 第一輪被投的人少於這個數就不進第二輪，直接照票數決定；兩人同票例外（SPEC A5.4）
 SECOND_ROUND_MIN_TARGETS: Final = 3
+# 每隻狼同時能排幾則定時電子音（SPEC v4.24）
+WOLF_SCHEDULE_SLOTS: Final = 2
 # 第二輪被提名到這個人數，被提名者也能互投（不能投自己），投票人才不會只剩一兩個（SPEC A5.4）
 MUTUAL_VOTE_MIN_NOMINEES: Final = 3
 RESUME_COUNTDOWN_SECONDS: Final = 2.5

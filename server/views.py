@@ -256,6 +256,8 @@ def _me_block(state: GameState, player: PlayerState) -> Message:
         }
     if is_wolf(player.role):
         block["wolf_pack"] = _wolf_block(state, player)
+        # 定時電子音只有排的人自己看得到，狼同伴和主持人都看不到（SPEC v4.24）
+        block["wolf_schedules"] = [s.model_dump() for s in state.wolf_schedules.get(player.id, [])]
         block["can_wolf_mask"] = rules.can_wolf_mask(state, player.id)
     if player.role is Role.SEER:
         block["seer_info"] = _seer_block(state)
@@ -498,7 +500,12 @@ def private_messages(
                     "silent": rules.is_night_step(state.step),
                 }
             )
-    elif event.type in (EventType.VOTE_CAST, EventType.PLAYER_DIED):
+    elif event.type in (
+        EventType.VOTE_CAST,
+        EventType.PLAYER_DIED,
+        EventType.WOLF_SCHEDULE_SET,
+        EventType.WOLF_SCHEDULE_CLEARED,
+    ):
         subject = data.get("voter") or data.get("player")
         if me is not None and me.id == subject:
             out.append({"t": "me", **_me_block(state, me)})
