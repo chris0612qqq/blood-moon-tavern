@@ -430,6 +430,7 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
             host.screenshot(path=f"{folder}/host_status_tab.png")
         assert not has(host, "host-tab-reveal")  # 揭曉併進簡報牆
         press(host, "host-tab-voice")
+        rail_y = host.locator('[data-testid="host-tab-status"]').bounding_box()["y"]
         wait(host, "card-quiet")
         assert not has(host, "line-wolf_open")  # 舊的台詞按鈕先藏起來
         assert not has(host, "btn-host-next") and not has(host, "btn-speak-toggle")
@@ -444,6 +445,7 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
         press(host, "host-tab-status")
         wait(host, "btn-host-next")
         assert has(host, "btn-speak-toggle") and has(host, "host-wall")
+        assert host.locator('[data-testid="host-tab-status"]').bounding_box()["y"] == rail_y
         label = host.locator('[data-testid="btn-host-next"]').inner_text()
         assert "預言家請睜眼" in label or "女巫請睜眼" in label
         browser.close()

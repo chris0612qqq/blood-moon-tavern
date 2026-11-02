@@ -21,7 +21,7 @@ const TOAST_MS = 3000;
 const ERROR_LOG_LIMIT = 50;
 const CHAT_STICK_PX = 40;
 const UNREAD_MAX = 99;
-const CHANNEL_OF_TAB = Object.freeze({ chat: 'public', wolf: 'wolf' });
+const CHANNEL_OF_TAB = Object.freeze({ chat: 'public' });
 const SCREENS = {
   S0: s0, S1: s1, S2: s2, S3: s3, S4: s4, S5: s5, S6: s6, S7: s7, S8: s8, S9: s9, S10: s10,
   S11: s11, S12: s12, S13: s13, S14: s14, S15: s15, S17: s17, S18: s18, S20: s20, S21: s21,
@@ -86,9 +86,6 @@ function connBanner() {
 
 function tabs(server) {
   const list = [['game', t('tab.game')], ['chat', t('tab.chat')]];
-  if (server.me?.wolf_pack || server.host || (server.step === STEP.END && server.phase === 'game')) {
-    list.push(['wolf', t('tab.wolf')]);
-  }
   if (server.me?.role) list.push(['role', t('tab.role')]);
   list.push(['players', t('tab.players')]);
   if (server.is_admin) list.push(['broadcast', t('tab.broadcast')]);
@@ -101,7 +98,10 @@ function tabs(server) {
       testid: `tab-${id}`,
       onclick: () => {
         store.ui.tab = id;
-        if (channel) store.ui.unread = { ...store.ui.unread, [channel]: 0 };
+        if (channel) {
+          store.ui.chatChannel = channel; // 每次打開都先看公共，旁人瞄到也看不出是狼
+          store.ui.unread = { ...store.ui.unread, [channel]: 0 };
+        }
         changed();
       },
     }, label, unread ? h('span', { class: 'tab__unread', testid: `unread-${id}` }, unread > UNREAD_MAX ? `${UNREAD_MAX}+` : String(unread)) : null);
@@ -110,8 +110,7 @@ function tabs(server) {
 
 function tabContent(server) {
   switch (store.ui.tab) {
-    case 'chat': return chatTab(server, 'public');
-    case 'wolf': return chatTab(server, 'wolf');
+    case 'chat': return chatTab(server);
     case 'role': return roleTab(server);
     case 'players': return playersTab(server);
     case 'broadcast': return broadcastTab(server);
