@@ -203,8 +203,8 @@ export function lobbyAdmin(server, players, need) {
       confirm: need > 0 ? null : startConfirm(players),
       run: () => send('admin.start'),
     }),
-    store.health?.dev ? button(t('s5.addBots'), () => {
-      api(`/dev/bots?count=${Math.max(need, 1)}`, { method: 'POST', auth: loadTokens().admin });
-    }, { testid: 'btn-add-bots' }) : null,
+    button(t('s5.addBots'), () => {
+      api(`/api/admin/bots?count=${Math.max(need, 1)}`, { method: 'POST', auth: loadTokens().admin });
+    }, { testid: 'btn-add-bots' }),
   ];
 }

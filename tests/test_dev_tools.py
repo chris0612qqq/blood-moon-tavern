@@ -29,18 +29,28 @@ def dev_client(env: Env) -> Iterator[TestClient]:
 def test_S8_dev_routes_absent_in_production(env: Env) -> None:
     with TestClient(create_app(env.service, dev=False)) as client:
         assert client.get("/dev/state").status_code in (404, 405)
-        assert client.post("/dev/bots?count=1").status_code in (404, 405)
         assert client.get("/api/health").json()["dev"] is False
 
 
 def test_bots_require_admin(dev_client: TestClient, env: Env) -> None:
-    assert dev_client.post("/dev/bots?count=1").status_code == 401
+    assert dev_client.post("/api/admin/bots?count=1").status_code == 401
     assert dev_client.get("/api/health").json()["dev"] is True
+
+
+def test_production_admin_can_add_bots_in_lobby_only(env: Env) -> None:
+    """正式店也能加機器人，但只有管理員、只在大廳（SPEC v4.23）。"""
+    with TestClient(create_app(env.service, dev=False)) as client:
+        open_room(env, client)
+        headers = admin_headers(env, client)
+        assert client.post("/api/admin/bots?count=0", headers=headers).status_code == 400
+        assert len(client.post("/api/admin/bots?count=2", headers=headers).json()["added"]) == 2
+        for ws in list(_OPEN):
+            ws.close()
 
 
 def test_D1_bots_finish_a_game_alone(dev_client: TestClient, env: Env) -> None:
     open_room(env, dev_client)
-    res = dev_client.post("/dev/bots?count=8", headers=admin_headers(env, dev_client))
+    res = dev_client.post("/api/admin/bots?count=8", headers=admin_headers(env, dev_client))
     assert len(res.json()["added"]) == 8
     assert all(not row["offline"] for row in env.service.roster_rows())
     admin = Ws(dev_client, env.admin_token)
@@ -57,10 +67,12 @@ def test_D1_bots_finish_a_game_alone(dev_client: TestClient, env: Env) -> None:
 def test_D1_bots_respect_capacity_and_lobby(dev_client: TestClient, env: Env) -> None:
     open_room(env, dev_client)
     headers = admin_headers(env, dev_client)
-    assert len(dev_client.post("/dev/bots?count=25", headers=headers).json()["added"]) == 20
+    assert dev_client.post("/api/admin/bots?count=25", headers=headers).status_code == 400
+    assert len(dev_client.post("/api/admin/bots?count=19", headers=headers).json()["added"]) == 19
+    assert len(dev_client.post("/api/admin/bots?count=5", headers=headers).json()["added"]) == 1
     admin = Ws(dev_client, env.admin_token)
     admin.reply("admin.start")
-    assert dev_client.post("/dev/bots?count=1", headers=headers).status_code == 403
+    assert dev_client.post("/api/admin/bots?count=1", headers=headers).status_code == 403
     admin.close()
 
 
@@ -68,7 +80,7 @@ def test_D4_state_inspector(dev_client: TestClient, env: Env) -> None:
     assert dev_client.get("/dev/state").json()["state"] is None
     open_room(env, dev_client)
     headers = admin_headers(env, dev_client)
-    dev_client.post("/dev/bots?count=6", headers=headers)
+    dev_client.post("/api/admin/bots?count=6", headers=headers)
     admin = Ws(dev_client, env.admin_token)
     admin.reply("admin.start")
     body = dev_client.get("/dev/state").json()
@@ -78,7 +90,7 @@ def test_D4_state_inspector(dev_client: TestClient, env: Env) -> None:
 
 def test_host_gets_next_line_hint(dev_client: TestClient, env: Env) -> None:
     open_room(env, dev_client, "god")
-    dev_client.post("/dev/bots?count=8", headers=admin_headers(env, dev_client))
+    dev_client.post("/api/admin/bots?count=8", headers=admin_headers(env, dev_client))
     host = Ws(dev_client, env.admin_token)
     host.reply("admin.start")
     host.send("state.request")
