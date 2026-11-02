@@ -338,7 +338,7 @@ const TEXT = Object.freeze({
   'broadcast.text': '內容',
   'broadcast.speakOn': '念出來：開',
   'broadcast.speakOff': '念出來：關（只顯示文字）',
-  'broadcast.gap': '一支接一支，每支隔幾秒（空白＝同時，最多 {max} 秒）',
+  'broadcast.gap': '一支接一支：上一支開始念後隔幾秒換下一支（空白＝同時，最多 {max} 秒；字卡也適用）',
   'broadcast.nightWarn': '現在是晚上，只發給部分玩家時，旁人聽到可能猜出身分',
   'broadcast.send': '發送給 {n} 人',
   'chat.older': '載入更早的訊息',
