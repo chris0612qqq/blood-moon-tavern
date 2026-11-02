@@ -71,7 +71,7 @@ class AdminStore:
 
     def verify(self, username: str, password: str) -> bool:
         data = self.load()
-        name_ok = hmac.compare_digest(username, data["username"])
+        name_ok = hmac.compare_digest(username.strip(), data["username"])
         return verify_secret(password, data["password_hash"]) and name_ok
 
 

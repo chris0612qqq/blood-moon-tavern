@@ -49,3 +49,10 @@ def test_rejects_bad_input(
     with pytest.raises(SystemExit):
         setup_admin.main()
     assert not target.exists()
+
+
+def test_login_ignores_spaces_around_username(tmp_path: Path) -> None:
+    store = auth.AdminStore(tmp_path / "admin.json")
+    store.save("boss", "password1")
+    assert store.verify(" boss ", "password1")
+    assert not store.verify("Boss", "password1")  # 大小寫仍要一樣，所以輸入欄要關掉自動大寫
