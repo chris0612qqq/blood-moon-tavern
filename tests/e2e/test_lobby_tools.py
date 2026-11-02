@@ -302,9 +302,20 @@ def test_unread_badges_on_chat_and_wolf_tabs(server_url: str) -> None:  # noqa: 
         assert not has(page, "unread-chat")
         page.evaluate(STORE_MESSAGE, {**message, "id": 503})
         assert store(page, "s.ui.unread.public") == 0
-        # 狼人頻道分開算；這支手機沒有狼人分頁就不會有標記可看，數字仍獨立
+        # 狼人頻道分開算，只顯示在聊天分頁裡的按鈕，下方分頁不會多一個數字洩漏身分
+        page.evaluate("window.__bmt.ui.tab = 'game'; window.__bmt.server.me = { wolf_pack: {} };")
         page.evaluate(STORE_MESSAGE, {**message, "id": 504, "channel": "wolf"})
         assert store(page, "s.ui.unread.wolf") == 1
+        page.wait_for_timeout(200)
+        assert not has(page, "unread-chat")
+        press(page, "tab-chat")
+        wait(page, "tab-wolf")
+        assert "(1)" in page.locator('[data-testid="tab-wolf"]').inner_text()
+        press(page, "tab-wolf")
+        wait(page, "chat-list-wolf")
+        assert store(page, "s.ui.unread.wolf") == 0
+        press(page, "tab-chat")  # 重新打開聊天先回公共
+        wait(page, "chat-list-public")
         browser.close()
 
 
@@ -349,12 +360,13 @@ def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa:
         player.wait_for_function("window.__spoken.join('') === '請你說'")
         assert player.evaluate("window.__cancelled") is False
         assert admin.locator('[data-testid^="card-"]').count() == 21
+        assert admin.locator('[data-testid="card-quiet"]').bounding_box()["height"] < 50  # 矮一半
         assert not has(other, "toast")
         press(admin, f"broadcast-target-{target}")
         admin.wait_for_function(
             "document.querySelector('[data-testid=\"card-quiet\"]').disabled"
         )  # 沒選人不能按
-        # 管理員剛好是狼人時下方有 6 個分頁，最小手機也要放得下
+        # 管理員剛好是狼人時下方有 5 個分頁，最小手機也要放得下
         admin.evaluate(
             """() => {
               const s = window.__bmt;
@@ -365,7 +377,7 @@ def test_broadcast_tab_sends_to_chosen_phones(server_url: str) -> None:  # noqa:
         )
         admin.wait_for_timeout(100)
         tabs = admin.locator(".tab")
-        assert tabs.count() == 6
+        assert tabs.count() == 5
         assert admin.evaluate(
             "[...document.querySelectorAll('.tab')].every((t) => t.scrollWidth <= t.clientWidth)"
         )

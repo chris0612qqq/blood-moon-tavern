@@ -62,6 +62,8 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .card-group { color: #fc6; font-size: 15px; margin-top: 12px; }
 .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 76px; background: #444; border: 2px solid #777; border-radius: 4px; color: #fff; padding: 4px; font-size: 16px; }
 .cell .avatar { width: 36px; height: 36px; }
+.grid--compact .cell { min-height: 44px; }
+.cell--target { background: #2f4a5e; border-color: #6a9ab8; }
 .cell--on { border-color: #fc6; background: #665a33; }
 .cell--empty { border-style: dashed; }
 .cell__seat { font-size: 14px; color: #ccc; }
@@ -119,16 +121,16 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .act--vote { border-color: #c9a24a; } .act--vote .act__label { color: #e8c872; }
 
 /* 上帝控制台：常用按鈕固定在上方、三個標籤固定在側邊，只有內容區會滑 */
-.host-screen { display: flex; flex-direction: column; height: 100%; }
+.host-screen { display: flex; gap: 8px; height: 100%; }
+.host-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .host-pinned { flex: none; padding-bottom: 6px; }
 .host-pinned h1 { margin: 2px 0; }
 .host-pinned button.btn { min-height: 44px; margin: 3px 0; }
 .host-pinned .count { font-size: 24px; }
-.host-layout { flex: 1; min-height: 0; display: flex; gap: 8px; }
 .host-rail { flex: none; width: 62px; display: flex; flex-direction: column; gap: 6px; }
 .host-tab { min-height: 64px; padding: 4px; font-size: 14px; background: #3a3a3a; color: #ddd; border: 1px solid #777; border-radius: 4px; }
 .host-tab--on { background: #665a33; border-color: #fc6; color: #fff; }
-.host-content { flex: 1; min-width: 0; overflow-y: auto; }
+.host-content { flex: 1; min-height: 0; overflow-y: auto; }
 .host-content .grid button.btn { padding: 0 2px; } /* 六個字的台詞才放得下一行 */
 .host-tab__line { display: block; }
 .end-cause { flex: 1; min-width: 0; text-align: right; }

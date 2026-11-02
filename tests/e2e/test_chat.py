@@ -196,16 +196,21 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
         # ---- 夜晚：狼人頻道可用本名；公共頻道所有人只讀，草稿保留 ----
         wait_step(faceless, "WOLF")
         wait_open(faceless)
+        assert "狼" not in faceless.locator(".tabs").inner_text()  # 下方分頁看不出是狼
+        press(faceless, "tab-chat")
         press(faceless, "tab-wolf")
         send_chat(faceless, "今晚刀誰")
         assert not has(faceless, "chat-as-fake")  # 狼人頻道一律本名（SPEC A6）
         night_msg = wait_message(ally, "今晚刀誰")
+        press(ally, "tab-chat")
         press(ally, "tab-wolf")
         assert bubble_who(ally, night_msg).startswith(faceless_name)
         press(ally, "tab-game")
         press(faceless, "tab-game")
 
+        press(bystander, "tab-chat")
         assert not has(bystander, "tab-wolf")  # 好人沒有狼人頻道
+        press(bystander, "tab-game")
         assert (
             store(bystander, "(s.server.chat ?? []).some(m => m.content === '今晚刀誰')") is False
         )
@@ -335,6 +340,7 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
         # 夜晚匿名身分關閉：切換器消失，也不會誤用舊身分（另有單元測試涵蓋夜晚拒絕）
 
         # ---- 白天狼人頻道仍是本名，好人仍收不到 ----
+        press(faceless, "tab-chat")
         press(faceless, "tab-wolf")
         wait(faceless, "chat-list-wolf")  # 等分頁切完才檢查
         assert not has(faceless, "chat-as-fake")

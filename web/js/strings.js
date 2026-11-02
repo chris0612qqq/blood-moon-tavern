@@ -291,6 +291,7 @@ const TEXT = Object.freeze({
   'chat.dead': '你已出局，只能看',
   'chat.wolfDead': '死亡狼人只能看',
   'chat.spectator': '旁觀中，只能看',
+  'chat.public': '公共',
   'chat.asSelf': '我自己',
   'chat.asFake': '假扮：{name}',
   'chat.asWolf': '狼人',

@@ -75,7 +75,22 @@ function olderButton(channel, messages) {
   });
 }
 
-export function chatTab(server, channel) {
+function canSeeWolfChannel(server) {
+  return Boolean(server.me?.wolf_pack || server.host || (server.step === 'END' && server.phase === 'game'));
+}
+
+function channelButton(label, channel, active, testid, unread) {
+  return button(unread ? `${label} (${unread})` : label, () => {
+    store.ui.chatChannel = channel;
+    store.ui.unread = { ...store.ui.unread, [channel]: 0 };
+    store.ui.chatStick = true;
+    changed();
+  }, { small: true, kind: active ? 'suggest' : 'secondary', testid });
+}
+
+export function chatTab(server) {
+  const canSwitch = canSeeWolfChannel(server);
+  const channel = canSwitch ? store.ui.chatChannel : 'public';
   const messages = (server.chat ?? []).filter((m) => m.channel === channel);
   const block = postBlock(server, channel);
   const draftKey = `chat-${channel}`;
@@ -87,6 +102,9 @@ export function chatTab(server, channel) {
   const masked = canMask && store.ui.chatAs === 'wolf';
   const target = server.me?.disguise_info?.target;
   return h('div', { class: 'chat' },
+    canSwitch ? h('div', { class: 'row' },
+      channelButton(t('chat.public'), 'public', channel === 'public', 'chat-channel-public', 0),
+      channelButton(t('tab.wolf'), 'wolf', channel === 'wolf', 'tab-wolf', store.ui.unread.wolf)) : null,
     h('div', { class: 'chat__list', testid: `chat-list-${channel}` },
       olderButton(channel, messages),
       messages.length ? messages.map((m) => bubble(server, m)) : h('p', { class: 'hint center' }, t('chat.empty'))),

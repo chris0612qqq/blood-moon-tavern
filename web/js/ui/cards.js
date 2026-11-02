@@ -12,10 +12,10 @@ const CARD_GROUPS = Object.freeze([
 
 export const cardText = (card) => t(`card.${card.id}`);
 
-export function cardGrid(onPress, disabled = false) {
+export function cardGrid(onPress, { disabled = false, compact = false } = {}) {
   return h('div', { testid: 'sound-cards' }, CARD_GROUPS.map((group) => [
     h('div', { class: 'card-group', key: `title-${group.id}` }, t(`cardGroup.${group.id}`)),
-    h('div', { class: 'grid', key: group.id }, group.cards.map((card) => h('button', {
+    h('div', { class: compact ? 'grid grid--compact' : 'grid', key: group.id }, group.cards.map((card) => h('button', {
       class: 'cell',
       key: card.id,
       testid: `card-${card.id}`,
