@@ -254,6 +254,10 @@ export function field(name, label, o = {}) {
       type: o.type ?? 'text',
       inputmode: o.inputmode,
       autocomplete: o.autocomplete ?? 'off',
+      // iPhone 會把第一個字母自動變大寫、自動改字，帳號就對不上（使用者回報）
+      autocapitalize: 'none',
+      autocorrect: 'off',
+      spellcheck: 'false',
       oninput: (e) => {
         if (!e.isComposing) commit(e.target);
       },
