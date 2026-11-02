@@ -27,7 +27,7 @@ from server.auth import AdminStore
 ROOT = Path(__file__).resolve().parent.parent.parent
 MOBILE = {"width": 390, "height": 780}
 PLAYERS = 12
-GAME_TIMEOUT_SECONDS = 600
+GAME_TIMEOUT_SECONDS = 1000  # 一回合約 130 秒，互投後平票變多，可能拖到 6、7 回合
 
 pytestmark = pytest.mark.e2e
 
@@ -435,7 +435,7 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
         assert has(host, "btn-speak-toggle")  # 旁白開關在固定區
         host.evaluate(
             "window.__spokenCard = []; const real = speechSynthesis.speak.bind(speechSynthesis);"
-            "speechSynthesis.speak = (u) => { window.__spokenCard.push(u.text); real(u); };"
+            "speechSynthesis.speak = (u) => { window.__spokenCard.push(u.text); real(u); }; null;"
         )
         step_before = store(host, "s.server.step_seq")
         press(host, "card-quiet")
