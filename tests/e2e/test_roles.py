@@ -2,7 +2,7 @@
 
 腳本化的一局，8 位真人分頁：
 第 1 夜 狼刀村民、預言家查到狼、女巫救人 → 第 1 天投出獵人、獵人開槍帶走狼同伴、遺言
-→ 第 2 夜 狼刀預言家、女巫不再被告知被殺者並下毒 → 死亡的好人押注 → 結算核對死因與押注。
+→ 第 2 夜 狼刀預言家、女巫不再被告知被殺者並下毒 → 結算核對死因。
 """
 
 from __future__ import annotations
@@ -209,20 +209,21 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         assert store(villagers[1], "s.server.history.every((row) => !row.ballots)")
         finish_speeches(pages, "VOTE")
 
-        # ---- 第二輪：被提名者不能投，其他人只看得到被提名者 ----
-        wait(hunter, "screen-s14-watch")
-        voters = [p for p in pages if p not in (hunter, villagers[0], villagers[2])]
-        for page in voters:
+        # ---- 第二輪：3 位被提名者可以互投、不能投自己，其他人只看得到被提名者 ----
+        suspects = (hunter, villagers[0], villagers[2])
+        for page in pages:
             wait_open(page)
-            assert page.locator('[data-testid^="pick-cell-"]').count() == 4  # 3 位＋棄票
-            press(page, f"pick-cell-{id_of[hunter]}")
+            cells = 3 if page in suspects else 4  # 可選的被提名者＋棄票
+            assert page.locator('[data-testid^="pick-cell-"]').count() == cells
+            target = villagers[0] if page is hunter else hunter
+            press(page, f"pick-cell-{id_of[target]}")
             press(page, "btn-vote")
             page.wait_for_function(
                 "document.querySelector('[data-testid=\"vote-done\"]')"
                 " || window.__bmt.server.step !== 'VOTE'"
             )
-        wait(voters[0], "reveal-tally")
-        assert f"{name_of[hunter]} {len(voters)} 票" in text_of(voters[0], "reveal-tally")
+        wait(villagers[1], "reveal-tally")
+        assert f"{name_of[hunter]} {len(pages) - 1} 票" in text_of(villagers[1], "reveal-tally")
         shot(pages[0], "vote_done")
 
         # ---- 獵人：被放逐，確認框後帶走狼同伴 ----
@@ -310,19 +311,9 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         shot(villagers[1], "players_log")
         press(villagers[1], "tab-game")
 
-        # ---- 押注：死亡好人可押，死亡狼人沒有入口 ----
-        assert not has(wolf, "btn-bet")
-        wait(hunter, "btn-bet")
-        press(hunter, "btn-bet")
-        wait(hunter, "screen-s27")
-        press(hunter, f"bet-wolf-{id_of[faceless]}")
-        press(hunter, f"bet-faceless-{id_of[faceless]}")
-        shot(hunter, "bet")
-        press(hunter, "btn-bet-submit")
-        hunter.wait_for_function("window.__bmt.server.me.my_bet?.faceless_guess")
-        press(hunter, "btn-bet-close")
+        assert not has(hunter, "btn-bet")  # 押注已拿掉（SPEC v4.20）
 
-        # ---- 結算：死因與押注都公開 ----
+        # ---- 結算：死因公開 ----
         press(admin, "tab-players")
         press(admin, "btn-admin-end")
         press(admin, "dialog-confirm")
@@ -335,8 +326,6 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         assert "放逐" in text_of(target, f"end-cause-{id_of[hunter]}")
         assert "帥" in text_of(target, f"end-cause-{id_of[wolf]}")
         assert text_of(target, f"end-role-{id_of[faceless]}") == "千面狼"
-        bet = text_of(target, f"end-bet-{id_of[hunter]}")
-        assert "3 分" in bet and name_of[faceless] in bet  # 猜中狼 +1、猜中千面狼 +2
         shot(target, "end_truth")
         browser.close()
     assert errors == []

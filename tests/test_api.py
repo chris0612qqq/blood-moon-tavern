@@ -28,9 +28,9 @@ from server.engine import Engine
 from server.enums import Mode, PauseReason, Role, Step
 from server.errors import ErrorCode, GameError
 from server.main import build_default_service, create_app
-from server.migrations import MIGRATIONS, SchemaTooNew, upgrade_event
+from server.migrations import MIGRATIONS, SchemaTooNew, upgrade_event, upgrade_events
 from server.room import Paths, RoomService
-from server.state import SCHEMA_VERSION
+from server.state import SCHEMA_VERSION, GameState
 
 JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
@@ -1486,6 +1486,17 @@ def test_N9_chat_history_page_stays_under_limit(
     assert 0 < len(page["messages"]) < 3
     assert page["messages"][-1]["content"].startswith("第2句")  # 裁掉的是舊的，還能再往前翻
     a.close()
+
+
+def test_old_saves_drop_removed_bets() -> None:
+    """舊存檔的押注事件略過，快照裡多的 bets 欄位讀取時忽略（SPEC v4.20）。"""
+    rows = [
+        {"type": "step_entered", "schema_version": SCHEMA_VERSION},
+        {"type": "bet_set", "schema_version": SCHEMA_VERSION},
+    ]
+    assert [row["type"] for row in upgrade_events(rows)] == ["step_entered"]
+    dump = GameState(players=[], mode=Mode.AUTO).model_dump()
+    assert "bets" not in GameState.model_validate({**dump, "bets": {"p1": {}}}).model_dump()
 
 
 def _saw_broadcast_before_ack(ws: Ws) -> bool:

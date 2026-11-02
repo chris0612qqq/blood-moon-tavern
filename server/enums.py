@@ -103,7 +103,6 @@ class Action(StrEnum):
     HUNTER_SHOOT = "hunter.shoot"
     SPEAK_END = "speak.end"
     VOTE_CAST = "vote.cast"
-    BET_SET = "bet.set"
     CHAT_SEND = "chat.send"
     NARRATOR_TAKEOVER = "narrator.takeover"
     ADMIN_END = "admin.end"

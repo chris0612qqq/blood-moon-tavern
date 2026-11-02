@@ -118,6 +118,13 @@ export function voiceWarning(isNarrator) {
     : null;
 }
 
+/** 這支手機沒辦法自動保持螢幕亮著時，請玩家手動設定。 */
+export function wakeHint() {
+  return store.wake.supported && !store.wake.failed
+    ? null
+    : h('p', { class: 'hint', testid: 'wake-hint' }, t('wake.manual'));
+}
+
 /** 大廳名單，玩家畫面和上帝控制台共用。 */
 export function lobbyList(server, players, isAdmin) {
   const shown = dragOrder(players);
@@ -176,6 +183,7 @@ export function s5(server) {
         t('s5.count', { n: players.length, cap: server.room?.capacity ?? LIMITS.MAX_PLAYERS })),
       mine ? h('b', { testid: 'my-seat' }, t('s5.you', { seat: mine.seat })) : null),
     voiceWarning(Boolean(mine) && (server.room?.narrator_id ?? server.narrator_id) === mine.id),
+    wakeHint(),
     // 無管理員模式的管理員要先加入才能開始，否則自己會變旁觀者、也沒有旁白主機
     isAdmin && !server.me && server.room?.mode === 'auto'
       ? h('p', { class: 'hint center', testid: 'lobby-need-join' }, t('s5.joinFirst'))

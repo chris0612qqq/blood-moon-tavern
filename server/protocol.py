@@ -127,11 +127,6 @@ class WitchAct(ClientFrame):
     poison: Id | None = None
 
 
-class BetSet(ClientFrame):
-    wolves: list[Id] = Field(default_factory=list, max_length=balance.MAX_PLAYERS)
-    faceless: Id | None = None
-
-
 class PlayerRef(ClientFrame):
     player: Id
 
@@ -174,7 +169,6 @@ CLIENT_MESSAGES: Final[dict[str, type[ClientFrame]]] = {
     "hunter.shoot": OptionalTarget,
     "speak.end": Empty,
     "vote.cast": OptionalTarget,
-    "bet.set": BetSet,
     "admin.seat": AdminSeat,
     "admin.start": Empty,
     "admin.end": Empty,

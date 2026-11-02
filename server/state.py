@@ -77,11 +77,6 @@ class HunterShot(BaseModel):
     target: str | None = None
 
 
-class Bet(BaseModel):
-    wolves: list[str] = Field(default_factory=list)
-    faceless: str | None = None
-
-
 class Timers(BaseModel):
     """目前步驟的時間點。全部用同一個時鐘；暫停時換算成剩餘秒數（CODING_RULES L5）。"""
 
@@ -120,7 +115,6 @@ class GameState(BaseModel):
     witch_poison_used: bool = False
     nights: list[NightRecord] = Field(default_factory=list)
     votes: list[VoteRound] = Field(default_factory=list)
-    bets: dict[str, Bet] = Field(default_factory=dict)
     disguise: DisguiseState | None = None
 
     day_context: DayContext | None = None

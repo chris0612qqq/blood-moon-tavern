@@ -119,8 +119,6 @@ class BotBrain:
         me = view["me"]
         actor = Actor(player_id=player_id)
         step = Step(view["step"])
-        if not me["alive"] and me["can_bet"] and self._roll(0.02):
-            self._bet(actor, view)
         if self._roll(self.chat_rate):
             self._chat(actor, view, me)
         if not me["is_actor"] or (me["done"] and step not in VOTE_STEPS):
@@ -194,10 +192,6 @@ class BotBrain:
             return
         target = self._pick(targets) if targets and self._roll(0.9) else None
         self.send(actor, Action.VOTE_CAST, {"target": target})
-
-    def _bet(self, actor: Actor, view: dict[str, Any]) -> None:
-        others = [p["id"] for p in view["players"] if p["id"] != view["me"]["id"]]
-        self.send(actor, Action.BET_SET, {"wolves": [self._pick(others)], "faceless": None})
 
     def _chat(self, actor: Actor, view: dict[str, Any], me: dict[str, Any]) -> None:
         if me.get("can_disguise") and self._roll(0.5):

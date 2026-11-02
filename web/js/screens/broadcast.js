@@ -1,9 +1,10 @@
-// 管理員的「廣播」分頁（SPEC C4）：選玩家、打內容，只送到被選的手機。
+// 管理員的「廣播」分頁（SPEC C4）：選玩家，按字卡或打字，只送到被選的手機。
 import { h } from '../dom.js';
 import { send } from '../net.js';
 import { LIMITS } from '../protocol.js';
 import { changed, store } from '../store.js';
 import { t } from '../strings.js';
+import { cardGrid, cardText } from '../ui/cards.js';
 import { actionButton, button, field } from '../ui/common.js';
 import { NIGHT_STEPS } from './tabs.js';
 
@@ -27,6 +28,16 @@ function targetCell(player, chosen) {
   }, `#${player.seat} ${player.name}`);
 }
 
+/** 按下就發，可以一直按，所以不用會鎖住的 actionButton。 */
+async function sendCard(card, targets) {
+  const text = cardText(card);
+  const result = await send('admin.broadcast', { targets, text, speak: true, sound: card.sound });
+  store.ui.toast = result.ok
+    ? { key: 'broadcast.sent', params: { n: targets.length, text } }
+    : { key: 'broadcast.failed' };
+  changed();
+}
+
 export function broadcastTab(server) {
   const form = store.ui.form;
   const players = everyone(server);
@@ -45,13 +56,16 @@ export function broadcastTab(server) {
       changed();
     }, { testid: 'broadcast-all' }),
     h('div', { class: 'grid' }, players.map((p) => targetCell(p, chosen))),
+    partlyAtNight ? h('p', { class: 'error-text', testid: 'broadcast-night-warn' }, t('broadcast.nightWarn')) : null,
+    h('h2', {}, t('broadcast.cards')),
+    cardGrid((card) => sendCard(card, ordered), !chosen.length || store.conn !== 'online'),
+    h('h2', {}, t('broadcast.free')),
     field('broadcast_text', t('broadcast.text'), { maxlength: LIMITS.CHAT_MAX_CHARS }),
     button(store.ui.broadcastSpeak ? t('broadcast.speakOn') : t('broadcast.speakOff'), () => {
       store.ui.broadcastSpeak = !store.ui.broadcastSpeak;
       changed();
     }, { testid: 'broadcast-speak' }),
     field('broadcast_gap', t('broadcast.gap', { max: LIMITS.BROADCAST_MAX_INTERVAL }), { inputmode: 'numeric', maxlength: 2 }),
-    partlyAtNight ? h('p', { class: 'error-text', testid: 'broadcast-night-warn' }, t('broadcast.nightWarn')) : null,
     actionButton({
       id: 'btn-broadcast-send',
       label: t('broadcast.send', { n: chosen.length }),

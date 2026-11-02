@@ -424,13 +424,19 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
         assert not has(host, "line-wolf_open")
         if folder:
             host.screenshot(path=f"{folder}/host_status_tab.png")
-        press(host, "host-tab-reveal")
-        wait(host, "host-view-reveal")
-        assert has(host, "btn-host-next") and has(host, "host-deaths")
-        if folder:
-            host.screenshot(path=f"{folder}/host_reveal_tab.png")
+        assert not has(host, "host-tab-reveal")  # 揭曉併進簡報牆
         press(host, "host-tab-voice")
-        wait(host, "line-wolf_open")
+        wait(host, "card-quiet")
+        assert not has(host, "line-wolf_open")  # 舊的台詞按鈕先藏起來
+        assert has(host, "btn-speak-toggle")  # 旁白開關在固定區
+        host.evaluate(
+            "window.__spokenCard = []; const real = speechSynthesis.speak.bind(speechSynthesis);"
+            "speechSynthesis.speak = (u) => { window.__spokenCard.push(u.text); real(u); };"
+        )
+        step_before = store(host, "s.server.step_seq")
+        press(host, "card-quiet")
+        host.wait_for_function("window.__spokenCard.includes('安靜')")
+        assert store(host, "s.server.step_seq") == step_before  # 字卡不影響流程
         label = host.locator('[data-testid="btn-host-next"]').inner_text()
         assert "預言家請睜眼" in label or "女巫請睜眼" in label
         browser.close()
