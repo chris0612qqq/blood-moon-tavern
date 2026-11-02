@@ -27,3 +27,9 @@ def test_second_store_refuses_to_open() -> None:
         port = taken.getsockname()[1]
         assert run_public.already_open(port)
     assert not run_public.already_open(port)
+
+
+def test_dead_tunnel_is_replaced_at_once_flaky_one_after_three_fails() -> None:
+    assert run_public.needs_new_tunnel(alive=False, fails=1)
+    assert not run_public.needs_new_tunnel(alive=True, fails=2)
+    assert run_public.needs_new_tunnel(alive=True, fails=3)
