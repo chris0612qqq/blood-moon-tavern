@@ -336,7 +336,9 @@
 
 ## B1 架構與部署
 
-> **v4.21 改用 Tailscale Funnel（使用者決定，2026-11-02）**：家裡電腦用 Funnel 提供固定 HTTPS 網址 `https://<電腦名>.<tailnet>.ts.net`，朋友直接開這個網址（伺服器同時提供畫面），不需要 GitHub Pages、`server.json` 和 Cloudflare；網址不會變，所以「換網址」相關步驟取消。開店用 `start.bat`（`scripts/run_public.py`）：拒絕開發模式、檢查管理員帳密、阻止睡眠、伺服器當掉自動重啟、開 Funnel、從外面做健康檢查、關視窗時關 Funnel。正式伺服器用 8770 埠，和開發用的 8765 分開。以下 Cloudflare／Pages 的內容保留作紀錄。
+> **v4.22 回到 Cloudflare 臨時通道＋GitHub Pages（使用者決定，2026-11-02）**：Funnel 實測每個動作延遲約 2 秒（流量繞東京、香港中繼），Cloudflare 走台北機房約 0.1–0.4 秒，所以改回本節原本的設計。`start.bat`（`scripts/run_public.py`）負責：拒絕開發模式、檢查管理員帳密、阻止睡眠、伺服器當掉自動重啟、開通道、`gh workflow run pages.yml` 發布網址、等 Pages 上的 `server.json` 更新、從外面做健康檢查；連續 3 次打不通就換一條通道重新發布。前端每次開啟與連不上時重讀 `server.json`。正式伺服器用 8770 埠。cloudflared 放在 `%LOCALAPPDATA%\cloudflared\`，不用註冊帳號。以下 v4.21 的 Funnel 說明作廢。
+>
+> ~~v4.21 改用 Tailscale Funnel~~：家裡電腦用 Funnel 提供固定 HTTPS 網址 `https://<電腦名>.<tailnet>.ts.net`，朋友直接開這個網址（伺服器同時提供畫面），不需要 GitHub Pages、`server.json` 和 Cloudflare；網址不會變，所以「換網址」相關步驟取消。開店用 `start.bat`（`scripts/run_public.py`）：拒絕開發模式、檢查管理員帳密、阻止睡眠、伺服器當掉自動重啟、開 Funnel、從外面做健康檢查、關視窗時關 Funnel。正式伺服器用 8770 埠，和開發用的 8765 分開。以下 Cloudflare／Pages 的內容保留作紀錄。
 
 ```
 玩家手機（Safari / PWA）
@@ -856,6 +858,8 @@ P0 環境與骨架 → P1（M1）規則核心 → P2（M2）引擎、保密視�
 ## D2 變更紀錄
 
 **v4.17 → v4.18**（使用者要求，2026-11-01）：放逐改兩輪。第一輪每人投一位最懷疑的人（SUSPECT_VOTE），最高票與第二高票的所有人進第二輪，同票都進；全棄＝無人放逐。第一輪當下只公布被提名者與票數，誰投誰不公開、不進紀錄與看真相。被提名者依座位各申述 30 秒（DEFENSE，可提早結束）。第二輪（VOTE）只能投被提名者或棄票，被提名者不能投；只有 1 人被提名時投「放逐他」或棄票；同票或全棄＝無人放逐；全部活人都被提名＝無人放逐。第二輪揭曉公開每人幾票與誰投誰，紀錄只留第二輪誰投誰。兩輪都維持可改票一次、全員投完等 5 秒。上帝模式兩輪投票的開始都由主持人按，申述自動輪替。被放逐者仍有遺言。
+
+**v4.21 → v4.22**（使用者決定，2026-11-02）：Funnel 延遲太大，部署改回 Cloudflare 臨時通道＋GitHub Pages，詳見 B1 開頭。
 
 **v4.20 → v4.21**（使用者決定，2026-11-02）：部署改用 Tailscale Funnel，詳見 B1 開頭。
 

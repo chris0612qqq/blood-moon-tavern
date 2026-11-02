@@ -1,0 +1,43 @@
+# 開店時由 start.bat 觸發（SPEC B1）：把這次的通道網址寫成 server.json，連同 web/ 發布到 GitHub Pages。
+# 不產生 commit；朋友永遠開 https://chris0612qqq.github.io/blood-moon-tavern/
+name: pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      api:
+        description: 這次開店的伺服器網址（https://xxxx.trycloudflare.com）
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 寫入伺服器位址
+        env:
+          API: ${{ inputs.api }}
+        run: |
+          if ! printf '%s' "$API" | grep -Eq '^https://[a-z0-9-]+\.trycloudflare\.com$'; then
+            echo "網址格式不對：$API"
+            exit 1
+          fi
+          printf '{"api": "%s"}\n' "$API" > web/server.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4

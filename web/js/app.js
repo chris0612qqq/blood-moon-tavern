@@ -1,6 +1,6 @@
 // 進入點：畫面外框、單一時鐘、健康檢查。畫面內容由 router 依狀態決定（CODING_RULES V1）。
 import { h, render } from './dom.js';
-import { api, connect, retryNow, serverNow } from './net.js';
+import { api, connect, findServer, retryNow, serverNow } from './net.js';
 import { STEP } from './protocol.js';
 import { resolveScreen } from './router.js';
 import './wake.js';
@@ -231,7 +231,12 @@ function clockFrame() {
 }
 
 async function pollHealth() {
-  const res = await api('/api/health');
+  let res = await api('/api/health');
+  if (!res.ok) {
+    // 酒館可能換了網址（重開通道），重讀 server.json 再試一次
+    await findServer();
+    res = await api('/api/health');
+  }
   const before = store.health?.room?.state;
   store.healthFailed = !res.ok;
   store.health = res.ok ? res.data : store.health;
@@ -309,5 +314,7 @@ subscribe(draw);
 window.__bmt = store; // Playwright 比對畫面與 store 用（UI_RULES UT1），不含任何別人的秘密
 draw();
 requestAnimationFrame(clockFrame);
-pollHealth();
-setInterval(pollHealth, HEALTH_MS);
+findServer().then(() => {
+  pollHealth();
+  setInterval(pollHealth, HEALTH_MS);
+});
