@@ -35,6 +35,8 @@ jobs:
             exit 1
           fi
           printf '{"api": "%s"}\n' "$API" > web/server.json
+      - name: 檔案網址加版本號，手機才不會用快取的舊版
+        run: python3 scripts/bust_cache.py web "${{ github.run_id }}"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
