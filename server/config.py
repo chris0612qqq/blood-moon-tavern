@@ -38,12 +38,10 @@ MSG_ID_MEMORY: Final = 50
 SNAPSHOT_KEEP: Final = 20
 ROOM_PASSWORD_DIGITS: Final = 4
 PIN_DIGITS: Final = 4
-# 正式開店時 start.bat 會帶入 Tailscale Funnel 的固定網址（SPEC B1）
 ALLOWED_ORIGINS: Final = (
     "https://chris0612qqq.github.io",
     "http://localhost:8765",
     "http://127.0.0.1:8765",
-    *filter(None, [os.environ.get("BMT_PUBLIC_ORIGIN")]),
 )
 
 # 網路（CODING_RULES N7、N8、SPEC B1）

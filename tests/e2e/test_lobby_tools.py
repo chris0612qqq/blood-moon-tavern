@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, Route, sync_playwright
 
 from tests.e2e.test_full_game import (
     MOBILE,
@@ -281,6 +281,41 @@ def test_vote_switches_voters_back_to_the_game_tab(server_url: str) -> None:  # 
         browser.close()
 
 
+def test_finds_server_from_server_json(server_url: str) -> None:  # noqa: F811
+    """放在 GitHub Pages 時照 server.json 找伺服器；連不上就重讀（SPEC B1、CODING_RULES N4）。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        tunnel = {"api": "https://old-tunnel.trycloudflare.com"}
+        reads: list[str] = []
+
+        def serve_json(route: Route) -> None:
+            reads.append(tunnel["api"])
+            route.fulfill(json=tunnel)
+
+        page.route("**/server.json*", serve_json)
+        # 假的通道網址：把請求轉給測試伺服器，模擬舊通道已經掛了
+        page.route("https://old-tunnel.trycloudflare.com/**", lambda route: route.abort())
+
+        def new_tunnel(route: Route) -> None:
+            # 轉給測試伺服器；跨網域要允許，正式時是 GitHub Pages 在伺服器的白名單裡
+            real = page.request.fetch(
+                route.request.url.replace("https://new-tunnel.trycloudflare.com", server_url)
+            )
+            route.fulfill(
+                response=real, headers={**real.headers, "access-control-allow-origin": "*"}
+            )
+
+        page.route("https://new-tunnel.trycloudflare.com/**", new_tunnel)
+        page.goto(server_url)
+        page.wait_for_function("window.__bmt.healthFailed === true")
+        tunnel["api"] = "https://new-tunnel.trycloudflare.com"  # 開店程式換了通道
+        page.wait_for_function("window.__bmt.health?.version", timeout=20000)
+        assert reads[0] == "https://old-tunnel.trycloudflare.com"
+        assert "https://new-tunnel.trycloudflare.com" in reads
+        browser.close()
+
+
 def test_unread_badges_on_chat_and_wolf_tabs(server_url: str) -> None:  # noqa: F811
     with sync_playwright() as driver:
         browser = driver.chromium.launch()
@@ -472,9 +507,7 @@ def test_keeps_screen_awake_and_hints_when_it_cannot(server_url: str) -> None:  
         page.wait_for_function("window.__wake.requests === 2")
         # 不是 HTTPS 時瀏覽器沒有這個功能，大廳提示手動設定
         plain = browser.new_context(viewport=MOBILE).new_page()
-        plain.add_init_script(
-            "Object.defineProperty(navigator, 'wakeLock', { value: undefined });"
-        )
+        plain.add_init_script("Object.defineProperty(navigator, 'wakeLock', { value: undefined });")
         plain.goto(server_url)
         fill(plain, "input-join_password", "1234")
         join_form(plain, "玩乙", None)

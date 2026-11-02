@@ -12,7 +12,7 @@
 | P3 | ✔ 通關 | 2026-10-31 | 20 個真實 WebSocket 客戶端跑完整局（兩模式）；重啟接續；故障注入；T6 達標 |
 | P4 | ⏳ 等真人試玩 | | 程式完成；Playwright 跑過 12 人局兩種模式；通關要 6 人以上實際玩一局並處理回饋 |
 | P5 | 🔧 功能做完，待實機與流暢度 | | 使用者同意先做（2026-11-01），不等 P4 真人試玩；已做輸入防呆、鍵盤、返回鍵、女巫等待、QR Code、拖曳排座位、聊天舊訊息、UT2／UT3／UT4、逐畫面檢查（UI_CHECKLIST.md）；拿掉踢人（SPEC v4.16）。還不能算通關的原因見 UI_CHECKLIST.md |
-| P7 | 🔧 施工中 | | 改用 Tailscale Funnel（SPEC v4.21）；`start.bat` 已寫好，等使用者開通 Funnel 與設定正式管理員帳密後實測 |
+| P7 | 🔧 施工中 | | Funnel 實測延遲 2 秒，改回 Cloudflare＋GitHub Pages（SPEC v4.22）；正式管理員帳密已設定；cloudflared 已下載到 %LOCALAPPDATA%\cloudflared（Cloudflare 簽章驗證過）；等開啟 GitHub Pages 後實測 |
 | P6、P8、P9 | ☐ | | |
 
 ## T6 效能基準（scripts/bench_t6.py，30 分鐘）

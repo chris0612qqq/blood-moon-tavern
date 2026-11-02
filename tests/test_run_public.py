@@ -7,14 +7,10 @@ import pytest
 from scripts import run_public
 
 
-def test_public_origin_from_tailscale_status() -> None:
-    status = {"Self": {"DNSName": "desktop-abc.tail123.ts.net."}}
-    assert run_public.public_origin(status) == "https://desktop-abc.tail123.ts.net"
-
-
-def test_not_logged_in_stops() -> None:
-    with pytest.raises(SystemExit):
-        run_public.public_origin({"Self": {"DNSName": ""}})
+def test_finds_tunnel_url_in_cloudflared_output() -> None:
+    line = "2026-11-02T08:25:10Z INF |  https://vista-sunglasses-gallery.trycloudflare.com  |"
+    assert run_public.find_tunnel_url(line) == "https://vista-sunglasses-gallery.trycloudflare.com"
+    assert run_public.find_tunnel_url("INF Registered tunnel connection") is None
 
 
 def test_dev_mode_never_goes_public() -> None:
