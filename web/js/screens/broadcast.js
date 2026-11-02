@@ -29,9 +29,9 @@ function targetCell(player, chosen) {
 }
 
 /** 按下就發，可以一直按，所以不用會鎖住的 actionButton。 */
-async function sendCard(card, targets) {
+async function sendCard(card, targets, interval) {
   const text = cardText(card);
-  const result = await send('admin.broadcast', { targets, text, speak: true, sound: card.sound });
+  const result = await send('admin.broadcast', { targets, text, speak: true, sound: card.sound, interval_s: interval });
   store.ui.toast = result.ok
     ? { key: 'broadcast.sent', params: { n: targets.length, text } }
     : { key: 'broadcast.failed' };
@@ -48,6 +48,8 @@ export function broadcastTab(server) {
   const text = (form.broadcast_text ?? '').trim();
   const allChosen = chosen.length === ids.length && ids.length > 0;
   const partlyAtNight = NIGHT_STEPS.has(server.step) && chosen.length > 0 && !allChosen;
+  // 字卡和打字共用：從上一支開始念算起，隔幾秒換下一支（念的時間不用等完，聲音會疊在一起）
+  const interval = Math.min(Number(form.broadcast_gap) || 0, LIMITS.BROADCAST_MAX_INTERVAL);
   return [
     h('h1', { testid: 'view-broadcast' }, t('tab.broadcast')),
     h('p', { class: 'hint' }, t('broadcast.hint')),
@@ -57,15 +59,15 @@ export function broadcastTab(server) {
     }, { testid: 'broadcast-all' }),
     h('div', { class: 'grid' }, players.map((p) => targetCell(p, chosen))),
     partlyAtNight ? h('p', { class: 'error-text', testid: 'broadcast-night-warn' }, t('broadcast.nightWarn')) : null,
+    field('broadcast_gap', t('broadcast.gap', { max: LIMITS.BROADCAST_MAX_INTERVAL }), { inputmode: 'numeric', maxlength: 2 }),
     h('h2', {}, t('broadcast.cards')),
-    cardGrid((card) => sendCard(card, ordered), { disabled: !chosen.length || store.conn !== 'online', compact: true }),
+    cardGrid((card) => sendCard(card, ordered, interval), { disabled: !chosen.length || store.conn !== 'online', compact: true }),
     h('h2', {}, t('broadcast.free')),
     field('broadcast_text', t('broadcast.text'), { maxlength: LIMITS.CHAT_MAX_CHARS }),
     button(store.ui.broadcastSpeak ? t('broadcast.speakOn') : t('broadcast.speakOff'), () => {
       store.ui.broadcastSpeak = !store.ui.broadcastSpeak;
       changed();
     }, { testid: 'broadcast-speak' }),
-    field('broadcast_gap', t('broadcast.gap', { max: LIMITS.BROADCAST_MAX_INTERVAL }), { inputmode: 'numeric', maxlength: 2 }),
     actionButton({
       id: 'btn-broadcast-send',
       label: t('broadcast.send', { n: chosen.length }),
@@ -74,7 +76,7 @@ export function broadcastTab(server) {
         targets: ordered,
         text,
         speak: store.ui.broadcastSpeak,
-        interval_s: Math.min(Number(form.broadcast_gap) || 0, LIMITS.BROADCAST_MAX_INTERVAL),
+        interval_s: interval,
       }),
     }),
   ];
