@@ -216,7 +216,7 @@ def test_someone_joining_during_a_drag_does_not_lose_it(server_url: str) -> None
             """async () => {
               const { api } = await import('/js/net.js');
               const { loadTokens } = await import('/js/session.js');
-              await api('/dev/bots?count=1', { method: 'POST', auth: loadTokens().admin });
+              await api('/api/admin/bots?count=1', { method: 'POST', auth: loadTokens().admin });
             }"""
         )
         page.wait_for_function("(n) => window.__bmt.server.roster.length > n", arg=count)
