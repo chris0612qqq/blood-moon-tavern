@@ -19,14 +19,13 @@ VERSION: Final = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 HOST: Final = "127.0.0.1"
 PORT: Final = 8765
-PROTOCOL_VERSION: Final = 6
+PROTOCOL_VERSION: Final = 7
 
 DEV_MODE: Final = os.environ.get("DEV_MODE") == "1"
 TIME_SCALE: Final = float(os.environ.get("TIME_SCALE", "1")) if DEV_MODE else 1.0
 
 # 功能開關（CODING_RULES R6）：新功能先關著做完、試玩後再打開
 FEATURES: Final[dict[str, bool]] = {
-    "bets": True,
     "ambient_sound": True,
 }
 

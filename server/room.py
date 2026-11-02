@@ -27,7 +27,7 @@ from server.enums import Action, Channel, ChatKind, Mode, PauseReason, Step
 from server.errors import ErrorCode, GameError
 from server.events import Event, EventType
 from server.hub import Connection, Session, Socket
-from server.migrations import SchemaTooNew, upgrade_event, upgrade_snapshot
+from server.migrations import SchemaTooNew, upgrade_events, upgrade_snapshot
 from server.modes import Actor
 from server.presence import PresenceAction, PresenceMonitor
 from server.rng import GameRng
@@ -1195,8 +1195,8 @@ class RoomService:
         assert room.game_id is not None
         try:
             events = [
-                Event.model_validate(upgrade_event(raw))
-                for raw in self.db.load_event_rows(room.game_id)
+                Event.model_validate(raw)
+                for raw in upgrade_events(self.db.load_event_rows(room.game_id))
             ]
         except SchemaTooNew:
             room.unrestorable = True

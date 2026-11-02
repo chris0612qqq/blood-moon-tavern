@@ -367,7 +367,7 @@ class Engine:
         if step is Step.DEFENSE:
             if state.speak_queue:
                 return Step.DEFENSE
-            # 被提名者第二輪不投；全部活人都被提名就沒有人能投（SPEC A5.4）
+            # 只有 2 位被提名者時他們不投；3 位以上可以互投（SPEC A5.4）
             return Step.VOTE if self._final_voters() and self._alive_nominees() else Step.REVEAL
         if step is Step.VOTE:
             return Step.REVEAL
@@ -417,8 +417,11 @@ class Engine:
         return [p for p in state.vote_round().nominees or [] if state.player(p).alive]
 
     def _final_voters(self) -> list[str]:
+        alive = rules.alive_players(self.state)
+        if len(self._alive_nominees()) >= balance.MUTUAL_VOTE_MIN_NOMINEES:
+            return [p.id for p in alive]
         nominated = self.state.vote_round().nominees or []
-        return [p.id for p in rules.alive_players(self.state) if p.id not in nominated]
+        return [p.id for p in alive if p.id not in nominated]
 
     def _plan_actors(self, step: Step) -> list[str]:
         state = self.state

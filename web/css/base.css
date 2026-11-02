@@ -55,6 +55,7 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .input--error { border: 2px solid #e66; }
 
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+.card-group { color: #fc6; font-size: 15px; margin-top: 12px; }
 .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 76px; background: #444; border: 2px solid #777; border-radius: 4px; color: #fff; padding: 4px; font-size: 16px; }
 .cell .avatar { width: 36px; height: 36px; }
 .cell--on { border-color: #fc6; background: #665a33; }

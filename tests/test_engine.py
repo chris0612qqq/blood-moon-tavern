@@ -938,7 +938,8 @@ class TestTwoRoundVote:
         self._at_suspects(game)
         self._cast(game, {"p3": "p1", "p4": "p2", "p5": "p6"})
         game.wait_for(Step.VOTE)
-        voters = list(game.state.actors)
+        nominees = game.state.vote_round().nominees or []
+        voters = [voter for voter in game.state.actors if voter not in nominees]
         half = len(voters) // 2
         for i, voter in enumerate(voters[: half * 2]):  # 單數時多的一人不投
             game.act(voter, Action.VOTE_CAST, target="p1" if i < half else "p2")
@@ -946,18 +947,39 @@ class TestTwoRoundVote:
         game.wait_for(Step.REVEAL)
         assert game.state.vote_round().exiled is None and game.state.line_id == "tie"
 
-    def test_everyone_nominated_means_no_second_round(self, game: Game) -> None:
-        self._at_suspects(game)
-        alive = list(game.state.actors)
-        self._cast(game, {voter: alive[(i + 1) % len(alive)] for i, voter in enumerate(alive)})
+    def _finish_defense(self, game: Game) -> None:
         game.wait_for(Step.DEFENSE)
-        for _ in range(len(alive)):
+        for _ in range(len(game.state.players)):
             if game.state.step is Step.DEFENSE:
                 game.wait_for(Step.DEFENSE)
                 game.act(str(game.state.current_speaker), Action.SPEAK_END)
                 game.run(1)
-        game.wait_for(Step.REVEAL)
-        assert game.state.vote_round().exiled is None
+        game.wait_for(Step.VOTE)
+
+    def test_three_nominees_vote_each_other_but_not_themselves(self, game: Game) -> None:
+        self._at_suspects(game)
+        alive = list(game.state.actors)
+        self._cast(game, {"p3": "p1", "p4": "p2", "p5": "p6"})
+        self._finish_defense(game)
+        assert set(game.state.vote_round().nominees or []) == {"p1", "p2", "p6"}
+        assert set(game.state.actors) == set(alive)
+        with pytest.raises(GameError):
+            game.act("p1", Action.VOTE_CAST, target="p1")
+        game.act("p1", Action.VOTE_CAST, target="p2")
+        assert game.state.vote_round().ballots["p1"] == "p2"
+
+    def test_two_nominees_do_not_vote(self, game: Game) -> None:
+        self._at_suspects(game)
+        self._cast(game, {"p3": "p1", "p4": "p2"})
+        self._finish_defense(game)
+        assert not {"p1", "p2"} & set(game.state.actors)
+
+    def test_everyone_nominated_can_still_vote(self, game: Game) -> None:
+        self._at_suspects(game)
+        alive = list(game.state.actors)
+        self._cast(game, {voter: alive[(i + 1) % len(alive)] for i, voter in enumerate(alive)})
+        self._finish_defense(game)
+        assert set(game.state.actors) == set(alive)
 
 
 class TestChat:
@@ -1088,36 +1110,6 @@ class TestWolfMask:
         god.state.step = Step.DAY_SPEAK
         with pytest.raises(GameError):
             self._mask(god, HOST)
-
-
-class TestBets:
-    def test_dead_village_can_bet_and_change(self, game: Game) -> None:
-        game.to_wolf_step()
-        game.night("p1")
-        game.act("p1", Action.BET_SET, wolves=["p4"], faceless="p4")
-        game.act("p1", Action.BET_SET, wolves=["p5"], faceless=None)
-        assert game.state.bets["p1"].wolves == ["p5"]
-
-    def test_alive_and_outsider_cannot_bet(self, game: Game) -> None:
-        game.to_wolf_step()
-        for who in ("p2", "p1", "late"):
-            with pytest.raises(GameError):
-                game.act(who, Action.BET_SET, wolves=[], faceless=None)
-
-    def test_dead_wolf_cannot_bet(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        game = Game(monkeypatch)
-        game.ack_all()
-        game.wait_for(Step.WOLF)
-        game.night(None, witch={"poison": "p5"})
-        with pytest.raises(GameError):
-            game.act("p5", Action.BET_SET, wolves=[], faceless=None)
-
-    def test_feature_flag(self, game: Game, monkeypatch: pytest.MonkeyPatch) -> None:
-        game.to_wolf_step()
-        game.night("p1")
-        monkeypatch.setitem(__import__("server.config").config.FEATURES, "bets", False)
-        with pytest.raises(GameError):
-            game.act("p1", Action.BET_SET, wolves=[], faceless=None)
 
 
 class TestNarrator:
@@ -1370,7 +1362,7 @@ class TestReplayAndRestore:
     def test_L24_restore_with_expired_timer_fires_after_resume(self, game: Game) -> None:
         game.to_wolf_step()
         game.clock.advance(balance.NIGHT_STEP_SECONDS + 100)
-        game.engine.emit(EventType.BET_SET, player="p1", wolves=[], faceless=None)
+        game.engine.emit(EventType.CARD_RESHOWN, player="p1")
         game.engine.flush()
         clock = FakeClock(5.0)
         engine = Engine.restore(game.engine.log, clock, GameRng(2))

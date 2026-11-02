@@ -58,6 +58,8 @@ WITCH_MIN_SECONDS_HIGH: Final = 15
 VOTE_ALL_CAST_GRACE_SECONDS: Final = 5
 # 第一輪被投的人少於這個數就不進第二輪，直接照票數決定；兩人同票例外（SPEC A5.4）
 SECOND_ROUND_MIN_TARGETS: Final = 3
+# 第二輪被提名到這個人數，被提名者也能互投（不能投自己），投票人才不會只剩一兩個（SPEC A5.4）
+MUTUAL_VOTE_MIN_NOMINEES: Final = 3
 RESUME_COUNTDOWN_SECONDS: Final = 2.5
 HOST_EXTEND_SECONDS: Final = 30
 
@@ -81,10 +83,6 @@ NAG_PRESSES: Final[tuple[int, ...]] = (5, 9)
 # 看真相最多列幾夜（SPEC A8.7）
 TRUTH_MAX_NIGHTS: Final = 7
 
-# 押注計分（SPEC A13）
-BET_WOLF_HIT: Final = 1
-BET_WOLF_MISS: Final = -1
-BET_FACELESS_HIT: Final = 2
 
 # 開場音效長度（ART 13.3），決定步驟間隔（SPEC A8.2）
 SFX_SECONDS: Final[dict[str, float]] = {

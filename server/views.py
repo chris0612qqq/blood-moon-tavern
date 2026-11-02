@@ -244,7 +244,6 @@ def _me_block(state: GameState, player: PlayerState) -> Message:
         "is_actor": is_actor,
         "done": player.id in state.done,
         "acked": player.acked,
-        "can_bet": rules.can_bet(state, player.id) and not _ended(state),
     }
     action = _STEP_ACTIONS.get(state.step)
     if is_actor and action is not None:
@@ -255,9 +254,6 @@ def _me_block(state: GameState, player: PlayerState) -> Message:
             "target": votes.ballots[player.id],
             "can_change": player.id not in votes.changed,
         }
-    if player.id in state.bets:
-        bet = state.bets[player.id]
-        block["my_bet"] = {"wolves": list(bet.wolves), "faceless_guess": bet.faceless}
     if is_wolf(player.role):
         block["wolf_pack"] = _wolf_block(state, player)
         block["can_wolf_mask"] = rules.can_wolf_mask(state, player.id)
@@ -272,7 +268,7 @@ def _me_block(state: GameState, player: PlayerState) -> Message:
 
 
 def host_block(state: GameState) -> Message:
-    """上帝主持人看得到全部（SPEC A3），押注例外（SPEC A13）。"""
+    """上帝主持人看得到全部（SPEC A3）。"""
     block: Message = {
         "actors": list(state.actors),
         "done": list(state.done),
@@ -363,15 +359,6 @@ def truth_block(state: GameState, chat: Sequence[Message] = ()) -> Message:
             {"id": m["id"], "real_author": m["real_author"], "display": m["display"]}
             for m in chat
             if m["disguise_period"] is not None or m["is_wolf_mask"]
-        ],
-        "bets": [
-            {
-                "player_id": score.player_id,
-                "score": score.score,
-                "rank": score.rank,
-                **state.bets[score.player_id].model_dump(),
-            }
-            for score in rules.score_bets(state.bets, roles)
         ],
     }
 
@@ -511,7 +498,7 @@ def private_messages(
                     "silent": rules.is_night_step(state.step),
                 }
             )
-    elif event.type in (EventType.VOTE_CAST, EventType.BET_SET, EventType.PLAYER_DIED):
+    elif event.type in (EventType.VOTE_CAST, EventType.PLAYER_DIED):
         subject = data.get("voter") or data.get("player")
         if me is not None and me.id == subject:
             out.append({"t": "me", **_me_block(state, me)})

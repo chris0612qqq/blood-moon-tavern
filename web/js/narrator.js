@@ -12,6 +12,8 @@ const CANCEL_SETTLE_MS = 60;
 const UNLOCK_TEXT = '。';
 // 留住目前的語音物件：有些瀏覽器會把沒人參照的語音回收掉，念到一半就停
 let current = null;
+const queued = [];
+const QUEUE_KEEP = 20;
 
 store.voice = { supported: Boolean(window.speechSynthesis), unlocked: false, voices: 0, name: '', last: '' };
 
@@ -73,6 +75,29 @@ export function speak(text) {
   }
 }
 
+/** 排在目前的話後面念，不打斷：字卡要能連按湊成一句（使用者決定）。 */
+export function speakAfter(text) {
+  const synth = window.speechSynthesis;
+  if (!synth) return false;
+  try {
+    const utterance = build(text, 1);
+    utterance.onstart = () => {
+      store.voice.unlocked = true;
+      report('started');
+    };
+    utterance.onerror = (event) => report(`error:${event.error ?? ''}`);
+    queued.push(utterance);
+    if (queued.length > QUEUE_KEEP) queued.shift();
+    synth.resume();
+    synth.speak(utterance);
+    report('requested');
+    return true;
+  } catch (err) {
+    report(`error:${err}`);
+    return false;
+  }
+}
+
 function unlockOnFirstTap() {
   if (store.voice.unlocked || !window.speechSynthesis) return;
   try {
@@ -109,5 +134,5 @@ export function onNarrate(msg) {
 
 /** 收到定向廣播：伺服器只送給被指定的手機，所以不看是不是旁白主機。音效（msg.sound）P8 才接。 */
 export function onBroadcast(msg) {
-  if (msg.speak) speak(msg.text);
+  if (msg.speak) speakAfter(msg.text);
 }

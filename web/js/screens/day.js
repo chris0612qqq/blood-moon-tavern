@@ -1,4 +1,4 @@
-// S11 天亮、S12 獵人、S13 發言、S14 投票、S15 揭曉、S16 暫停、S17 死亡、S22 遺言、S27 押注。
+// S11 天亮、S12 獵人、S13 發言、S14 投票、S15 揭曉、S16 暫停、S17 死亡、S22 遺言。
 import { h } from '../dom.js';
 import { send } from '../net.js';
 import { changed, store } from '../store.js';
@@ -22,7 +22,6 @@ export function s11(server) {
       // 公布和死者是兩則訊息，中間可能畫一次：有人要死就不能先說平安夜
       : (row?.saved || server.dawn_count ? null : h('p', { class: 'big center', testid: 'peaceful' }, t('s11.peaceful'))),
     row?.saved ? h('p', { class: 'center', testid: 'dawn-saved' }, t('s11.saved', { name: nameOf(server, row.saved) })) : null,
-    betEntry(server),
   ];
 }
 
@@ -44,7 +43,6 @@ export function s12(server) {
     return [
       h('h1', { class: 'center', testid: 'screen-s12' }, t('s12.others', { name: nameOf(server, hunter) })),
       countdown(server, t('s12.timeout')),
-      betEntry(server),
     ];
   }
   if (me.done) return h('p', { class: 'center' }, t('done'));
@@ -133,7 +131,6 @@ export function s13(server) {
     mine && !me.done
       ? actionButton({ id: 'btn-speak-end', label: t('s13.end'), run: () => send('speak.end') })
       : null,
-    betEntry(server),
   ];
 }
 
@@ -147,7 +144,6 @@ export function s14(server) {
       countdown(server),
       progress,
       suspectBoard(server),
-      betEntry(server),
     ];
   }
   const vote = me.my_vote;
@@ -222,7 +218,6 @@ export function s15(server) {
     tallyLine(server, ballots),
     ballots.map(([from, to]) => h('div', { class: 'list-row', key: from },
       t('s15.ballot', { from: nameOf(server, from), to: to ? nameOf(server, to) : t('s14.abstain') }))),
-    betEntry(server),
   ];
 }
 
@@ -241,7 +236,6 @@ export function s17(server) {
   return [
     h('h1', { class: 'center', testid: 'screen-s17' }, t('s17.title')),
     h('p', { class: 'center hint' }, t('s7.title')),
-    betEntry(server),
   ];
 }
 
@@ -284,61 +278,5 @@ export function s22(server) {
       ]
       : null,
   ];
-}
-
-/** 好人陣營的死者才有押注入口（SPEC A13、S17）。 */
-function betEntry(server) {
-  if (!server.me?.can_bet) return null;
-  return button(t('s17.bet'), () => { store.ui.overlay = 'S27'; changed(); }, { testid: 'btn-bet' });
-}
-
-export function s27() {
-  const server = store.server;
-  const close = () => { store.ui.overlay = null; changed(); };
-  if (!server?.me?.can_bet) {
-    return [h('h1', {}, t('s27.title')), button(t('common.close'), close)];
-  }
-  const me = server.me;
-  const limit = wolfTotal(server);
-  const others = server.players.filter((p) => p.id !== me.id).map((p) => p.id);
-  const form = store.ui.form;
-  const wolves = form.bet_wolves ?? me.my_bet?.wolves ?? [];
-  const faceless = form.bet_faceless !== undefined ? form.bet_faceless : (me.my_bet?.faceless_guess ?? null);
-  const toggle = (id) => {
-    const list = form.bet_wolves ?? [...wolves];
-    const index = list.indexOf(id);
-    if (index >= 0) list.splice(index, 1);
-    else if (list.length < limit) list.push(id);
-    else store.ui.toast = { key: 's27.limit', params: { n: limit } };
-    form.bet_wolves = list;
-    changed();
-  };
-  const grid = (prefix, active, onPick) => h('div', { class: 'grid' }, others.map((id) => h('button', {
-    class: `cell ${active(id) ? 'cell--on' : ''}`,
-    key: `${prefix}-${id}`,
-    testid: `${prefix}-${id}`,
-    onclick: () => onPick(id),
-  }, nameOf(server, id))));
-  return [
-    h('h1', { testid: 'screen-s27' }, t('s27.title')),
-    h('p', { class: 'hint' }, t('s27.limit', { n: limit })),
-    grid('bet-wolf', (id) => wolves.includes(id), toggle),
-    h('p', {}, t('s27.faceless')),
-    grid('bet-faceless', (id) => faceless === id, (id) => {
-      form.bet_faceless = faceless === id ? null : id;
-      changed();
-    }),
-    actionButton({
-      id: 'btn-bet-submit',
-      label: t('s27.submit'),
-      run: () => send('bet.set', { wolves, faceless }),
-    }),
-    button(t('common.close'), close, { testid: 'btn-bet-close' }),
-  ];
-}
-
-// 狼人總數公開（SPEC S26 規則速查有本局配置），由配角色表查，不靠秘密資料
-function wolfTotal(server) {
-  return store.wolfCount?.(server.players.length) ?? 1;
 }
 

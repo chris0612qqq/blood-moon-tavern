@@ -13,7 +13,7 @@ from server.errors import ErrorCode, GameError
 from server.rng import GameRng
 from server.roles import deal_sequence, is_wolf, night_step_pairs, role_def, roles_acting_in
 from server.rules import Consensus, RoleRecord
-from server.state import Bet, HunterShot, NightRecord
+from server.state import HunterShot, NightRecord
 from tests.helpers import EIGHT, make_state
 
 
@@ -370,51 +370,6 @@ def test_bitten_hunter_public_only_when_shooting() -> None:
     assert not rules.role_is_public(state, hunter)
     state.hunter_shots.append(HunterShot(round_no=1, hunter="p6", target=None))
     assert rules.role_is_public(state, hunter)
-
-
-class TestBets:
-    def test_can_bet_only_dead_village(self) -> None:
-        state = make_state(EIGHT, dead={1: DeathCause.WOLF, 4: DeathCause.VOTE})
-        assert rules.can_bet(state, "p1")
-        assert not rules.can_bet(state, "p2")  # 還活著
-        assert not rules.can_bet(state, "p4")  # 狼陣營
-
-    @pytest.mark.parametrize(
-        "bet",
-        [
-            Bet(wolves=["p2", "p3", "p4"]),  # 超過狼人總數
-            Bet(wolves=["p2", "p2"]),  # 重複
-            Bet(wolves=["p1"]),  # 自己
-            Bet(faceless="p1"),  # 自己
-            Bet(wolves=["nope"]),  # 不是玩家
-        ],
-    )
-    def test_validate_rejects(self, bet: Bet) -> None:
-        with pytest.raises(GameError):
-            rules.validate_bet(make_state(EIGHT), "p1", bet)
-
-    def test_validate_accepts(self) -> None:
-        rules.validate_bet(make_state(EIGHT), "p1", Bet(wolves=["p4", "p5"], faceless="p4"))
-
-    def test_score_and_ties(self) -> None:
-        roles = {"w1": Role.FACELESS, "w2": Role.WOLF, "v": Role.VILLAGER, "s": Role.SEER}
-        scores = rules.score_bets(
-            {
-                "a": Bet(wolves=["w1", "w2"], faceless="w1"),  # 2 + 2
-                "b": Bet(wolves=["w2", "v"], faceless="w2"),  # 1 - 1
-                "c": Bet(wolves=["v", "s"]),  # -2 → 0
-                "d": Bet(wolves=["w2"]),  # 1
-                "e": Bet(wolves=["w1"]),  # 1
-            },
-            roles,
-        )
-        assert [(s.player_id, s.score, s.rank) for s in scores] == [
-            ("a", 4, 1),
-            ("d", 1, 2),
-            ("e", 1, 2),
-            ("b", 0, 4),
-            ("c", 0, 4),
-        ]
 
 
 class TestDirectExile:

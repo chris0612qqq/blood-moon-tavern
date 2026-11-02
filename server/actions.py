@@ -21,7 +21,7 @@ from server.errors import ErrorCode, GameError
 from server.events import EventType
 from server.modes import Actor, can_resume
 from server.roles import is_wolf
-from server.state import Bet, DisguisePeriod, GameState, Timers
+from server.state import DisguisePeriod, GameState, Timers
 
 if TYPE_CHECKING:
     from server.engine import Engine
@@ -251,22 +251,6 @@ def _maybe_start_vote_grace(engine: Engine) -> None:
     updated = timing.model_copy()
     updated.grace_until = grace
     engine.emit(EventType.TIMERS_SET, timers=updated.model_dump())
-
-
-def _bet_set(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
-    player_id = actor.player_id
-    state = engine.state
-    if (
-        not config.FEATURES["bets"]
-        or player_id is None
-        or state.step is Step.END
-        or not state.has_player(player_id)
-        or not rules.can_bet(state, player_id)
-    ):
-        raise _fail(ErrorCode.FORBIDDEN)
-    bet = Bet(wolves=list(payload.get("wolves", [])), faceless=payload.get("faceless"))
-    rules.validate_bet(state, player_id, bet)
-    engine.emit(EventType.BET_SET, player=player_id, wolves=bet.wolves, faceless=bet.faceless)
 
 
 # ---- 聊天 ----
@@ -591,7 +575,6 @@ HANDLERS: dict[Action, Handler] = {
     Action.HUNTER_SHOOT: _hunter_shoot,
     Action.SPEAK_END: _speak_end,
     Action.VOTE_CAST: _vote_cast,
-    Action.BET_SET: _bet_set,
     Action.CHAT_SEND: _chat_send,
     Action.NARRATOR_TAKEOVER: _narrator_takeover,
     Action.ADMIN_END: _admin_end,

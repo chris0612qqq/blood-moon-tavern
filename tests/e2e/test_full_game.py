@@ -27,15 +27,19 @@ from server.auth import AdminStore
 ROOT = Path(__file__).resolve().parent.parent.parent
 MOBILE = {"width": 390, "height": 780}
 PLAYERS = 12
-GAME_TIMEOUT_SECONDS = 600
+GAME_TIMEOUT_SECONDS = 1000  # 一回合約 130 秒，互投後平票變多，可能拖到 6、7 回合
 
 pytestmark = pytest.mark.e2e
 
 
 def _free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return int(probe.getsockname()[1])
+    # 瀏覽器會擋一些埠（ERR_UNSAFE_PORT），最大是 10080；系統可能隨機給到
+    while True:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = int(probe.getsockname()[1])
+        if port > 10080:
+            return port
 
 
 @contextlib.contextmanager
@@ -424,13 +428,19 @@ def test_host_voice_menu_repeats_and_never_jumps(server_url: str) -> None:
         assert not has(host, "line-wolf_open")
         if folder:
             host.screenshot(path=f"{folder}/host_status_tab.png")
-        press(host, "host-tab-reveal")
-        wait(host, "host-view-reveal")
-        assert has(host, "btn-host-next") and has(host, "host-deaths")
-        if folder:
-            host.screenshot(path=f"{folder}/host_reveal_tab.png")
+        assert not has(host, "host-tab-reveal")  # 揭曉併進簡報牆
         press(host, "host-tab-voice")
-        wait(host, "line-wolf_open")
+        wait(host, "card-quiet")
+        assert not has(host, "line-wolf_open")  # 舊的台詞按鈕先藏起來
+        assert has(host, "btn-speak-toggle")  # 旁白開關在固定區
+        host.evaluate(
+            "window.__spokenCard = []; const real = speechSynthesis.speak.bind(speechSynthesis);"
+            "speechSynthesis.speak = (u) => { window.__spokenCard.push(u.text); real(u); }; null;"
+        )
+        step_before = store(host, "s.server.step_seq")
+        press(host, "card-quiet")
+        host.wait_for_function("window.__spokenCard.includes('安靜')")
+        assert store(host, "s.server.step_seq") == step_before  # 字卡不影響流程
         label = host.locator('[data-testid="btn-host-next"]').inner_text()
         assert "預言家請睜眼" in label or "女巫請睜眼" in label
         browser.close()

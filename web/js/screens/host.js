@@ -3,11 +3,13 @@ import { h } from '../dom.js';
 import { send, serverNow } from '../net.js';
 import { LIMITS, ROLE } from '../protocol.js';
 import { changed, store } from '../store.js';
-import { causePlain, deathLabel, LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
+import { causePlain, LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
 import { actionButton, avatar, button, countdown, nameOf, pauseToggle } from '../ui/common.js';
 import { suspectBoard, voteProgress } from './day.js';
 import { actRow } from './tabs.js';
-import { lobbyAdmin, lobbyList, lobbyMenu, seated, voiceWarning } from './s5_lobby.js';
+import { speakAfter } from '../narrator.js';
+import { cardGrid, cardText } from '../ui/cards.js';
+import { lobbyAdmin, lobbyList, lobbyMenu, seated, voiceWarning, wakeHint } from './s5_lobby.js';
 
 export { lobbyMenu };
 
@@ -23,6 +25,7 @@ function hostLobby(server) {
     h('h1', { testid: 'screen-s20' }, t('s20.title')),
     h('p', { testid: 'lobby-count' }, t('s5.count', { n: players.length, cap: server.room?.capacity })),
     voiceWarning(true),
+    wakeHint(),
     lobbyAdmin(server, players, need),
     // 名單放最後：20 人時按鈕才不會被擠到要滑很遠
     h('div', {}, lobbyList(server, players, true)),
@@ -80,6 +83,10 @@ function voiceControls(server) {
   const speak = store.ui.speakAloud;
   const label = LINE_ORDER.includes(line) ? t('s20.again', { line: lineLabel(line) }) : t('s20.againPlain');
   return [
+    button(speak ? t('s20.speakPhone') : t('s20.speakSelf'), () => {
+      store.ui.speakAloud = !speak;
+      changed();
+    }, { testid: 'btn-speak-toggle' }),
     line ? actionButton({
       id: 'line-current',
       label,
@@ -103,26 +110,23 @@ function voiceControls(server) {
   ];
 }
 
+// 舊的台詞按鈕：使用者要求先藏起來，要復原把這裡改成 true
+const SHOW_LINE_MENU = false;
+
 function lineButtons(server) {
   const suggested = nextIsReady(server) ? server.host.next_line : null;
   const speak = store.ui.speakAloud;
-  return [
-    button(speak ? t('s20.speakPhone') : t('s20.speakSelf'), () => {
-      store.ui.speakAloud = !speak;
-      changed();
-    }, { testid: 'btn-speak-toggle' }),
-    h('div', { class: 'grid', style: 'grid-template-columns:1fr 1fr' }, LINE_ORDER.map((line) => {
-      const isNext = line === suggested;
-      return h('div', { key: line },
-        actionButton({
-          id: `line-${line}`,
-          label: lineLabel(line),
-          kind: isNext ? 'suggest' : 'secondary',
-          confirm: line === server.host.next_line ? unfinishedWarning(server) : null,
-          run: () => send('host.line', { line_id: line, speak }),
-        }));
-    })),
-  ];
+  return h('div', { class: 'grid', style: 'grid-template-columns:1fr 1fr' }, LINE_ORDER.map((line) => {
+    const isNext = line === suggested;
+    return h('div', { key: line },
+      actionButton({
+        id: `line-${line}`,
+        label: lineLabel(line),
+        kind: isNext ? 'suggest' : 'secondary',
+        confirm: line === server.host.next_line ? unfinishedWarning(server) : null,
+        run: () => send('host.line', { line_id: line, speak }),
+      }));
+  }));
 }
 
 function unfinishedWarning(server) {
@@ -175,28 +179,6 @@ function moreMenu(server) {
     button(t('common.close'), () => { store.ui.hostMoreOpen = false; changed(); }, { testid: 'btn-host-more-close' }));
 }
 
-function revealTab(server) {
-  const row = (server.history ?? []).find((r) => r.round_no === server.round_no);
-  const shots = server.host.hunter_shots ?? [];
-  const name = (id) => nameOf(server, id);
-  return [
-    h('h2', { testid: 'host-view-reveal' }, t('s20.round', { n: server.round_no })),
-    h('p', { testid: 'host-deaths' }, row?.deaths?.length
-      ? t('s20.deathsNow', { names: row.deaths.map((id) => deathLabel(name(id), row.causes?.[id])).join('、') })
-      : t('s20.deathsNone')),
-    shots.filter((s) => s.round_no === server.round_no).map((s) => h('p', { key: `shot${s.hunter}` },
-      t(s.target ? 's20.shot' : 's20.holster', { who: name(s.hunter), target: s.target ? name(s.target) : '' }))),
-    h('h2', {}, t('s20.ballots')),
-    row?.ballots
-      ? [
-        h('p', { testid: 'host-exile' }, row.exiled ? t('s20.exiled', { name: name(row.exiled) }) : t('s20.tie')),
-        Object.entries(row.ballots).map(([from, to]) => h('div', { class: 'list-row', key: from },
-          t('s15.ballot', { from: name(from), to: to ? name(to) : t('s14.abstain') }))),
-      ]
-      : h('p', { class: 'hint' }, t('s20.noBallots')),
-  ];
-}
-
 // 簡報牆的順序；白天的步驟都算過了夜晚
 const NIGHT_ORDER = ['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END', 'DAWN'];
 
@@ -205,12 +187,14 @@ function reached(server, step) {
   return at === -1 || at >= NIGHT_ORDER.indexOf(step);
 }
 
-function wallWolf(night, name) {
-  const picks = Object.entries(night.wolf_picks ?? {})
-    .map(([wolf, target]) => t('s18.wolfPick', { who: name(wolf), target: target ? name(target) : t('s8.empty') }));
-  const result = night.wolf_target ? t('s18.wolfKill', { target: name(night.wolf_target) }) : t('s18.wolfEmpty');
-  return actRow('wolf', t('s18.actWolf'),
-    picks.join('、') || t('s20.wallPicking'), night.wolf_decided ? ` ${result}` : '');
+/** 誰咬誰：狼人只能殺一個，不用逐隻列（使用者要求）。 */
+function wallWolf(server, night, row, name) {
+  const wolves = server.host.players
+    .filter((p) => [ROLE.WOLF, ROLE.FACELESS].includes(p.role) && (p.alive || row?.deaths?.includes(p.id)))
+    .map((p) => name(p.id)).join('、');
+  let result = t('s20.wallPicking');
+  if (night.wolf_decided) result = night.wolf_target ? t('s20.wallBite', { target: name(night.wolf_target) }) : t('s20.wallNoBite');
+  return actRow('wolf', t('s18.actWolf'), t('s20.wallWolf', { wolves, result }));
 }
 
 /** 這個角色這回合有沒有上場：活著，或是今晚才死的。 */
@@ -250,6 +234,12 @@ function wallDawn(server, night, row, name) {
       ? dead.map((id) => t('s18.deathRow', { name: name(id), cause: causePlain(row.causes[id]) })).join('、')
       : (night.witch_saved ? '' : t('s18.peaceful')),
     night.witch_saved ? h('div', {}, t('s18.saved', { name: name(night.wolf_target) })) : null);
+}
+
+/** 主持人手動判死的人：不屬於任何行動，但也是這回合的死亡。 */
+function wallManual(row, name) {
+  const dead = (row?.deaths ?? []).filter((id) => row.causes?.[id] === 'manual');
+  return dead.length ? actRow('manual', t('s20.wallManual'), dead.map(name).join('、')) : null;
 }
 
 /** 第一輪：投票中看誰選誰，投完看票數和誰進第二輪。誰投誰不留（SPEC A5.4）。 */
@@ -296,14 +286,15 @@ function briefingWall(server) {
   const name = (id) => nameOf(server, id);
   return h('div', { testid: 'host-wall' },
     h('h2', {}, t('s20.wallTitle', { n })),
-    wallWolf(night, name),
+    wallWolf(server, night, row, name),
     wallSeer(server, night, row, name),
     wallWitch(server, night, row, name),
     wallDawn(server, night, row, name),
     (server.host.hunter_shots ?? []).filter((s) => s.round_no === n).map((s) => actRow('hunter', t('s18.actHunter'),
       t(s.target ? 's18.hunterShot' : 's18.hunterHolster', { who: name(s.hunter), target: s.target ? name(s.target) : '' }))),
     wallFirstRound(server, round, name),
-    wallSecondRound(server, round, name));
+    wallSecondRound(server, round, name),
+    wallManual(row, name));
 }
 
 function statusTab(server) {
@@ -324,13 +315,13 @@ function statusTab(server) {
 
 function voiceTab(server) {
   return [
-    h('p', { class: 'hint', testid: 'host-view-voice' }, t('s20.againHint')),
-    lineButtons(server),
+    h('p', { class: 'hint', testid: 'host-view-voice' }, t('s20.cardsHint')),
+    cardGrid((card) => speakAfter(cardText(card))),
+    SHOW_LINE_MENU ? lineButtons(server) : null,
   ];
 }
 
 const HOST_TABS = [
-  ['reveal', 's20.tabReveal', revealTab],
   ['status', 's20.tabStatus', statusTab],
   ['voice', 's20.tabVoice', voiceTab],
 ];

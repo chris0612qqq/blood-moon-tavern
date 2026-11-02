@@ -272,14 +272,6 @@ function truthSummary(server, truth, name) {
       real: name(m.real_author),
       shown: m.display ? name(m.display) : t('chat.wolfName'),
     }))),
-    (truth.bets ?? []).length ? h('h2', {}, t('s18.bets')) : null,
-    // SPEC A13：名次、分數、每人押了誰
-    (truth.bets ?? []).map((b) => h('div', { class: 'panel', key: `b${b.player_id}`, testid: `end-bet-${b.player_id}` },
-      h('div', {}, t('s18.betRow', { rank: b.rank, name: name(b.player_id), score: b.score })),
-      h('div', { class: 'hint' }, t('s18.betPicks', {
-        wolves: b.wolves.length ? b.wolves.map(name).join('、') : t('players.nobody'),
-        faceless: name(b.faceless),
-      })))),
   ];
 }
 

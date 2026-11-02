@@ -11,7 +11,7 @@ from server.enums import Action, DayContext, DeathCause, Role, Step, Winner
 from server.errors import ErrorCode, GameError
 from server.rng import GameRng
 from server.roles import deal_sequence, is_wolf, role_def
-from server.state import Bet, GameState, NightRecord, PlayerState
+from server.state import GameState, NightRecord, PlayerState
 
 DAY_STEPS = frozenset(
     {
@@ -65,13 +65,6 @@ class WitchOptions:
     attacked: str | None
     can_save: bool
     can_poison: bool
-
-
-@dataclass(frozen=True)
-class BetScore:
-    player_id: str
-    score: int
-    rank: int
 
 
 def is_day_step(step: Step) -> bool:
@@ -329,41 +322,3 @@ def can_wolf_mask(state: GameState, player_id: str) -> bool:
     """能否以匿名「狼人」身分發言（SPEC A9、B8）：存活的狼人或千面狼、白天（含白天暫停）。"""
     player = state.player(player_id)
     return player.alive and is_wolf(player.role) and is_day_step(state.step)
-
-
-def can_bet(state: GameState, player_id: str) -> bool:
-    """押注資格（SPEC A13）：已出局的好人陣營。"""
-    player = state.player(player_id)
-    return not player.alive and not is_wolf(player.role)
-
-
-def validate_bet(state: GameState, player_id: str, bet: Bet) -> None:
-    """驗證押注內容（SPEC B8）：人數不超過狼人總數、不含自己、不重複、都是本局玩家。"""
-    wolf_total = sum(1 for p in state.players if is_wolf(p.role))
-    picks = [*bet.wolves, *([bet.faceless] if bet.faceless is not None else [])]
-    if (
-        len(bet.wolves) > wolf_total
-        or len(set(bet.wolves)) != len(bet.wolves)
-        or player_id in picks
-        or not all(state.has_player(p) for p in picks)
-    ):
-        raise GameError(ErrorCode.INVALID_TARGET)
-
-
-def score_bets(bets: Mapping[str, Bet], roles: Mapping[str, Role]) -> list[BetScore]:
-    """押注計分與排名（SPEC A13）：同分並列，最低 0 分；沒押的人不在 bets 內。"""
-    scores: dict[str, int] = {}
-    for player_id, bet in bets.items():
-        score = sum(
-            balance.BET_WOLF_HIT if is_wolf(roles[p]) else balance.BET_WOLF_MISS for p in bet.wolves
-        )
-        if bet.faceless is not None and roles[bet.faceless] is Role.FACELESS:
-            score += balance.BET_FACELESS_HIT
-        scores[player_id] = max(0, score)
-    ordered = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
-    results: list[BetScore] = []
-    for index, (player_id, score) in enumerate(ordered):
-        tied_with_previous = results and results[-1].score == score
-        rank = results[-1].rank if tied_with_previous else index + 1
-        results.append(BetScore(player_id=player_id, score=score, rank=rank))
-    return results
