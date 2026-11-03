@@ -122,3 +122,22 @@ def test_slow_frames_turn_off_decorations(server_url: str) -> None:  # noqa: F81
         assert page.locator(".ring__sparks").evaluate("(el) => getComputedStyle(el).display") == "none"
         assert not has(page, "dialog")
         browser.close()
+
+
+def test_recorded_howl_with_synth_fallback(server_url: str) -> None:  # noqa: F811
+    howl = "async () => (await import('/js/sfx.js')).wolfHowl()"
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        preview(page, server_url)
+        page.locator('[data-testid="screen-s8"]').click()  # 第一次點擊才開聲音、下載錄音
+        # 錄音 2.8 秒＋停 0.3 秒才念旁白
+        page.wait_for_function(f"({howl})().then((ms) => ms === 3100)", timeout=8000)
+        # 錄音載不到就用合成的，旁白照樣會念
+        broken = browser.new_context(viewport=MOBILE).new_page()
+        broken.route("**/audio/wolf_howl.wav", lambda route: route.fulfill(status=404))
+        preview(broken, server_url)
+        broken.locator('[data-testid="screen-s8"]').click()
+        broken.wait_for_timeout(1000)
+        assert broken.evaluate(howl) == 2300
+        browser.close()
