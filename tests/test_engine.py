@@ -42,7 +42,7 @@ class Game:
     ) -> None:
         roles = roles or ROLES_8
         self.nominate: tuple[str, ...] = ()
-        monkeypatch.setattr("server.rules.deal", lambda ids, history, rng: dict(roles))
+        monkeypatch.setattr("server.rules.deal", lambda ids, history, rng, plan=None: dict(roles))
         self.clock = FakeClock()
         players = [(pid, pid.upper()) for pid in roles]
         narrator = None if mode is Mode.GOD else "p1"
