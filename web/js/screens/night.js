@@ -4,7 +4,7 @@ import { send } from '../net.js';
 import { store, changed } from '../store.js';
 import { errorText, roleAbility, roleName, roleStory, stepName, t } from '../strings.js';
 import {
-  actionButton, avatar, countdown, countdownRing, nameOf, pickGrid, selection, toast,
+  actionButton, avatar, countdownRing, nameOf, pickGrid, selection, toast,
 } from '../ui/common.js';
 
 /** 角色卡：長按才顯示，放開蓋回；秘密只在顯示時才進 DOM（CODING_RULES V18、V19）。 */
@@ -69,7 +69,7 @@ export function s6(server) {
   const { done = 0, total = 0 } = server.progress ?? {};
   return [
     h('h1', { testid: 'screen-s6' }, t('s6.title')),
-    countdown(server, t('s6.timeout')),
+    countdownRing(server, t('s6.timeout')),
     roleCard(server),
     h('p', { class: 'center', testid: 'deal-progress' }, t('s6.progress', { done, total })),
     me.done
@@ -176,7 +176,7 @@ export function s9(server) {
   const sel = selection('seer');
   return [
     h('h1', { testid: 'screen-s9' }, t('s9.title')),
-    countdown(server, t('s9.timeout')),
+    countdownRing(server, t('s9.timeout')),
     pickGrid({ ids: me.eligible_targets ?? [], server, selected: sel.value, onPick: sel.set }),
     sel.value
       ? actionButton({
@@ -194,7 +194,7 @@ export function s10(server) {
   const potionState = (used) => t(used ? 's10.used' : 's10.left');
   const head = [
     h('h1', { testid: 'screen-s10' }, stepName(server.step)),
-    countdown(server, t('s10.timeout')),
+    countdownRing(server, t('s10.timeout')),
     h('p', { class: 'center' }, t('s10.potions', {
       antidote: potionState(info.antidote_used),
       poison: potionState(info.poison_used),

@@ -41,7 +41,7 @@ def test_admin_picks_which_phones_read_narration(server_url: str) -> None:  # no
         pid = store(page, "s.server.me.id")
         press(admin, f"voice-{pid}")
         wait_speaks(page, True)
-        assert "cell--on" in (admin.locator(f'[data-testid="voice-{pid}"]').get_attribute("class") or "")
+        admin.wait_for_selector(f'[data-testid="voice-{pid}"].cell--on')  # 管理員畫面要等收到變更才重畫
         press(admin, "voices-narrator")
         wait_speaks(page, False)
         assert speaks(admin)

@@ -79,100 +79,10 @@ html[data-screen="S8"] body {
   text-align: center;
 }
 
-/* 倒數環（ART 7.2）：金色環隨時間變短；剩 10 秒轉火色冒火星；剩 3 秒數字跳；暫停變灰 */
-.ring {
-  --ring-color: var(--gold);
-  position: relative;
-  width: 72px;
-  height: 72px;
-  margin: 6px auto 2px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: conic-gradient(var(--ring-color) calc(var(--frac, 1) * 360deg), rgba(201, 162, 74, .14) 0);
-}
-.ring::before {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 30%, #2a2018, var(--bg-night) 75%);
-  box-shadow: inset 0 0 0 1px rgba(232, 200, 114, .3);
-}
-.ring__num {
-  position: relative;
-  font: 700 30px/1 var(--font-num);
-  color: var(--parchment);
-  font-variant-numeric: tabular-nums;
-}
-.ring__num[data-waiting] { font: 600 13px/1.2 var(--font-body); max-width: 56px; }
-.ring[data-zone="warn"], .ring[data-zone="urgent"] { --ring-color: var(--ember); }
-.ring[data-zone="urgent"] .ring__num { animation: ring-beat 1s ease-out infinite; }
-@keyframes ring-beat { 0% { transform: scale(1.06); } 40%, 100% { transform: scale(1); } }
-.ring[data-zone="paused"] { --ring-color: var(--steel); }
-
-.ring__sparks { position: absolute; inset: 0; pointer-events: none; }
-.ring__sparks i {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: var(--candle);
-  box-shadow: 0 0 6px var(--ember);
-  opacity: 0;
-}
-.ring[data-zone="warn"] .ring__sparks i, .ring[data-zone="urgent"] .ring__sparks i { animation: spark 1.4s ease-out infinite; }
-.ring__sparks i:nth-child(2) { left: 80%; top: 15%; animation-delay: .3s !important; }
-.ring__sparks i:nth-child(3) { left: 95%; top: 55%; animation-delay: .7s !important; }
-.ring__sparks i:nth-child(4) { left: 15%; top: 20%; animation-delay: .5s !important; }
-.ring__sparks i:nth-child(5) { left: 5%; top: 60%; animation-delay: 1s !important; }
-@keyframes spark {
-  0% { opacity: 0; transform: translate(0, 0) scale(1); }
-  15% { opacity: 1; }
-  100% { opacity: 0; transform: translate(4px, -22px) scale(.4); }
-}
-
-/* 選擇格做成小木牌（ART 7.4）：石板底、黃銅邊；選中浮起 2px 加金光 */
+/* 格子的木牌外觀在 art.css；狼人畫面的格子高一點，頭像大一點 */
 .grid--wolf { gap: var(--gap-1); }
-.grid--wolf .cell {
-  position: relative;
-  min-height: 88px;
-  color: var(--parchment);
-  border: 1px solid #8a6d32;
-  border-radius: 4px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .05), transparent 30%),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, .08) 0 2px, transparent 2px 7px),
-    var(--bg-stone);
-  box-shadow: inset 0 1px 0 rgba(232, 200, 114, .25), 0 2px 0 rgba(0, 0, 0, .5);
-  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast);
-}
-.grid--wolf .cell::after {
-  /* 選中的金光放在偽元素上，只改透明度 */
-  content: '';
-  position: absolute;
-  inset: -3px;
-  border-radius: 6px;
-  box-shadow: 0 0 0 2px var(--gold-bright), 0 0 14px rgba(232, 200, 114, .55);
-  opacity: 0;
-  transition: opacity var(--dur-fast);
-  pointer-events: none;
-}
-.grid--wolf .cell:active { transform: scale(.97); transition-duration: var(--dur-tap); }
-.grid--wolf .cell--on { transform: translateY(-2px); border-color: var(--gold-bright); }
-.grid--wolf .cell--on::after { opacity: 1; }
-.grid--wolf .avatar {
-  width: 44px;
-  height: 44px;
-  background: #3a2d22;
-  color: var(--parchment);
-  box-shadow: 0 0 0 2px #8a6d32;
-  font-family: var(--font-title);
-}
-.grid--wolf .cell__seat { font: 700 14px var(--font-num); color: var(--gold); }
+.grid--wolf .cell { min-height: 88px; }
+.grid--wolf .avatar { width: 44px; height: 44px; }
 .grid--wolf .cell__name { line-height: 1.2; }
 
 /* 同伴選的人：右上角三道爪痕＋同伴名字小牌（ART 7.3） */
@@ -193,7 +103,6 @@ html[data-screen="S8"] body {
 .grid--wolf.grid--marks .cell__marks:empty { display: none; } /* 名牌浮在角落，不用先留位子 */
 
 /* 不咬：虛線框＋一彎殘月 */
-.grid--wolf .cell--empty { border-style: dashed; background: rgba(12, 16, 24, .7); }
 .grid--wolf .cell--empty .cell__name::before {
   content: '';
   display: block;
@@ -255,14 +164,11 @@ html[data-screen="S8"] body {
 
 /* 舊手機掉幀時自動關掉霧與火星（ART 11.3） */
 html[data-lowfx] .s8::after { display: none; }
-html[data-lowfx] .ring__sparks { display: none; }
 html[data-lowfx] .s8__moon::after { animation: none; }
 
 /* 減少動態效果：全部改成 300 ms 淡入（SPEC C9.2 #13） */
 @media (prefers-reduced-motion: reduce) {
-  .s8::after, .s8__moon::after, .ring__sparks, .ring[data-zone="urgent"] .ring__num { animation: none; }
-  .ring__sparks { display: none; }
-  .grid--wolf .cell, .grid--wolf .cell--on { transform: none; }
+  .s8::after, .s8__moon::after { animation: none; }
   .grid--wolf .cell--confirming::before { animation: s8-fade 300ms forwards; }
   .slash i { transform: rotate(-24deg); opacity: 0; animation: s8-fade 300ms forwards; }
   @keyframes s8-fade { from { opacity: 0; } to { opacity: 1; } }
