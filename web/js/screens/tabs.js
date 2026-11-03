@@ -121,6 +121,8 @@ function sendLabel(fake, masked, targetName) {
 // 看不到的狼人訊息和 64 KB 裁切都會讓則數變少。最舊的不是 1 號就可能還有更舊的
 function olderButton(channel, messages) {
   if (!messages.length || messages[0].id <= FIRST_CHAT_ID || store.ui.chatEnd[channel]) return null;
+  // 狼頻道的第一則一定是開局系統訊息（SPEC v4.25），看到它就沒有更舊的了
+  if (channel === 'wolf' && messages[0].kind === 'system') return null;
   return actionButton({
     id: 'chat-older',
     small: true,
