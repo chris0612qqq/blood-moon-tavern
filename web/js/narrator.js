@@ -128,14 +128,18 @@ for (const name of ['touchend', 'click']) {
 // 語音清單是非同步載入的（CODING_RULES V14）
 window.speechSynthesis?.addEventListener?.('voiceschanged', zhVoice);
 
-function isNarrator(server) {
+/** 這支手機要不要念旁白：旁白主機、上帝主持人，或管理員選了「全部人」／指定到這支（SPEC v4.29）。 */
+export function speaksHere(server) {
   if (server?.host) return true;
-  return Boolean(server?.me && server.narrator_id === server.me.id);
+  const me = server?.me?.id;
+  if (!me) return false;
+  const narrator = server.narrator_id ?? server.room?.narrator_id;
+  return narrator === me || Boolean(server.voices?.all) || Boolean(server.voices?.players.includes(me));
 }
 
 /** 收到 narrate 時呼叫：只有旁白主機或主持人手機發聲。 */
 export function onNarrate(msg) {
-  if (!msg.speak || !isNarrator(store.server)) return;
+  if (!msg.speak || !speaksHere(store.server)) return;
   // 狼人請睜眼之前先狼嚎（ART 12.4），嚎完才念；重念、催促時不再嚎
   const howl = OPENING_SFX[msg.line_id];
   const seq = store.server.step_seq;

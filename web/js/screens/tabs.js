@@ -3,8 +3,8 @@ import { h } from '../dom.js';
 import { api, send } from '../net.js';
 import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
-import { causeJoke, causePlain, deathLabel, roleName, t } from '../strings.js';
-import { actionButton, avatar, button, field, nameOf, pauseToggle } from '../ui/common.js';
+import { causeJoke, causePlain, deathLabel, errorText, roleName, t } from '../strings.js';
+import { actionButton, avatar, button, field, nameOf, pauseToggle, toast } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { installGuideButton } from './install.js';
 import { roleCard } from './night.js';
@@ -416,6 +416,45 @@ export function s18(server) {
   ];
 }
 
+/** 管理員選哪些手機也念旁白（SPEC v4.29）。各自在不同地方測試時用；同一間房間只留旁白主機，免得回音。 */
+function voiceSettings(server) {
+  if (!server?.is_admin || !server.room) return null;
+  const voices = server.voices ?? { all: false, players: [] };
+  const mode = voices.all ? 'all' : voices.players.length || store.ui.voicesPicking ? 'some' : 'narrator';
+  const save = (all, players) => send('admin.voices', { all, players }).then((result) => {
+    if (!result.ok) toast('error.raw', { text: errorText(result.code) });
+  });
+  const choose = (next) => {
+    store.ui.voicesPicking = next === 'some';
+    changed();
+    // 改成「指定的人」時先清成沒人，再一個一個點
+    if (next !== mode) save(next === 'all', []);
+  };
+  const modeButton = (id, label) => h('button', {
+    class: `btn btn--small ${mode === id ? 'btn--suggest' : 'btn--secondary'}`,
+    testid: `voices-${id}`,
+    onclick: () => choose(id),
+  }, label);
+  const toggle = (id) => {
+    const players = voices.players.includes(id) ? voices.players.filter((p) => p !== id) : [...voices.players, id];
+    save(false, players);
+  };
+  return [
+    h('h2', {}, t('s21.voices')),
+    h('div', { class: 'row' },
+      modeButton('narrator', t('s21.voicesNarrator')),
+      modeButton('all', t('s21.voicesAll')),
+      modeButton('some', t('s21.voicesSome'))),
+    mode === 'some' ? h('div', { class: 'grid grid--compact' }, (server.roster ?? []).map((p) => h('button', {
+      class: `cell ${voices.players.includes(p.id) ? 'cell--on' : ''}`,
+      key: p.id,
+      testid: `voice-${p.id}`,
+      onclick: () => toggle(p.id),
+    }, p.name))) : null,
+    h('p', { class: 'hint' }, t('s21.voicesHint')),
+  ];
+}
+
 export function s21() {
   const server = store.server;
   const close = () => { store.ui.overlay = null; changed(); };
@@ -429,6 +468,7 @@ export function s21() {
       name: store.voice.name || t('voice.none'),
       count: store.voice.voices,
     })),
+    voiceSettings(server),
     installGuideButton(),
     button(t('s21.export'), () => {
       const text = JSON.stringify(store.errorLog ?? [], null, 1);
