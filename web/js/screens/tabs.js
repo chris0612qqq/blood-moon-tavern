@@ -6,6 +6,7 @@ import { changed, store } from '../store.js';
 import { causeJoke, causePlain, deathLabel, roleName, t } from '../strings.js';
 import { actionButton, avatar, button, field, nameOf, pauseToggle } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
+import { installGuideButton } from './install.js';
 import { roleCard } from './night.js';
 import { speak, VOICE_STYLE } from '../narrator.js';
 import { photoBubble, sendPhoto } from '../ui/media.js';
@@ -428,6 +429,7 @@ export function s21() {
       name: store.voice.name || t('voice.none'),
       count: store.voice.voices,
     })),
+    installGuideButton(),
     button(t('s21.export'), () => {
       const text = JSON.stringify(store.errorLog ?? [], null, 1);
       store.ui.dialog = { kind: 'text', text };

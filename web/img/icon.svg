@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- App 圖示（ART 5.3：血月＋二十面骰）。重要的圖案都在中央 80% 的圓內，Android 裁成圓形也看得到 -->
+  <defs>
+    <radialGradient id="sky" cx="50%" cy="40%" r="70%">
+      <stop offset="0" stop-color="#2a1f14"/>
+      <stop offset="1" stop-color="#14100d"/>
+    </radialGradient>
+    <radialGradient id="moon" cx="40%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#c8423a"/>
+      <stop offset="0.6" stop-color="#8e1b1b"/>
+      <stop offset="1" stop-color="#4a0d0d"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <circle cx="256" cy="226" r="150" fill="#8e1b1b" opacity="0.25"/>
+  <circle cx="256" cy="226" r="128" fill="url(#moon)"/>
+  <circle cx="218" cy="190" r="18" fill="#4a0d0d" opacity="0.45"/>
+  <circle cx="300" cy="250" r="26" fill="#4a0d0d" opacity="0.35"/>
+  <circle cx="268" cy="172" r="10" fill="#4a0d0d" opacity="0.4"/>
+  <g fill="#1f1a15" stroke="#c9a24a" stroke-width="7" stroke-linejoin="round">
+    <polygon points="256,262 334,307 334,397 256,442 178,397 178,307"/>
+  </g>
+  <g fill="none" stroke="#e8c872" stroke-width="5" stroke-linejoin="round">
+    <polygon points="256,292 312,382 200,382"/>
+    <path d="M256,262 L256,292 M334,307 L312,382 M334,397 L312,382 M256,442 L312,382 M256,442 L200,382 M178,397 L200,382 M178,307 L200,382 M178,307 L256,292 M334,307 L256,292"/>
+  </g>
+  <text x="256" y="365" font-family="Georgia, serif" font-weight="bold" font-size="40" fill="#e8c872" text-anchor="middle">20</text>
+</svg>

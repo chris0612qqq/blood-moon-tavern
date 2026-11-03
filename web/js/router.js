@@ -1,5 +1,6 @@
 // 畫面由狀態決定（CODING_RULES V1）：重連、回前景、回上一步後都不會停在錯的畫面。
 import { STEP } from './protocol.js';
+import { wantsInstallGuide } from './pwa.js';
 import { loadTokens } from './session.js';
 
 const NIGHT_ACTOR_SCREENS = { [STEP.WOLF]: 'S8', [STEP.SEER]: 'S9', [STEP.WITCH]: 'S10' };
@@ -21,6 +22,7 @@ export function resolveScreen(store) {
   if (ended) return 'S25';
   const tokens = loadTokens();
   if (!server) {
+    if (wantsInstallGuide(tokens)) return 'S23';
     if (!health?.room) return 'S0';
     // 有 token 代表正在連線；無管理員模式的管理員還要自己加入，所以看加入頁
     const connecting = tokens.player || (tokens.admin && health.room.mode === 'god');
