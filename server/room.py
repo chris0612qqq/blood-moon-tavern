@@ -119,6 +119,7 @@ class RoomService:
         self.media_rows: dict[str, media.StoredMedia] = {}
         self.chat_seq = 0
         self.role_plan: dict[str, Role] = {}  # 開局前管理員指定的職業（SPEC v4.26）
+        self.voices: dict[str, Any] = views.voices_block()  # 哪些手機也念旁白（SPEC v4.29）
         self.chat_times: dict[str, deque[float]] = {}
         self.db_fails = 0
         self.presence = PresenceMonitor()
@@ -246,6 +247,7 @@ class RoomService:
         self.media_rows = {}
         self.chat_seq = 0
         self.role_plan = {}
+        self.voices = views.voices_block()
         self.chat_times = {}
         self.db_fails = 0
         self.presence = PresenceMonitor()
@@ -477,6 +479,9 @@ class RoomService:
         elif kind == "admin.reset_pin":
             assert isinstance(frame, protocol.PlayerRef)
             self._admin_reset_pin(conn, frame)
+        elif kind == "admin.voices":
+            assert isinstance(frame, protocol.AdminVoices)
+            self._admin_voices(conn, frame)
         elif kind == "admin.narrator" and self.engine is None:
             assert isinstance(frame, protocol.PlayerRef)
             self._lobby_narrator(conn, frame)
@@ -656,6 +661,7 @@ class RoomService:
             message["is_admin"] = conn.session.is_admin
             if room is not None and room.closes_at is not None:
                 message["closes_at"] = room.closes_at
+        message["voices"] = self.voices
         return self._fit(self._decorate(message))
 
     @staticmethod
@@ -817,6 +823,17 @@ class RoomService:
             raise GameError(ErrorCode.INVALID_TARGET)
         player.pin_hash = ""
         self.db.write([_player_statement(room.id, player)])
+
+    def _admin_voices(self, conn: Connection, frame: protocol.AdminVoices) -> None:
+        """大廳和遊戲中都能改；只存在記憶體，伺服器重開就回到只有旁白主機。"""
+        self._require_admin(conn.session)
+        self.require_room()
+        if any(pid not in self.players for pid in frame.players):
+            raise GameError(ErrorCode.INVALID_TARGET)
+        self.voices = views.voices_block(frame.all, frame.players)
+        message = views.voices_message(self.voices)
+        for other in self.conns:
+            other.send(message, self.now)
 
     def _lobby_narrator(self, conn: Connection, frame: protocol.PlayerRef) -> None:
         self._require_admin(conn.session)

@@ -30,6 +30,8 @@ export const store = {
     hostMoreOpen: false,
     witchStage: {},
     chatAs: 'self',
+    /** 設定裡的「旁白要在哪些手機念」正在選人。 */
+    voicesPicking: false,
     /** 哪些頻道已經翻到最舊。 */
     chatEnd: {},
     /** 按下載入舊訊息時的清單高度；收到後換到 chatRestore，重繪時補回捲動位置。 */
@@ -171,6 +173,9 @@ const HANDLERS = {
     if (!s) return;
     s.narrator_id = msg.player;
     if (s.room) s.room.narrator_id = msg.player;
+  },
+  voices(msg) {
+    if (store.server) store.server.voices = { all: msg.all, players: msg.players };
   },
   'chat.msg'(msg) {
     const s = store.server;

@@ -162,6 +162,13 @@ class AdminSeat(ClientFrame):
     order: list[Id] = Field(max_length=config.ROOM_CAPACITY)
 
 
+class AdminVoices(ClientFrame):
+    """哪些手機也念旁白（SPEC v4.29）：all 為真就是全部人，否則是 players 加上旁白主機。"""
+
+    all: bool = False
+    players: list[Id] = Field(default_factory=list, max_length=config.ROOM_CAPACITY)
+
+
 class HostLine(ClientFrame):
     line_id: Id
     speak: bool = True
@@ -205,6 +212,7 @@ CLIENT_MESSAGES: Final[dict[str, type[ClientFrame]]] = {
     "admin.pause": Empty,
     "admin.resume": Empty,
     "admin.narrator": PlayerRef,
+    "admin.voices": AdminVoices,
     "admin.broadcast": AdminBroadcast,
     "admin.reset_pin": PlayerRef,
     "host.line": HostLine,
