@@ -3,7 +3,7 @@ import { h } from '../dom.js';
 import { send } from '../net.js';
 import { changed, store } from '../store.js';
 import { causePlain, pauseReason, roleName, t } from '../strings.js';
-import { actionButton, avatar, button, countdown, nameOf, pickGrid, selection } from '../ui/common.js';
+import { actionButton, avatar, button, countdownRing, nameOf, pickGrid, selection } from '../ui/common.js';
 
 export function s11(server) {
   const row = (server.history ?? []).find((h_) => h_.round_no === server.round_no);
@@ -42,14 +42,14 @@ export function s12(server) {
   if (!me?.is_actor) {
     return [
       h('h1', { class: 'center', testid: 'screen-s12' }, t('s12.others', { name: nameOf(server, hunter) })),
-      countdown(server, t('s12.timeout')),
+      countdownRing(server, t('s12.timeout')),
     ];
   }
   if (me.done) return h('p', { class: 'center' }, t('done'));
   const sel = selection('hunter');
   return [
     h('h1', { testid: 'screen-s12-mine' }, t('s12.mine')),
-    countdown(server, t('s12.timeout')),
+    countdownRing(server, t('s12.timeout')),
     pickGrid({ ids: me.eligible_targets ?? [], server, selected: sel.value, onPick: sel.set }),
     sel.value
       ? actionButton({
@@ -126,7 +126,7 @@ export function s13(server) {
         : t(defending ? 's13.othersDefense' : 's13.others', { name: nameOf(server, speaker) })),
     defending ? nomineeLine(server) : null,
     h('div', { class: 'center' }, speaker ? avatar(server, speaker) : null),
-    countdown(server),
+    countdownRing(server),
     speakOrder(server),
     mine && !me.done
       ? actionButton({ id: 'btn-speak-end', label: t('s13.end'), run: () => send('speak.end') })
@@ -141,7 +141,7 @@ export function s14(server) {
     return [
       h('h1', { class: 'center', testid: 'screen-s14-watch' }, t('s14.watch')),
       server.step === 'VOTE' ? nomineeLine(server) : null,
-      countdown(server),
+      countdownRing(server),
       progress,
       suspectBoard(server),
     ];
@@ -154,7 +154,7 @@ export function s14(server) {
   return [
     h('h1', { testid: 'screen-s14' }, t(server.step === 'SUSPECT_VOTE' ? 's14.titleSuspect' : 's14.title')),
     server.step === 'VOTE' ? nomineeLine(server) : null,
-    countdown(server, t('s14.timeout')),
+    countdownRing(server, t('s14.timeout')),
     pickGrid({
       ids: me.eligible_targets ?? [],
       server,
@@ -184,7 +184,7 @@ function votedView(server, vote, progress) {
     h('h1', { class: 'center', testid: 'vote-done' }, vote.target
       ? t('s14.mine', { name: nameOf(server, vote.target) })
       : t('s14.mineAbstain')),
-    countdown(server),
+    countdownRing(server),
     progress,
     suspectBoard(server),
     vote.can_change
@@ -249,7 +249,7 @@ export function s22(server) {
     h('h1', { class: 'center', testid: mine ? 'screen-s22-mine' : 'screen-s22' },
       mine ? t('s22.mine') : t('s22.others', { name: nameOf(server, speaker) })),
     speaker ? deadRow(server, speaker) : null,
-    countdown(server),
+    countdownRing(server),
     mine && !me.done
       ? [
         store.ui.drafts[`${draftKey}:sent`]

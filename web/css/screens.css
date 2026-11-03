@@ -1,0 +1,69 @@
+/* 各畫面的氣氛（ART 8）。只換背景光與色調，不加會擋到操作的東西；S8 狼人在 s8.css。
+   用 html[data-screen] 選畫面，app.js 每次重畫都會設好。 */
+
+/* S0 等待開局、S4 加入：酒館門口透出的燭光 */
+html[data-screen="S0"] .main, html[data-screen="S4"] .main, html[data-screen="S23"] .main {
+  background: radial-gradient(ellipse 70% 35% at 50% 0%, rgba(255, 207, 122, .16), transparent 75%);
+}
+
+/* S5 大廳：俯視圓桌，中央一圈燭光 */
+html[data-screen="S5"] .main {
+  background: radial-gradient(ellipse 90% 45% at 50% 30%, rgba(255, 207, 122, .10), transparent 70%);
+}
+
+/* S7 夜晚·旁觀：窗外血月、冷色霧 */
+html[data-screen="S7"] .main {
+  background:
+    radial-gradient(circle at 50% 70px, #a8322c 0 30px, rgba(142, 27, 27, .35) 31px, transparent 80px),
+    radial-gradient(ellipse 100% 30% at 50% 100%, rgba(139, 147, 160, .14), transparent 70%);
+}
+html[data-screen="S7"] .main h1 { margin-top: 120px; }
+
+/* S9 預言家：紫色星芒（ART 3.3 arcane） */
+html[data-screen="S9"] .main {
+  background:
+    radial-gradient(circle at 20% 15%, rgba(255, 255, 255, .5) 0 1px, transparent 2px),
+    radial-gradient(circle at 75% 25%, rgba(255, 255, 255, .4) 0 1px, transparent 2px),
+    radial-gradient(circle at 60% 8%, rgba(255, 255, 255, .45) 0 1px, transparent 2px),
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .3) 0 1px, transparent 2px),
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(91, 75, 138, .45), transparent 75%);
+}
+html[data-screen="S9"] .cell--on { border-color: #b6a7ee; }
+html[data-screen="S9"] .cell--on::after { box-shadow: 0 0 0 2px #b6a7ee, 0 0 14px rgba(141, 120, 214, .7); }
+
+/* S10 女巫：左紅右綠兩瓶藥的光 */
+html[data-screen="S10"] .main {
+  background:
+    radial-gradient(ellipse 45% 30% at 10% 0%, rgba(181, 55, 58, .35), transparent 75%),
+    radial-gradient(ellipse 45% 30% at 90% 0%, rgba(63, 143, 90, .35), transparent 75%);
+}
+
+/* S11 天亮：窗外由藍轉金 */
+html[data-screen="S11"] .main {
+  background: linear-gradient(180deg, rgba(111, 163, 184, .18), rgba(255, 207, 122, .16) 40%, transparent 75%);
+  animation: dawn var(--dur-night) ease-in-out;
+}
+@keyframes dawn { from { opacity: .6; } }
+
+/* S12 獵人：木質暖色 */
+html[data-screen="S12"] .main { background: radial-gradient(ellipse 80% 35% at 50% 0%, rgba(122, 85, 50, .4), transparent 75%); }
+
+/* S13 發言、S22 遺言：聚光燭光／一束月光 */
+html[data-screen="S13"] .main { background: radial-gradient(ellipse 60% 30% at 50% 10%, rgba(255, 207, 122, .14), transparent 75%); }
+html[data-screen="S22"] .main { background: linear-gradient(180deg, rgba(111, 163, 184, .2), transparent 45%); }
+
+/* S14 投票、S15 揭曉：銅幣金 */
+html[data-screen="S14"] .main, html[data-screen="S15"] .main {
+  background: radial-gradient(ellipse 80% 30% at 50% 0%, rgba(201, 162, 74, .16), transparent 75%);
+}
+
+/* S17 已出局：灰霧、色彩降飽和（不用 filter，避免整頁重繪） */
+html[data-screen="S17"] .main { background: linear-gradient(180deg, var(--fog), rgba(20, 20, 24, .6)); }
+html[data-screen="S17"] .main h1 { color: var(--steel); }
+
+/* S18 結算：金色日出 */
+html[data-screen="S18"] .main { background: radial-gradient(ellipse 100% 40% at 50% 0%, rgba(232, 200, 114, .22), transparent 75%); }
+html[data-screen="S18"] .main h1 { color: var(--gold-bright); font-size: 28px; text-align: center; }
+
+/* S25 酒館打烊 */
+html[data-screen="S25"] .main { background: radial-gradient(ellipse 60% 30% at 50% 30%, rgba(255, 207, 122, .06), transparent 75%); }
