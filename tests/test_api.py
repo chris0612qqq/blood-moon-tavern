@@ -833,7 +833,9 @@ def test_P11_chat_does_not_grow_engine_log(env: Env, client: TestClient) -> None
         env.clock.advance(1.1)
         admin.reply("chat.send", channel="public", content="x")
     assert len(engine.log) == before
-    assert env.db.rows("SELECT COUNT(*) AS c FROM event_log WHERE type='chat_sent'")[0]["c"] == 5 + 2  # 加開局系統訊息兩則
+    assert (
+        env.db.rows("SELECT COUNT(*) AS c FROM event_log WHERE type='chat_sent'")[0]["c"] == 5 + 2
+    )  # 加開局系統訊息兩則
     admin.close()
 
 
