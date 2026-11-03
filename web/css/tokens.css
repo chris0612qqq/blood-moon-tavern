@@ -1,0 +1,51 @@
+/* 美術數值（ART 3、4、11.1；CODING_RULES V5）。畫面只用這裡的變數，不直接寫色碼與時間。 */
+:root {
+  /* 主色票（SPEC C2） */
+  --bg-night: #14100d;
+  --bg-stone: #1f1a15;
+  --parchment: #e8d9b5;
+  --parchment-dark: #cdb98a;
+  --ink: #2b1d12;
+  --gold: #c9a24a;
+  --gold-bright: #e8c872;
+  --blood: #8e1b1b;
+  --ember: #d9702b;
+  --moss: #4a6b3a;
+  --arcane: #5b4b8a;
+  --mask: #3d2f4f;
+  --ice: #6fa3b8;
+  --steel: #8b93a0;
+  /* 延伸色 */
+  --night-sky: #0c1018;
+  --dusk: #2a1f14;
+  --witch-red: #b5373a;
+  --witch-green: #3f8f5a;
+  --hunter-wood: #7a5532;
+  --candle: #ffcf7a;
+  --fog: rgba(139, 147, 160, .18);
+
+  /* 字體：正式字型子集化在量產時加入，先用手機內建的宋體與襯線體 */
+  --font-title: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --font-body: system-ui, "PingFang TC", "Noto Sans TC", sans-serif;
+  --font-num: "Cinzel", "Trajan Pro", Georgia, "Times New Roman", serif;
+  --fs-title: 24px;
+  --fs-lead: 18px;
+  --fs-body: 16px;
+
+  /* 間距四級（ART 6） */
+  --gap-1: 8px;
+  --gap-2: 12px;
+  --gap-3: 16px;
+  --gap-4: 24px;
+
+  /* 動畫時間（ART 11.1） */
+  --dur-tap: 120ms;
+  --dur-fast: 200ms;
+  --dur-dialog: 350ms;
+  --dur-flip: 600ms;
+  --dur-phase: 800ms;
+  --dur-night: 1000ms;
+  --dur-confirm: 3000ms; /* 狼人全員一致後自動確認（SPEC C8.1） */
+  --dur-slash: 400ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+}

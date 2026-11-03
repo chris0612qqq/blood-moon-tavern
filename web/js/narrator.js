@@ -5,6 +5,7 @@
 // 所以任何第一次點擊都先念一個無聲的字解鎖，之後伺服器叫念才念得出來（CODING_RULES V13）。
 
 import { LIMITS } from './protocol.js';
+import { HOWL_MS, wolfHowl } from './sfx.js';
 import { changed, store } from './store.js';
 
 const PITCH = 0.9;
@@ -19,6 +20,9 @@ const UNLOCK_TEXT = '。';
 let current = null;
 const queued = [];
 const QUEUE_KEEP = 20;
+// 角色開場音效。垂直切片只有狼人；其他角色量產時加進來（ART 12.4）
+const OPENING_SFX = Object.freeze({ wolf_open: wolfHowl });
+let openingPlayedAt = null;
 
 store.voice = { supported: Boolean(window.speechSynthesis), unlocked: false, voices: 0, name: '', last: '' };
 
@@ -132,9 +136,15 @@ function isNarrator(server) {
 /** 收到 narrate 時呼叫：只有旁白主機或主持人手機發聲。 */
 export function onNarrate(msg) {
   if (!msg.speak || !isNarrator(store.server)) return;
+  // 狼人請睜眼之前先狼嚎（ART 12.4），嚎完才念；重念、催促時不再嚎
+  const howl = OPENING_SFX[msg.line_id];
+  const seq = store.server.step_seq;
+  const played = howl && seq !== openingPlayedAt && howl();
+  if (howl) openingPlayedAt = seq;
   // 主持人選了「我自己念」：繼續後的重念也只顯示字幕
   if (store.server.host && !store.ui.speakAloud) return;
-  speak(msg.text);
+  if (played) setTimeout(() => speak(msg.text), HOWL_MS);
+  else speak(msg.text);
 }
 
 /** 收到定向廣播：伺服器只送給被指定的手機，所以不看是不是旁白主機。音效（msg.sound）P8 才接。 */

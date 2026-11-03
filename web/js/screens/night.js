@@ -3,7 +3,9 @@ import { h } from '../dom.js';
 import { send } from '../net.js';
 import { store, changed } from '../store.js';
 import { errorText, roleAbility, roleName, roleStory, stepName, t } from '../strings.js';
-import { actionButton, countdown, nameOf, pickGrid, selection, toast } from '../ui/common.js';
+import {
+  actionButton, avatar, countdown, countdownRing, nameOf, pickGrid, selection, toast,
+} from '../ui/common.js';
 
 /** 角色卡：長按才顯示，放開蓋回；秘密只在顯示時才進 DOM（CODING_RULES V18、V19）。 */
 export function roleCard(server) {
@@ -125,16 +127,26 @@ export function s8(server) {
       if (!result.ok) toast('error.raw', { text: errorText(result.code) });
     });
   };
+  // 美術垂直切片（DEV_PLAN P8）：血月、爪痕暗角、倒數環、木牌格子；畫面樣式在 css/s8.css
+  const moon = h('div', { class: 's8__moon', 'aria-hidden': 'true' });
   if (info.decided) {
-    return h('div', { class: 'center' },
-      h('h1', { testid: 'screen-s8-done' }, t('s7.title')),
-      h('div', { class: 'panel', testid: 'wolf-status' }, wolfStatus(server, info)));
+    const victim = info.decided_target;
+    return h('div', { class: 's8 s8--done center' },
+      moon,
+      h('h1', { class: 's8__title', testid: 'screen-s8-done' }, t('s7.title')),
+      h('div', { class: `victim ${victim ? '' : 'victim--none'}`, testid: 'wolf-victim' },
+        victim ? avatar(server, victim) : null,
+        h('div', { class: 'victim__name' }, victim ? nameOf(server, victim) : t('s8.empty')),
+        victim ? h('span', { class: 'slash', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')) : null),
+      h('div', { class: 'panel s8__status', testid: 'wolf-status' }, wolfStatus(server, info)));
   }
-  return [
-    h('h1', { testid: 'screen-s8' }, t('s8.title')),
-    countdown(server, t('s8.timeout')),
-    h('p', { class: 'center', testid: 'wolf-one-kill' }, t('s8.oneKill')),
-    allies ? h('p', {}, t('s8.allies', { names: allies })) : null,
+  const agreed = info.confirming_until ? (picks[me.id] ?? 'none') : undefined;
+  return h('div', { class: 's8' },
+    moon,
+    h('h1', { class: 's8__title', testid: 'screen-s8' }, t('s8.title')),
+    countdownRing(server, t('s8.timeout')),
+    h('p', { class: 'center s8__rule', testid: 'wolf-one-kill' }, t('s8.oneKill')),
+    allies ? h('p', { class: 'center s8__allies' }, t('s8.allies', { names: allies })) : null,
     pickGrid({
       ids: me.eligible_targets ?? [],
       server,
@@ -142,9 +154,10 @@ export function s8(server) {
       marks,
       onPick: pick,
       extra: [{ value: 'none', label: t('s8.empty') }],
+      look: 'grid--wolf',
+      stateOf: (value) => (value === agreed ? 'cell--confirming' : ''),
     }),
-    h('div', { class: 'panel', testid: 'wolf-status' }, wolfStatus(server, info)),
-  ];
+    h('div', { class: 'panel s8__status', testid: 'wolf-status' }, wolfStatus(server, info)));
 }
 
 export function s9(server) {

@@ -6,6 +6,7 @@ import { resolveScreen } from './router.js';
 import './wake.js';
 import './pwa.js';
 import { lightboxLayer } from './ui/media.js';
+import { tickClocks, watchFrames } from './ui/clock.js';
 import { clearAdminToken, clearPlayerToken, loadTokens } from './session.js';
 import { changed, store, subscribe } from './store.js';
 import { stepName, t } from './strings.js';
@@ -212,25 +213,15 @@ function draw() {
 // 單一時鐘（UI_RULES Q5、U6）：每影格以 deadline − 校正後的伺服器時間重算，不用計數器
 let lastHostRedraw = 0;
 
-function clockFrame() {
+function clockFrame(ms) {
+  watchFrames(ms);
   const now = serverNow();
   // 上帝控制台的「下一句可以按了」會隨時間變，每秒重畫一次
   if (store.server?.host && performance.now() - lastHostRedraw > 1000) {
     lastHostRedraw = performance.now();
     changed();
   }
-  for (const el of document.querySelectorAll('[data-deadline]')) {
-    const opens = Number(el.dataset.opens);
-    let text;
-    if (el.dataset.opens && now < opens) text = el.dataset.prep ?? t('prep');
-    else {
-      const left = Math.max(0, Math.ceil(Number(el.dataset.deadline) - now));
-      text = el.dataset.clock === 'mmss'
-        ? `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`
-        : String(left);
-    }
-    if (el.textContent !== text) el.textContent = text;
-  }
+  tickClocks(now);
   requestAnimationFrame(clockFrame);
 }
 
