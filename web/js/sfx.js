@@ -12,8 +12,8 @@ const AFTER_RECORDING_MS = 300; // 錄音放完稍停一下再念旁白
 const ECHO_S = 0.4;
 const ECHO_FEEDBACK = 0.35;
 const CLEANUP_MS = 5000;
-// 角色開場音效比旁白低 4 dB（ART 12.2）
-const SFX_GAIN = 10 ** (-4 / 20);
+// 原本比旁白低 4 dB（ART 12.2），使用者試聽後要再大聲三倍
+const SFX_GAIN = 3 * 10 ** (-4 / 20);
 
 let context = null;
 let howlRecording = null;
@@ -48,6 +48,21 @@ function audio() {
   return context;
 }
 
+let limiter = null;
+/** 音效都接到這裡：放大三倍後錄音會超過上限，用限幅器壓住，免得破音。 */
+function sfxOut(ac) {
+  if (!limiter) {
+    limiter = ac.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.1;
+    limiter.connect(ac.destination);
+  }
+  return limiter;
+}
+
 // iOS 只在手指點擊當下允許打開聲音，所以第一次點擊就先開好
 for (const name of ['touchend', 'click']) {
   document.addEventListener(name, () => { audio(); }, { capture: true, passive: true });
@@ -72,7 +87,7 @@ function playRecording(ac, buffer) {
   const gain = ac.createGain();
   gain.gain.value = SFX_GAIN;
   source.connect(gain);
-  gain.connect(ac.destination);
+  gain.connect(sfxOut(ac));
   source.start();
   return Math.round(buffer.duration * 1000) + AFTER_RECORDING_MS;
 }
@@ -88,11 +103,12 @@ function synthHowl(ac) {
   echo.delayTime.value = ECHO_S;
   const feedback = ac.createGain();
   feedback.gain.value = ECHO_FEEDBACK;
-  out.connect(ac.destination);
+  const master = sfxOut(ac);
+  out.connect(master);
   out.connect(echo);
   echo.connect(feedback);
   feedback.connect(echo);
-  feedback.connect(ac.destination);
+  feedback.connect(master);
 
   const envelope = ac.createGain();
   envelope.gain.setValueAtTime(0.0001, t0);
