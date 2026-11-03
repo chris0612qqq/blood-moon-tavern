@@ -42,7 +42,7 @@ class Game:
     ) -> None:
         roles = roles or ROLES_8
         self.nominate: tuple[str, ...] = ()
-        monkeypatch.setattr("server.rules.deal", lambda ids, history, rng: dict(roles))
+        monkeypatch.setattr("server.rules.deal", lambda ids, history, rng, plan=None: dict(roles))
         self.clock = FakeClock()
         players = [(pid, pid.upper()) for pid in roles]
         narrator = None if mode is Mode.GOD else "p1"
@@ -1056,10 +1056,32 @@ class TestChat:
         game.act(ADMIN, Action.ADMIN_END)
         self._chat(game, "late")
 
-    def test_host_cannot_post_to_wolf_channel(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_host_can_post_to_wolf_channel(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # SPEC v4.25：上帝主持人可以在狼頻道偷偷提示狼人
         game = Game(monkeypatch, mode=Mode.GOD)
+        events = self._chat(game, HOST, channel=Channel.WOLF)
+        assert events[0].data["is_host"] and events[0].data["channel"] == "wolf"
+
+    def test_intro_messages(self, game: Game) -> None:
+        # SPEC v4.25：開局系統訊息，狼頻道一則、公共頻道一則；這局有千面狼才提假扮
+        events = game.engine.post_intro()
+        assert [(e.data["channel"], e.data["kind"]) for e in events] == [
+            ("wolf", "system"),
+            ("public", "system"),
+        ]
+        has_faceless = any(p.role is Role.FACELESS for p in game.state.players)
+        assert events[0].data["content"] == ("intro.wolfFaceless" if has_faceless else "intro.wolf")
+        assert events[1].data["content"] == "intro.public"
+        assert all(e.data["real_author"] is None for e in events)
+
+    def test_players_cannot_send_system_messages(self) -> None:
+        from server import protocol
+
+        frame = {"t": "chat.send", "msg_id": "m1", "channel": "public", "kind": "system"}
         with pytest.raises(GameError):
-            self._chat(game, HOST, channel=Channel.WOLF)
+            protocol.parse_client({**frame, "media_id": "x"})
+        with pytest.raises(GameError):
+            protocol.parse_client({**frame, "content": "intro.public"})
 
 
 class TestWolfMask:

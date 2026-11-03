@@ -206,6 +206,9 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
         press(ally, "tab-chat")
         press(ally, "tab-wolf")
         assert bubble_who(ally, night_msg).startswith(faceless_name)
+        # 開局系統訊息：狼頻道說明功能，這局有千面狼所以提到假扮（SPEC v4.25）
+        intro = ally.locator('[data-testid="chat-list-wolf"]').inner_text()
+        assert "歡迎加入狼群" in intro and "千面狼" in intro and "定時電子音" in intro
         press(ally, "tab-game")
         press(faceless, "tab-game")
 
@@ -219,6 +222,8 @@ def test_chat_wolf_channel_and_faceless_switching(server_url: str) -> None:  # n
         wait(bystander, "chat-blocked")
         blocked = bystander.locator('[data-testid="chat-blocked"]').inner_text()
         assert "夜晚" in blocked and not has(bystander, "chat-input")
+        public = bystander.locator('[data-testid="chat-list-public"]').inner_text()
+        assert "血月升起" in public and "狼群" not in public  # 好人只看到公共頻道的氣氛文字
         press(bystander, "tab-game")
 
         play_night_without_deaths(pages)

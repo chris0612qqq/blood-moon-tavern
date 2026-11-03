@@ -833,7 +833,9 @@ def test_P11_chat_does_not_grow_engine_log(env: Env, client: TestClient) -> None
         env.clock.advance(1.1)
         admin.reply("chat.send", channel="public", content="x")
     assert len(engine.log) == before
-    assert env.db.rows("SELECT COUNT(*) AS c FROM event_log WHERE type='chat_sent'")[0]["c"] == 5
+    assert (
+        env.db.rows("SELECT COUNT(*) AS c FROM event_log WHERE type='chat_sent'")[0]["c"] == 5 + 2
+    )  # 加開局系統訊息兩則
     admin.close()
 
 
@@ -1609,3 +1611,38 @@ def test_speaker_phone_also_hears_their_turn(env: Env, client: TestClient) -> No
     assert not _saw_broadcast_before_ack(ws)
     for conn in (ws, other, admin):
         conn.close()
+
+
+# ---- 開局前指定職業（SPEC v4.26） ----
+
+
+def test_admin_role_plan(env: Env, client: TestClient) -> None:
+    open_room(env, client, "god")
+    tokens = player_tokens(client, 8)
+    (seer_token, seer), (_, wolf_a), (_, wolf_b), (_, faceless) = tokens[:4]
+    admin = Ws(client, env.admin_token)
+    assert admin.reply("admin.role", player=seer, role="seer")["t"] == "ack"
+    assert Ws(client, env.admin_token).state["role_plan"] == {seer: "seer"}
+    # 只有管理員看得到
+    player = Ws(client, seer_token)
+    assert "role_plan" not in player.state
+    assert player.reply("admin.role", player=seer, role="wolf")["code"] == "forbidden"
+    # 8 人只有 1 個預言家、2 狼（含千面狼）：超過名額拒絕
+    assert admin.reply("admin.role", player=wolf_a, role="seer")["code"] == "role_plan_full"
+    assert admin.reply("admin.role", player=wolf_a, role="wolf")["t"] == "ack"
+    assert admin.reply("admin.role", player=wolf_b, role="wolf")["code"] == "role_plan_full"
+    assert admin.reply("admin.role", player=faceless, role="faceless")["t"] == "ack"
+    # 改回隨機
+    assert admin.reply("admin.role", player=faceless, role=None)["t"] == "ack"
+    assert env.service.role_plan == {seer: "seer", wolf_a: "wolf"}
+    assert admin.reply("admin.start")["t"] == "ack"
+    engine = env.service.engine
+    assert engine is not None
+    assert engine.state.player(seer).role.value == "seer"
+    assert engine.state.player(wolf_a).role.value == "wolf"
+    # 其他職業照人數表隨機補齊
+    roles = [p.role.value for p in engine.state.players]
+    assert roles.count("seer") == 1 and roles.count("wolf") == 1 and roles.count("faceless") == 1
+    # 開局後不能再改，也只用在這一局
+    assert admin.reply("admin.role", player=seer, role=None)["code"] == "invalid_target"
+    assert env.service.role_plan == {}

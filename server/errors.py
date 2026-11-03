@@ -27,6 +27,7 @@ class ErrorCode(StrEnum):
     FILE_TOO_LARGE = "file_too_large"
     VERSION_MISMATCH = "version_mismatch"
     INTERNAL_ERROR = "internal_error"
+    ROLE_PLAN_FULL = "role_plan_full"
 
 
 class GameError(Exception):

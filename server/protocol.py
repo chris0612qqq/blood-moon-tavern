@@ -11,7 +11,7 @@ from typing import Annotated, Any, Final
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from server import balance, config
-from server.enums import Channel, ChatKind, Mode
+from server.enums import Channel, ChatKind, Mode, Role
 from server.errors import ErrorCode, GameError
 
 Id = Annotated[str, Field(min_length=1, max_length=64)]
@@ -151,6 +151,13 @@ class PlayerRef(ClientFrame):
     player: Id
 
 
+class AdminRole(ClientFrame):
+    """開局前指定職業（SPEC v4.26）；role 為 None 表示改回隨機。"""
+
+    player: Id
+    role: Role | None = None
+
+
 class AdminSeat(ClientFrame):
     order: list[Id] = Field(max_length=config.ROOM_CAPACITY)
 
@@ -192,6 +199,7 @@ CLIENT_MESSAGES: Final[dict[str, type[ClientFrame]]] = {
     "speak.end": Empty,
     "vote.cast": OptionalTarget,
     "admin.seat": AdminSeat,
+    "admin.role": AdminRole,
     "admin.start": Empty,
     "admin.end": Empty,
     "admin.pause": Empty,
@@ -224,6 +232,8 @@ def parse_client(raw: Any) -> ClientFrame:
 
 
 def _check_chat(msg: ChatSend) -> None:
+    if msg.kind is ChatKind.SYSTEM:
+        raise GameError(ErrorCode.BAD_REQUEST)
     if msg.kind in (ChatKind.TEXT, ChatKind.TTS):
         if not msg.content or len(msg.content) > config.CHAT_MAX_CHARS or msg.media_id:
             raise GameError(ErrorCode.BAD_REQUEST)
