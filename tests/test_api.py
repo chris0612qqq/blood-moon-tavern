@@ -1646,3 +1646,22 @@ def test_admin_role_plan(env: Env, client: TestClient) -> None:
     # 開局後不能再改，也只用在這一局
     assert admin.reply("admin.role", player=seer, role=None)["code"] == "invalid_target"
     assert env.service.role_plan == {}
+
+
+def test_admin_voices(env: Env, client: TestClient) -> None:
+    open_room(env, client, "god")
+    (token, pid), (_, other) = player_tokens(client, 6)[:2]
+    admin = Ws(client, env.admin_token)
+    player = Ws(client, token)
+    assert player.state["voices"] == {"all": False, "players": []}
+    assert player.reply("admin.voices", all=True)["code"] == "forbidden"
+    assert admin.reply("admin.voices", players=["nope"])["code"] == "invalid_target"
+    assert admin.reply("admin.voices", players=[pid, other, pid])["t"] == "ack"
+    voices = player.until("voices")
+    assert (voices["all"], voices["players"]) == (False, sorted([pid, other]))
+    # 遊戲中也能改，重新連線的人從完整狀態拿到
+    assert admin.reply("admin.start")["t"] == "ack"
+    assert admin.reply("admin.voices", all=True)["t"] == "ack"
+    assert Ws(client, token).state["voices"] == {"all": True, "players": []}
+    admin.close()
+    player.close()

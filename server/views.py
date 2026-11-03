@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -576,6 +576,15 @@ def roster_message(rows: Sequence[Message]) -> Message:
 def broadcast_message(text: str, speak: bool, sound: str | None) -> Message:
     """定向廣播的內容（SPEC C4）。只有呼叫端指定的手機會收到。"""
     return {"t": "broadcast", "text": text, "speak": speak, "sound": sound}
+
+
+def voices_block(everyone: bool = False, players: Iterable[str] = ()) -> dict[str, Any]:
+    """哪些手機也念旁白。旁白內容大家都一樣，所以不是秘密，每個人都會收到。"""
+    return {"all": everyone, "players": sorted(set(players))}
+
+
+def voices_message(voices: Mapping[str, Any]) -> Message:
+    return {"t": "voices", **voices}
 
 
 def narrator_message(player_id: str | None) -> Message:

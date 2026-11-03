@@ -3,6 +3,7 @@ import { h } from '../dom.js';
 import { send, serverNow } from '../net.js';
 import { changed, store } from '../store.js';
 import { errorText, t } from '../strings.js';
+import { ringState } from './clock.js';
 
 const SUCCESS_MS = 1200;
 const ERROR_MS = 2000;
@@ -91,16 +92,41 @@ export function button(label, onclick, o = {}) {
  * 倒數：不在這裡算秒數。節點帶 data-deadline，由 app.js 的單一時鐘每影格更新（UI_RULES U6、Q5）。
  */
 export function countdown(server, hint) {
+  return h('div', { class: 'center' }, clockNumber(server, 'count'), hint ? h('div', { class: 'hint' }, hint) : null);
+}
+
+function clockNumber(server, cls) {
   const paused = Boolean(server.paused);
   const notOpen = server.opens_at !== undefined && server.opens_at !== null;
+  return h('div', {
+    class: cls,
+    testid: 'countdown',
+    'data-deadline': paused ? null : (server.deadline ?? null),
+    'data-opens': paused ? null : (notOpen ? server.opens_at : null),
+    'data-prep': prepText(server),
+    // 旁白還在念時顯示文字不是數字，倒數環裡要改用小字（clock.js 每影格同步）
+    'data-waiting': !paused && notOpen && serverNow() < server.opens_at,
+  }, paused ? '‖' : clockText(server));
+}
+
+const SPARKS = 5;
+
+/** 倒數環（ART 7.2）：環隨時間變短，剩 10 秒轉火色冒火星，剩 3 秒數字跳動，暫停變灰。 */
+export function countdownRing(server, hint) {
+  const paused = Boolean(server.paused);
+  const opens = server.opens_at ?? null;
+  const { frac, zone } = ringState(server.deadline, opens, serverNow(), paused);
   return h('div', { class: 'center' },
     h('div', {
-      class: 'count',
-      testid: 'countdown',
-      'data-deadline': paused ? null : (server.deadline ?? null),
-      'data-opens': paused ? null : (notOpen ? server.opens_at : null),
-      'data-prep': prepText(server),
-    }, paused ? '‖' : clockText(server)),
+      class: 'ring',
+      testid: 'countdown-ring',
+      'data-ring-deadline': paused ? null : (server.deadline ?? null),
+      'data-ring-opens': paused ? null : opens,
+      'data-zone': zone,
+      style: `--frac:${frac.toFixed(4)}`,
+    },
+    h('span', { class: 'ring__sparks', 'aria-hidden': 'true' }, Array.from({ length: SPARKS }, () => h('i'))),
+    clockNumber(server, 'ring__num')),
     hint ? h('div', { class: 'hint' }, hint) : null);
 }
 
@@ -136,29 +162,34 @@ export function avatar(server, id) {
     row?.avatar_url ? h('img', { src: row.avatar_url, alt: name, loading: 'lazy' }) : name.slice(0, 1));
 }
 
-/** 選擇格（SPEC C8.1）：不可選的人不出現；一律 3 欄。extra 是空刀、棄票這類特殊格。 */
-export function pickGrid({ ids, server, selected, onPick, marks = null, extra = [], prefix = 'pick-cell' }) {
+/**
+ * 選擇格（SPEC C8.1）：不可選的人不出現；一律 3 欄。extra 是空刀、棄票這類特殊格。
+ * look 是整個格子區的外觀（例如 'grid--wolf'），stateOf(value) 回傳單格多加的 class（例如即將確認）。
+ */
+export function pickGrid({
+  ids, server, selected, onPick, marks = null, extra = [], prefix = 'pick-cell', look = '', stateOf = () => '',
+}) {
   const cells = ids.map((id) => {
     const row = server.players?.find((p) => p.id === id);
     return h('button', {
-      class: `cell ${selected === id ? 'cell--on' : ''}`,
+      class: `cell ${selected === id ? 'cell--on' : ''} ${stateOf(id)}`,
       key: id,
       testid: `${prefix}-${id}`,
       onclick: () => onPick(id),
     },
     avatar(server, id),
-    h('div', {},
+    h('div', { class: 'cell__name' },
       h('span', { class: 'cell__seat' }, row ? `#${row.seat} ` : ''),
       nameOf(server, id)),
     h('div', { class: 'cell__marks' }, marks?.[id] ?? ''));
   });
   const specials = extra.map((e) => h('button', {
-    class: `cell cell--empty ${selected === e.value ? 'cell--on' : ''}`,
+    class: `cell cell--empty ${selected === e.value ? 'cell--on' : ''} ${stateOf(e.value)}`,
     key: `extra-${e.value}`,
     testid: `${prefix}-${e.value}`,
     onclick: () => onPick(e.value),
-  }, e.label, h('div', { class: 'cell__marks' }, marks?.[e.value] ?? '')));
-  return h('div', { class: `grid ${marks ? 'grid--marks' : ''}` }, cells, specials);
+  }, h('div', { class: 'cell__name' }, e.label), h('div', { class: 'cell__marks' }, marks?.[e.value] ?? '')));
+  return h('div', { class: `grid ${marks ? 'grid--marks' : ''} ${look}` }, cells, specials);
 }
 
 /** 點格子只是選取，再點一次取消（UI_RULES K7）。 */

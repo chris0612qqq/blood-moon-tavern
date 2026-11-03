@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-Hant" data-phase="night" data-screen="S8">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>血月酒館 · 美術預覽</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/s8.css">
+<style>
+  /* 只給預覽頁用的切換列，不是遊戲畫面 */
+  .preview-bar { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; background: #000; border-bottom: 1px solid #444; }
+  .preview-bar button { flex: 1 1 30%; min-height: 40px; font-size: 14px; background: #222; color: #ddd; border: 1px solid #555; border-radius: 4px; }
+  .preview-bar button[data-on] { border-color: #e8c872; color: #fff; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module" src="js/preview_s8.js"></script>
+</body>
+</html>
