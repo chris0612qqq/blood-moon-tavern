@@ -4,7 +4,7 @@ import { h, render } from './dom.js';
 import { serverNow } from './net.js';
 import { speak } from './narrator.js';
 import { s8 } from './screens/night.js';
-import { HOWL_MS, wolfHowl } from './sfx.js';
+import { wolfHowl } from './sfx.js';
 import { changed, store, subscribe } from './store.js';
 import { tickClocks, watchFrames } from './ui/clock.js';
 
@@ -79,7 +79,8 @@ function bar() {
     }, label)),
     h('button', {
       onclick: () => {
-        if (wolfHowl()) setTimeout(() => speak(WOLF_OPEN), HOWL_MS);
+        const waitMs = wolfHowl();
+        if (waitMs) setTimeout(() => speak(WOLF_OPEN), waitMs);
         else speak(WOLF_OPEN);
       },
     }, '🐺 狼嚎＋旁白'));

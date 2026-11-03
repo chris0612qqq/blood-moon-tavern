@@ -5,7 +5,7 @@
 // 所以任何第一次點擊都先念一個無聲的字解鎖，之後伺服器叫念才念得出來（CODING_RULES V13）。
 
 import { LIMITS } from './protocol.js';
-import { HOWL_MS, wolfHowl } from './sfx.js';
+import { wolfHowl } from './sfx.js';
 import { changed, store } from './store.js';
 
 const PITCH = 0.9;
@@ -143,11 +143,11 @@ export function onNarrate(msg) {
   // 狼人請睜眼之前先狼嚎（ART 12.4），嚎完才念；重念、催促時不再嚎
   const howl = OPENING_SFX[msg.line_id];
   const seq = store.server.step_seq;
-  const played = howl && seq !== openingPlayedAt && howl();
+  const waitMs = howl && seq !== openingPlayedAt ? howl() : 0;
   if (howl) openingPlayedAt = seq;
   // 主持人選了「我自己念」：繼續後的重念也只顯示字幕
   if (store.server.host && !store.ui.speakAloud) return;
-  if (played) setTimeout(() => speak(msg.text), HOWL_MS);
+  if (waitMs) setTimeout(() => speak(msg.text), waitMs);
   else speak(msg.text);
 }
 
