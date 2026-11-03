@@ -1,10 +1,10 @@
 // S5 大廳（SPEC A4、C4）。
 import { h } from '../dom.js';
 import { api, send } from '../net.js';
-import { LIMITS, NO_HUNTER_PLAYER_COUNT, ROLE_TABLE } from '../protocol.js';
+import { LIMITS, NO_HUNTER_PLAYER_COUNT, ROLE, ROLE_TABLE } from '../protocol.js';
 import { loadTokens } from '../session.js';
 import { changed, store } from '../store.js';
-import { t } from '../strings.js';
+import { roleName, t } from '../strings.js';
 import { actionButton, avatar, button, toast } from '../ui/common.js';
 
 const DRAG_EDGE = 48;
@@ -86,9 +86,61 @@ function startDrag(event, players, id) {
   document.addEventListener('pointercancel', onEnd);
 }
 
+// 開局前指定職業（SPEC v4.26）：選單照這個順序；千面狼固定一隻，算在狼人總數裡
+const PLAN_ROLES = [ROLE.WOLF, ROLE.FACELESS, ROLE.SEER, ROLE.WITCH, ROLE.HUNTER, ROLE.VILLAGER];
+const FACELESS_PER_GAME = 1;
+
+/** 這個人數各職業有幾個名額；人數不在 6–20 時回 null。 */
+function roleLimits(n) {
+  if (!ROLE_TABLE[n]) return null;
+  const [wolves, villagers] = ROLE_TABLE[n];
+  return {
+    [ROLE.WOLF]: wolves - FACELESS_PER_GAME,
+    [ROLE.FACELESS]: FACELESS_PER_GAME,
+    [ROLE.SEER]: 1,
+    [ROLE.WITCH]: 1,
+    [ROLE.HUNTER]: n === NO_HUNTER_PLAYER_COUNT.value ? 0 : 1,
+    [ROLE.VILLAGER]: villagers,
+  };
+}
+
+/** 只算還坐在位子上的人：指定後離開的人不佔名額。 */
+function activePlan(server, players) {
+  const ids = new Set(players.map((p) => p.id));
+  return Object.fromEntries(Object.entries(server.role_plan ?? {}).filter(([id]) => ids.has(id)));
+}
+
+function roleSection(server, player) {
+  const players = seated(server);
+  const plan = activePlan(server, players);
+  const limits = roleLimits(players.length);
+  const current = plan[player.id] ?? null;
+  const used = (role) => Object.entries(plan).filter(([id, r]) => r === role && id !== player.id).length;
+  const choose = (role) => send('admin.role', { player: player.id, role });
+  return [
+    h('p', { class: 'hint' }, limits ? t('s5.roleHint') : t('s5.roleHintFew')),
+    h('div', { class: 'role-grid' },
+      // 每顆包一層：按鈕下面的原因文字（例如送出失敗）才會留在同一格裡
+      h('div', {}, actionButton({ id: `role-random-${player.id}`, small: true, kind: current ? 'secondary' : 'suggest', label: t('s5.roleRandom'), run: () => choose(null) })),
+      PLAN_ROLES.map((role) => {
+        const left = limits ? limits[role] - used(role) : null;
+        return h('div', { key: role }, actionButton({
+          id: `role-${role}-${player.id}`,
+          small: true,
+          kind: current === role ? 'suggest' : 'secondary',
+          label: left === null ? roleName(role) : t('s5.roleLeft', { role: roleName(role), n: Math.max(left, 0) }),
+          // 名額滿了只變灰，不在下面加原因：兩欄的格子才不會被撐歪
+          disabled: left !== null && left <= 0 && current !== role ? ' ' : null,
+          run: () => choose(role),
+        }));
+      })),
+  ];
+}
+
 function row(server, player, isAdmin, players) {
   const narrator = (server.room?.narrator_id ?? server.narrator_id) === player.id;
   const dragging = store.ui.seatDrag?.id === player.id;
+  const planned = isAdmin ? server.role_plan?.[player.id] : null;
   return h('div', { class: `list-row seat-row ${dragging ? 'seat-row--drag' : ''}`, key: player.id, testid: `lobby-row-${player.id}` },
     isAdmin ? h('span', {
       class: 'seat-handle',
@@ -101,7 +153,8 @@ function row(server, player, isAdmin, players) {
     // 標籤放名字下面：管理員同時是旁白又離線時，右邊的按鈕才不會被擠出去
     h('div', { class: 'grow seat-row__who' },
       h('div', { class: 'nowrap' }, player.name),
-      player.is_admin || narrator || player.offline ? h('div', { class: 'seat-row__tags' },
+      player.is_admin || narrator || player.offline || planned ? h('div', { class: 'seat-row__tags' },
+        planned ? h('span', { class: 'badge badge--role', testid: `planned-${player.id}` }, roleName(planned)) : null,
         player.is_admin ? h('span', { class: 'badge' }, t('s5.adminTag')) : null,
         narrator ? h('span', { class: 'badge' }, t('s5.narratorTag')) : null,
         player.offline ? h('span', { class: 'badge' }, t('s5.offlineTag')) : null) : null),
@@ -149,6 +202,7 @@ export function lobbyMenu(server, playerId) {
   };
   return [
     h('h2', {}, player.name),
+    player.is_spectator ? null : roleSection(server, player),
     server.room?.mode === 'auto'
       ? actionButton({ id: 'btn-set-narrator', label: t('s5.setNarrator'), run: () => closeAfter(send('admin.narrator', { player: playerId })) })
       : null,
@@ -158,7 +212,7 @@ export function lobbyMenu(server, playerId) {
       kind: 'secondary',
       run: () => closeAfter(send('admin.reset_pin', { player: playerId }), 'toast.pinReset'),
     }),
-    button(t('common.close'), close),
+    button(t('common.close'), close, { testid: 'lobby-menu-close' }),
   ];
 }
 
@@ -167,7 +221,9 @@ function startConfirm(players) {
   const [wolves, villagers] = ROLE_TABLE[n];
   const hunter = n === NO_HUNTER_PLAYER_COUNT.value ? '' : t('s5.hunter');
   const offline = players.filter((p) => p.offline).map((p) => p.name).join('、');
-  const summary = t('s5.startConfirm', { n, wolves, hunter, villagers });
+  const planned = Object.keys(activePlan(store.server ?? {}, players)).length;
+  const base = t('s5.startConfirm', { n, wolves, hunter, villagers });
+  const summary = planned ? `${base}\n${t('s5.plannedCount', { n: planned })}` : base;
   return offline ? `${summary}\n${t('s5.offlineWarn', { names: offline })}` : summary;
 }
 

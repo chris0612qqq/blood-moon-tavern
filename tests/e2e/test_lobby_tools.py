@@ -610,3 +610,36 @@ def test_host_briefing_wall(server_url: str) -> None:  # noqa: F811
         second_round = host.locator('[data-testid="wall-second-round"]').inner_text()
         assert f"{names[0]} → {names[1]}" in second_round and f"{names[1]} 1 票" in second_round
         browser.close()
+
+
+def test_admin_sets_roles_before_start(server_url: str) -> None:  # noqa: F811
+    # SPEC v4.26：大廳點玩家選單指定職業，名單出現標籤，沒指定的隨機
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        host = browser.new_context(viewport=MOBILE).new_page()
+        host.goto(server_url)
+        admin_open_room(host, "god")
+        press(host, "btn-to-control")
+        wait(host, "screen-s20")
+        press(host, "btn-add-bots")
+        host.wait_for_function("window.__bmt.server.roster.length >= 6")
+        first, second = store(host, "s.server.roster.slice(0, 2).map((p) => p.id)")
+        press(host, f"lobby-menu-{first}")
+        assert host.locator(f'[data-testid="role-seer-{first}"]').inner_text() == "預言家 1"
+        press(host, f"role-seer-{first}")
+        wait(host, f"planned-{first}")
+        assert host.locator(f'[data-testid="planned-{first}"]').inner_text() == "預言家"
+        press(host, "lobby-menu-close")
+        # 預言家只有一個：別人的選單裡已經滿了
+        press(host, f"lobby-menu-{second}")
+        assert host.locator(f'[data-testid="role-seer-{second}"]').is_disabled()
+        press(host, f"role-wolf-{second}")
+        wait(host, f"planned-{second}")
+        press(host, "lobby-menu-close")
+        press(host, "btn-start")
+        assert "已指定 2 人" in host.locator('[data-testid="dialog-text"]').inner_text()
+        press(host, "dialog-confirm")
+        wait(host, "btn-host-next")
+        roles = store(host, "Object.fromEntries(s.server.host.players.map((p) => [p.id, p.role]))")
+        assert roles[first] == "seer" and roles[second] == "wolf"
+        browser.close()

@@ -125,9 +125,10 @@ class Engine:
         settings: Mapping[str, int] | None = None,
         narrator_id: str | None = None,
         strict: bool = True,
+        role_plan: Mapping[str, Role] | None = None,
     ) -> Engine:
         """發牌開局（SPEC A8.1）。`players` 為依座位排好的 (id, 名字)。"""
-        dealt = rules.deal([pid for pid, _ in players], history, rng)
+        dealt = rules.deal([pid for pid, _ in players], history, rng, role_plan)
         state = GameState(
             mode=mode,
             players=[
@@ -232,6 +233,10 @@ class Engine:
     ) -> list[Event]:
         """處理一則意圖（SPEC B4）。驗證順序依 CODING_RULES E2；不合法拋 GameError。"""
         actions.dispatch(self, actor, action, dict(payload or {}), step_seq)
+        return self.flush()
+
+    def post_intro(self) -> list[Event]:
+        actions.post_intro(self)
         return self.flush()
 
     def send_wolf_schedules(self, wall: float) -> list[Event]:

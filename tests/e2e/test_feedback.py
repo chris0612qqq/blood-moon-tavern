@@ -138,7 +138,8 @@ def test_f1_f2_reconnect_banner_then_offline_then_recovers(
     # 網路恢復：不用重新整理就回到正常
     page.evaluate("window.__blockSockets = false; window.dispatchEvent(new Event('online'))")
     page.wait_for_function("window.__bmt.conn === 'online'")
-    assert page.locator('[data-testid="conn-banner"]').count() == 0
+    # 提示條在下一次重繪才拿掉，等它消失，不要剛連上就檢查
+    page.wait_for_function("!document.querySelector('[data-testid=\"conn-banner\"]')", timeout=3000)
 
 
 def test_f1_stuck_connection_gives_up_and_retries(browser: Browser, server_url: str) -> None:  # noqa: F811

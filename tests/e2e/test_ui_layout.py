@@ -62,6 +62,14 @@ AUDIT_JS = """() => {
       found.push(`文字被裁切：${label(el)}`);
     }
   }
+  // 聊天列表捲動時，超出列表的部分被裁掉，看不到也按不到：只拿看得到的部分比重疊
+  const visibleRect = (el) => {
+    const r = el.getBoundingClientRect();
+    const list = el.closest('.chat__list');
+    if (!list) return r;
+    const box = list.getBoundingClientRect();
+    return { left: r.left, right: r.right, top: Math.max(r.top, box.top), bottom: Math.min(r.bottom, box.bottom) };
+  };
   const tappable = [...document.querySelectorAll('#app button, .overlay button, #app input')]
     .filter(shown).filter((el) => !inScroller(el));
   for (const el of tappable) {
@@ -70,8 +78,8 @@ AUDIT_JS = """() => {
   }
   for (let i = 0; i < tappable.length; i += 1) {
     for (let j = i + 1; j < tappable.length; j += 1) {
-      const a = tappable[i].getBoundingClientRect();
-      const b = tappable[j].getBoundingClientRect();
+      const a = visibleRect(tappable[i]);
+      const b = visibleRect(tappable[j]);
       const overlap = Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1
         && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
       // 不同區塊（內容區捲到分頁列後面）不算重疊，畫面上看不到也按不到

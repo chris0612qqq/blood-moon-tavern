@@ -79,6 +79,9 @@ def test_photo_and_voice_messages(server_url: str) -> None:  # noqa: F811
         player.wait_for_function("(window.__bmt.server.chat ?? []).some((m) => m.kind === 'tts')")
         # 收到時不自動念（點擊時會念無聲的「。」解鎖語音，不算）
         assert not player.evaluate("window.__said.some((s) => s.text === '大家好')")
+        # 只能用聽的：別人看不到原文，發的人自己看得到（SPEC v4.25）
+        assert "大家好" not in player.locator("button.tts").last.inner_text()
+        assert "大家好" in admin.locator("button.tts").last.inner_text()
         player.locator("button.tts").last.click()
         player.wait_for_function("window.__said.some((s) => s.text === '大家好')")
         said = player.evaluate("window.__said.find((s) => s.text === '大家好')")

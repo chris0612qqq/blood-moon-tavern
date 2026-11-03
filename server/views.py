@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -561,6 +561,11 @@ def lobby_state(
         "is_admin": is_admin,
         "chat": [lobby_chat_message(m, viewer) for m in chat],
     }
+
+
+def role_plan_block(plan: Mapping[str, Role]) -> Message:
+    """管理員大廳才有：開局前指定的職業（SPEC v4.26）。名額前端用 ROLE_TABLE 自己算。"""
+    return {"role_plan": {pid: role.value for pid, role in plan.items()}}
 
 
 def roster_message(rows: Sequence[Message]) -> Message:

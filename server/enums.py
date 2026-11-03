@@ -72,6 +72,8 @@ class ChatKind(StrEnum):
     VOICE = "voice"
     # 打字轉電子音（SPEC v4.24）：沒有錄音，點一下用手機語音念出來
     TTS = "tts"
+    # 系統訊息（SPEC v4.25）：只由伺服器發，content 是前端字串的代號
+    SYSTEM = "system"
 
 
 class DisguiseEnd(StrEnum):
