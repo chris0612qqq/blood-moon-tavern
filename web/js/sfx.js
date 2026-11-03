@@ -18,6 +18,12 @@ const SFX_GAIN = 10 ** (-4 / 20);
 let context = null;
 let howlRecording = null;
 
+// iPhone 預設把 Web Audio 當「環境音」，側邊靜音鍵一開就沒聲音（旁白語音不受影響）；
+// 改成「播放」類，像音樂一樣不理靜音鍵（Safari 17 起支援，舊版沒有就照舊）
+try {
+  if (navigator.audioSession) navigator.audioSession.type = 'playback';
+} catch { /* 不支援就算了 */ }
+
 /** 第一次開聲音時順便下載錄音；下載或解碼失敗就一直用合成的。 */
 async function loadHowl(ac) {
   try {
