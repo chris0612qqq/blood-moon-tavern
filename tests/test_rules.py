@@ -413,3 +413,21 @@ class TestNominees:
     )
     def test_top_two_levels(self, votes: dict[str, str | None], expected: dict[str, int]) -> None:
         assert rules.nominees(votes) == expected
+
+
+def test_deal_with_role_plan() -> None:
+    # SPEC v4.26：管理員指定的先發，剩下的名額照人數表抽
+    ids = [f"p{i}" for i in range(1, 13)]
+    plan = {"p1": Role.SEER, "p2": Role.WOLF, "p3": Role.VILLAGER}
+    for seed in range(20):
+        dealt = rules.deal(ids, {}, GameRng(seed), plan)
+        assert all(dealt[pid] is role for pid, role in plan.items())
+        counts = rules.role_counts(12)
+        assert {role: list(dealt.values()).count(role) for role in counts} == counts
+
+
+def test_plan_fits() -> None:
+    assert rules.plan_fits(8, {"a": Role.SEER})
+    assert not rules.plan_fits(8, {"a": Role.SEER, "b": Role.SEER})
+    assert not rules.plan_fits(6, {"a": Role.HUNTER})  # 6 人局沒有獵人
+    assert rules.plan_fits(4, {"a": Role.SEER, "b": Role.SEER})  # 還不夠開局，開局時再檢查

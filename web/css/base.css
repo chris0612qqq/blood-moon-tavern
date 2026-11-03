@@ -143,3 +143,6 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .host-content .grid button.btn { padding: 0 2px; } /* 六個字的台詞才放得下一行 */
 .host-tab__line { display: block; }
 .end-cause { flex: 1; min-width: 0; text-align: right; }
+.role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 12px; }
+.role-grid .btn { width: 100%; }
+.badge--role { background: #6a3a8a; color: #fff; }

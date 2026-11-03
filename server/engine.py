@@ -125,9 +125,10 @@ class Engine:
         settings: Mapping[str, int] | None = None,
         narrator_id: str | None = None,
         strict: bool = True,
+        role_plan: Mapping[str, Role] | None = None,
     ) -> Engine:
         """發牌開局（SPEC A8.1）。`players` 為依座位排好的 (id, 名字)。"""
-        dealt = rules.deal([pid for pid, _ in players], history, rng)
+        dealt = rules.deal([pid for pid, _ in players], history, rng, role_plan)
         state = GameState(
             mode=mode,
             players=[

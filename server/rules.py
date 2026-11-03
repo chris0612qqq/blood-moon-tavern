@@ -153,11 +153,32 @@ def weighted_pick(items: Sequence[str], weights: Sequence[int], rng: GameRng) ->
     raise AssertionError("point outside total weight")
 
 
-def deal(ids: Sequence[str], history: Mapping[str, RoleRecord], rng: GameRng) -> dict[str, Role]:
-    """依序抽特殊角色，剩下為村民（SPEC A5.7）。先排序確保同種子結果相同（L25）。"""
+def plan_fits(n: int, plan: Mapping[str, Role]) -> bool:
+    """管理員指定的職業沒超過這個人數能有的數量（SPEC v4.26）。"""
+    if n not in balance.ROLE_TABLE:
+        return True  # 人數還不夠開局，開局時會再檢查
+    counts = role_counts(n)
+    return all(list(plan.values()).count(role) <= counts[role] for role in set(plan.values()))
+
+
+def deal(
+    ids: Sequence[str],
+    history: Mapping[str, RoleRecord],
+    rng: GameRng,
+    plan: Mapping[str, Role] | None = None,
+) -> dict[str, Role]:
+    """依序抽特殊角色，剩下為村民（SPEC A5.7）。先排序確保同種子結果相同（L25）。
+
+    plan 是管理員事先指定的職業（SPEC v4.26），先發給他們，剩下的名額才抽。
+    """
     counts = role_counts(len(ids))
-    pool = sorted(ids)
-    roles: dict[str, Role] = {}
+    fixed = {pid: role for pid, role in (plan or {}).items() if pid in ids}
+    if not plan_fits(len(ids), fixed):
+        raise ValueError("role plan exceeds role counts")
+    for role in fixed.values():
+        counts[role] -= 1
+    pool = sorted(pid for pid in ids if pid not in fixed)
+    roles: dict[str, Role] = dict(fixed)
     for role in deal_sequence():
         for _ in range(counts[role]):
             weights = [role_weight(history.get(p), role) for p in pool]

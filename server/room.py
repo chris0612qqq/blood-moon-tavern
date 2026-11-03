@@ -20,11 +20,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, TypeVar
 
-from server import auth, config, media, protocol, views
+from server import auth, config, media, protocol, rules, views
 from server.clock import Clock, SystemClock
 from server.db import Database
 from server.engine import STEP_LINES, Engine
-from server.enums import Action, Channel, ChatKind, Mode, PauseReason, Step
+from server.enums import Action, Channel, ChatKind, Mode, PauseReason, Role, Step
 from server.errors import ErrorCode, GameError
 from server.events import Event, EventType
 from server.hub import Connection, Session, Socket
@@ -118,6 +118,7 @@ class RoomService:
         self.disguised_chat: list[ChatRow] = []
         self.media_rows: dict[str, media.StoredMedia] = {}
         self.chat_seq = 0
+        self.role_plan: dict[str, Role] = {}  # 開局前管理員指定的職業（SPEC v4.26）
         self.chat_times: dict[str, deque[float]] = {}
         self.db_fails = 0
         self.presence = PresenceMonitor()
@@ -244,6 +245,7 @@ class RoomService:
         self.disguised_chat = []
         self.media_rows = {}
         self.chat_seq = 0
+        self.role_plan = {}
         self.chat_times = {}
         self.db_fails = 0
         self.presence = PresenceMonitor()
@@ -457,6 +459,9 @@ class RoomService:
         elif kind == "admin.seat":
             assert isinstance(frame, protocol.AdminSeat)
             self._admin_seat(conn, frame)
+        elif kind == "admin.role":
+            assert isinstance(frame, protocol.AdminRole)
+            self._admin_role(conn, frame)
         elif kind == "admin.broadcast":
             assert isinstance(frame, protocol.AdminBroadcast)
             self._require_admin(conn.session)
@@ -639,6 +644,8 @@ class RoomService:
             message = views.lobby_state(
                 info, self.roster_rows(), conn.viewer, chat, conn.session.is_admin
             )
+            if conn.session.is_admin:
+                message |= views.role_plan_block(self.role_plan)
         else:
             message = views.build(
                 self.engine.state, conn.viewer, chat, truth_chat=self.disguised_chat
@@ -726,6 +733,31 @@ class RoomService:
             self.players[player_id].seat = seat
         self.db.write([_player_statement(room.id, self.players[p]) for p in frame.order])
         self.broadcast_roster()
+
+    def _seated_ids(self) -> list[str]:
+        return [p.id for p in self.players.values() if not p.is_spectator]
+
+    def _admin_role(self, conn: Connection, frame: protocol.AdminRole) -> None:
+        """開局前指定玩家職業，沒指定的開局時隨機（SPEC v4.26）。
+
+        只有管理員看得到（views.lobby_state），只存在記憶體：大廳時伺服器重啟就要重設。
+        """
+        self._require_admin(conn.session)
+        room = self.require_room()
+        seated = self._seated_ids()
+        if room.state != _LOBBY or self.engine is not None or frame.player not in seated:
+            raise GameError(ErrorCode.INVALID_TARGET)
+        plan = {pid: role for pid, role in self.role_plan.items() if pid in seated}
+        if frame.role is None:
+            plan.pop(frame.player, None)
+        else:
+            plan[frame.player] = frame.role
+        if not rules.plan_fits(len(seated), plan):
+            raise GameError(ErrorCode.ROLE_PLAN_FULL)
+        self.role_plan = plan
+        for other in self.conns:
+            if other.session.is_admin:
+                self._send_state(other)
 
     def _notify_speaker(self, narrated: dict[str, Any]) -> None:
         """輪到誰發言，本人手機也念一次（SPEC C4）。他就是旁白主機時已經念過了。"""
@@ -823,6 +855,10 @@ class RoomService:
             raise GameError(ErrorCode.FORBIDDEN)
         wall = self.wall()
         history = self.db.load_role_history(((p.id, p.device_id, p.name) for p in seated), wall)
+        plan = {p.id: self.role_plan[p.id] for p in seated if p.id in self.role_plan}
+        # 指定後有人離開、人數變少，名額可能不夠了：請管理員先調整（SPEC v4.26）
+        if not rules.plan_fits(len(seated), plan):
+            raise GameError(ErrorCode.ROLE_PLAN_FULL)
         narrator = None if room.mode is Mode.GOD else self._pick_narrator(room, seated)
         engine = Engine.create(
             [(p.id, p.name) for p in seated],
@@ -833,7 +869,9 @@ class RoomService:
             settings=room.settings,
             narrator_id=narrator,
             strict=self.strict,
+            role_plan=plan,
         )
+        self.role_plan = {}  # 只用在這一局，下一局重新隨機
         engine.chat_seq = self.chat_seq
         game_id = uuid.uuid4().hex
         room.game_id = game_id
