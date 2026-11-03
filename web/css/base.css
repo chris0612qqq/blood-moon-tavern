@@ -146,3 +146,13 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 12px; }
 .role-grid .btn { width: 100%; }
 .badge--role { background: #6a3a8a; color: #fff; }
+
+/* S23 安裝引導、S24 準備檢查 */
+.install__steps { padding-left: 24px; }
+.install__step { margin: 10px 0; }
+.install__icon { width: 24px; height: 24px; vertical-align: middle; margin-left: 4px; }
+.prep-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.prep { border: 1px solid #a86; border-radius: 4px; padding: 8px 10px; background: #383028; }
+.prep--done { border-color: #575; background: #2f382f; }
+.prep__title { font-weight: 600; }
+.prep .hint { margin: 4px 0; }

@@ -6,6 +6,7 @@ import { loadTokens } from '../session.js';
 import { changed, store } from '../store.js';
 import { roleName, t } from '../strings.js';
 import { actionButton, avatar, button, toast } from '../ui/common.js';
+import { prepCards } from './install.js';
 
 const DRAG_EDGE = 48;
 const DRAG_SCROLL = 24;
@@ -221,10 +222,14 @@ function startConfirm(players) {
   const [wolves, villagers] = ROLE_TABLE[n];
   const hunter = n === NO_HUNTER_PLAYER_COUNT.value ? '' : t('s5.hunter');
   const offline = players.filter((p) => p.offline).map((p) => p.name).join('、');
+  // 機器人不會回報，只列出回報過而且螢幕可能會關的人
+  const screenOff = players.filter((p) => p.prep?.wakelock === false).map((p) => p.name).join('、');
   const planned = Object.keys(activePlan(store.server ?? {}, players)).length;
-  const base = t('s5.startConfirm', { n, wolves, hunter, villagers });
-  const summary = planned ? `${base}\n${t('s5.plannedCount', { n: planned })}` : base;
-  return offline ? `${summary}\n${t('s5.offlineWarn', { names: offline })}` : summary;
+  const lines = [t('s5.startConfirm', { n, wolves, hunter, villagers })];
+  if (planned) lines.push(t('s5.plannedCount', { n: planned }));
+  if (screenOff) lines.push(t('s5.wakeWarn', { names: screenOff }));
+  if (offline) lines.push(t('s5.offlineWarn', { names: offline }));
+  return lines.join('\n');
 }
 
 export function s5(server) {
@@ -239,7 +244,7 @@ export function s5(server) {
         t('s5.count', { n: players.length, cap: server.room?.capacity ?? LIMITS.MAX_PLAYERS })),
       mine ? h('b', { testid: 'my-seat' }, t('s5.you', { seat: mine.seat })) : null),
     voiceWarning(Boolean(mine) && (server.room?.narrator_id ?? server.narrator_id) === mine.id),
-    wakeHint(),
+    mine ? prepCards() : wakeHint(),
     // 無管理員模式的管理員要先加入才能開始，否則自己會變旁觀者、也沒有旁白主機
     isAdmin && !server.me && server.room?.mode === 'auto'
       ? h('p', { class: 'hint center', testid: 'lobby-need-join' }, t('s5.joinFirst'))
