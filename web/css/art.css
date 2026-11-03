@@ -1,0 +1,281 @@
+/* 正式外觀（DEV_PLAN P8 量產，ART 5–8）。疊在 base.css 上面：base.css 管版面與大小，這裡只管材質與顏色，
+   所以點擊區、字級、間距都不會因為美術改變（UI_RULES）。動畫只動 transform 和 opacity（Q6）。 */
+
+body {
+  font-family: var(--font-body);
+  color: var(--parchment);
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255, 207, 122, .10), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 50%, transparent 60%, rgba(0, 0, 0, .55) 100%),
+    var(--dusk);
+  background-attachment: fixed;
+}
+html[data-phase="night"] body {
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(111, 163, 184, .10), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 50%, transparent 55%, rgba(0, 0, 0, .7) 100%),
+    var(--night-sky);
+}
+
+h1, h2 { font-family: var(--font-title); letter-spacing: .06em; }
+h1 { color: var(--parchment); }
+h2 { color: var(--gold-bright); }
+.hint { color: #b9ab8c; }
+html[data-phase="night"] .hint { color: var(--steel); }
+.error-text { color: #ff9a8a; }
+.reason { color: #e0b4a4; }
+.big { font-family: var(--font-title); }
+.count { font-family: var(--font-num); color: var(--parchment); }
+
+/* 頂端狀態列：木質橫樑（ART 7.8） */
+.status {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .06), transparent 40%, rgba(0, 0, 0, .25)),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, .12) 0 1px, transparent 1px 5px),
+    #3b2a1c;
+  border-bottom: 2px solid #8a6d32;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+}
+.status__title { font-family: var(--font-title); color: var(--gold-bright); }
+.status__name { color: var(--parchment); }
+.status__icon { border: 1px solid #8a6d32; color: var(--gold-bright); background: rgba(0, 0, 0, .2); }
+/* 連線燈是小油燈：火焰顏色＋文字（UI_RULES F13） */
+.conn { border-color: #8a6d32; color: var(--parchment); background: rgba(0, 0, 0, .25); }
+.conn::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); vertical-align: 1px; background: var(--steel); }
+.conn--online::before { background: #7fcf6a; box-shadow: 0 0 6px #7fcf6a; }
+.conn--reconnecting::before { background: var(--candle); box-shadow: 0 0 6px var(--ember); animation: lamp 1s ease-in-out infinite alternate; }
+.conn--offline::before { background: #e05a4a; }
+@keyframes lamp { to { opacity: .35; } }
+
+/* 旁白字幕：月光藍字（ART 7.8） */
+.subtitle { background: rgba(12, 16, 24, .85); color: var(--ice); border-bottom: 1px solid rgba(111, 163, 184, .3); font-family: var(--font-title); }
+
+/* 布旗（ART 7.6） */
+.banner { background: linear-gradient(180deg, #a85a22, #7a3e14); color: #fff3dc; border-bottom: 2px solid rgba(0, 0, 0, .4); }
+.banner--error { background: linear-gradient(180deg, #9e2424, var(--blood)); }
+
+/* 底部分頁列：深色木紋，選中的亮金浮起（ART 7.8） */
+.tabs {
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, .14) 0 1px, transparent 1px 6px),
+    #2e2116;
+  border-top: 2px solid #8a6d32;
+}
+.tab { color: #c8b48a; transition: transform var(--dur-fast) var(--ease-out); }
+.tab--on { background: rgba(232, 200, 114, .14); color: var(--gold-bright); transform: translateY(-2px); box-shadow: inset 0 2px 0 var(--gold-bright); }
+.tab__unread { background: var(--blood); box-shadow: 0 0 0 1px #e8a090; } /* 蠟封小紅點 */
+.tab--small { background: #2e2116; color: #c8b48a; border: 1px solid #5a4528; }
+
+/* 按鈕五態（ART 7.1）：主要＝深石板金框；次要＝羊皮紙；危險＝血紅框；建議下一步＝金色呼吸光 */
+button.btn {
+  position: relative;
+  color: var(--gold-bright);
+  border: 2px solid var(--gold);
+  background: linear-gradient(180deg, #2c241c, var(--bg-stone));
+  box-shadow: inset 0 1px 0 rgba(232, 200, 114, .35), 0 2px 0 rgba(0, 0, 0, .5);
+  font-weight: 600;
+  transition: transform var(--dur-tap) var(--ease-out);
+}
+button.btn:active:not(:disabled) { transform: scale(.97); }
+button.btn--secondary {
+  color: var(--ink);
+  border: 1px solid #a88a4a;
+  background: linear-gradient(180deg, var(--parchment), var(--parchment-dark));
+  box-shadow: inset 0 0 12px rgba(122, 85, 50, .25), 0 2px 0 rgba(0, 0, 0, .45);
+  font-weight: 500;
+}
+/* 夜晚不出現大片亮色（ART 1.3）：羊皮紙壓暗 */
+html[data-phase="night"] button.btn--secondary { background: linear-gradient(180deg, #8f8264, #6f6449); color: #1c140c; }
+button.btn--danger { color: var(--parchment); border-color: #c0392b; background: linear-gradient(180deg, #3a1a16, #24100d); }
+button.btn--suggest { color: #2b1d12; border-color: var(--gold-bright); background: linear-gradient(180deg, var(--gold-bright), var(--gold)); }
+button.btn--suggest::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 6px;
+  box-shadow: 0 0 12px 2px rgba(232, 200, 114, .7);
+  animation: breathe 2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes breathe { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+button.btn--pending { opacity: .7; }
+button.btn--success { color: var(--parchment); border-color: #7fcf6a; background: linear-gradient(180deg, #557a43, var(--moss)); }
+button.btn--error { color: var(--parchment); border-color: #e05a4a; background: linear-gradient(180deg, #4a1d18, #2e110e); animation: shake .3s linear; }
+@keyframes shake { 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-4px); } }
+button.btn:disabled { color: var(--steel); border-color: #5c6068; background: #24211d; box-shadow: none; }
+button.btn--secondary:disabled { color: #6b6457; background: #a59a80; }
+
+/* 石板面板 */
+.panel, .pause-cover, .act {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .04), transparent 30%),
+    var(--bg-stone);
+  border: 1px solid #5a4528;
+  box-shadow: inset 0 1px 0 rgba(232, 200, 114, .15);
+}
+.pause-cover { border: 2px solid var(--parchment-dark); background: linear-gradient(180deg, var(--parchment), var(--parchment-dark)); color: var(--ink); }
+.pause-cover .hint { color: #5a4630; }
+
+/* 對話框是卷軸：羊皮紙、上下木軸（ART 7.6） */
+.overlay { background: rgba(5, 4, 3, .72); }
+.dialog {
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 60%, rgba(122, 85, 50, .3) 100%),
+    var(--parchment);
+  border-top: 8px solid var(--hunter-wood);
+  border-bottom: 8px solid var(--hunter-wood);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .6);
+  animation: unroll var(--dur-dialog) var(--ease-out);
+}
+@keyframes unroll { from { transform: translateY(-6px); opacity: 0; } }
+.dialog h2 { color: var(--ink); }
+.dialog .hint { color: #5a4630; }
+.dialog textarea { background: #f4ead2; color: var(--ink); border-color: #a88a4a; }
+.toast { background: var(--parchment); color: var(--ink); border-left: 6px solid var(--hunter-wood); border-right: 6px solid var(--hunter-wood); box-shadow: 0 4px 12px rgba(0, 0, 0, .5); animation: unroll var(--dur-fast) var(--ease-out); }
+
+/* 輸入框像帳本格子 */
+input, select, textarea { background: #1a140f; color: var(--parchment); border: 1px solid #8a6d32; }
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--gold-bright); outline-offset: 1px; }
+
+/* 選擇格是小木牌（ART 7.4）：石板底、黃銅邊；選中浮起 2px 加金光 */
+.cell {
+  position: relative;
+  color: var(--parchment);
+  border: 1px solid #8a6d32;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .05), transparent 30%),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .08) 0 2px, transparent 2px 7px),
+    var(--bg-stone);
+  box-shadow: inset 0 1px 0 rgba(232, 200, 114, .25), 0 2px 0 rgba(0, 0, 0, .5);
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast);
+}
+.cell::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--gold-bright), 0 0 14px rgba(232, 200, 114, .55);
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+  pointer-events: none;
+}
+.cell:active { transform: scale(.97); transition-duration: var(--dur-tap); }
+.cell--on { transform: translateY(-2px); border-color: var(--gold-bright); background-color: #3a2f1c; }
+.cell--on::after { opacity: 1; }
+.cell--target { border-color: var(--ice); background-color: #1c2a33; }
+.cell--empty { border-style: dashed; background: rgba(12, 16, 24, .6); }
+.cell__seat { font: 700 14px var(--font-num); color: var(--gold); }
+.cell__marks { color: #ffb4a8; }
+
+/* 倒數環（ART 7.2）：金色環隨時間變短；剩 10 秒轉火色冒火星；剩 3 秒數字跳；暫停變灰 */
+.ring {
+  --ring-color: var(--gold);
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 6px auto 2px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--ring-color) calc(var(--frac, 1) * 360deg), rgba(201, 162, 74, .14) 0);
+}
+.ring::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, #2a2018, var(--bg-night) 75%);
+  box-shadow: inset 0 0 0 1px rgba(232, 200, 114, .3);
+}
+.ring__num {
+  position: relative;
+  font: 700 30px/1 var(--font-num);
+  color: var(--parchment);
+  font-variant-numeric: tabular-nums;
+}
+.ring__num[data-waiting] { font: 600 13px/1.2 var(--font-body); max-width: 56px; }
+.ring[data-zone="warn"], .ring[data-zone="urgent"] { --ring-color: var(--ember); }
+.ring[data-zone="urgent"] .ring__num { animation: ring-beat 1s ease-out infinite; }
+@keyframes ring-beat { 0% { transform: scale(1.06); } 40%, 100% { transform: scale(1); } }
+.ring[data-zone="paused"] { --ring-color: var(--steel); }
+
+.ring__sparks { position: absolute; inset: 0; pointer-events: none; }
+.ring__sparks i {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--candle);
+  box-shadow: 0 0 6px var(--ember);
+  opacity: 0;
+}
+.ring[data-zone="warn"] .ring__sparks i, .ring[data-zone="urgent"] .ring__sparks i { animation: spark 1.4s ease-out infinite; }
+.ring__sparks i:nth-child(2) { left: 80%; top: 15%; animation-delay: .3s !important; }
+.ring__sparks i:nth-child(3) { left: 95%; top: 55%; animation-delay: .7s !important; }
+.ring__sparks i:nth-child(4) { left: 15%; top: 20%; animation-delay: .5s !important; }
+.ring__sparks i:nth-child(5) { left: 5%; top: 60%; animation-delay: 1s !important; }
+@keyframes spark {
+  0% { opacity: 0; transform: translate(0, 0) scale(1); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(4px, -22px) scale(.4); }
+}
+
+html[data-lowfx] .ring__sparks { display: none; }
+
+/* 頭像：黃銅環（ART 7.3） */
+.avatar { background: #3a2d22; color: var(--parchment); box-shadow: 0 0 0 2px #8a6d32; font-family: var(--font-title); }
+.avatar--dead { opacity: .45; filter: grayscale(1); box-shadow: 0 0 0 2px #5c6068; }
+
+/* 名單、標籤 */
+.list-row { border-bottom: 1px solid rgba(138, 109, 50, .35); }
+.seat-row { background: transparent; }
+.seat-row--drag { background: rgba(232, 200, 114, .18); }
+.seat-handle { border-color: #8a6d32; color: var(--gold); }
+.badge { border-color: #8a6d32; color: #e6d3a6; background: rgba(0, 0, 0, .2); }
+.badge--role { background: var(--mask); border-color: #8d78d6; color: #fff; }
+
+/* 角色卡（ART 7.5）：卡背深色皮革＋金框；長按翻開 */
+.card {
+  color: var(--parchment);
+  border: 2px solid var(--gold);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(201, 162, 74, .18), transparent 45%),
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, .15) 0 2px, transparent 2px 6px),
+    #2a1a12;
+  box-shadow: inset 0 0 0 4px #1a100b, inset 0 0 0 5px rgba(201, 162, 74, .5), 0 4px 12px rgba(0, 0, 0, .6);
+}
+
+/* 聊天泡泡是羊皮紙小紙條（ART 7.7） */
+.bubble { background: linear-gradient(180deg, #efe2c2, var(--parchment-dark)); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+.bubble__who { color: #6b4f2e; }
+.bubble--mine { background: linear-gradient(180deg, #f4ead2, var(--parchment)); border: 1px solid var(--gold); }
+.bubble--host { background: linear-gradient(180deg, var(--candle), #e0a84a); }
+.bubble--wolf { background: linear-gradient(180deg, #4a1c1a, #2e100e); color: var(--parchment); border: 1px solid #b04030; }
+.bubble--wolf .bubble__who { color: #ffb4a8; }
+.bubble--system { background: rgba(61, 47, 79, .9); color: #efe6ff; border: 1px dashed #8d78d6; }
+.bubble--system .bubble__who { color: #c9b8f0; }
+.tts { border-color: rgba(43, 29, 18, .4); }
+
+/* 上帝控制台：說書台 */
+.host-tab { background: #2e2116; color: #c8b48a; border-color: #5a4528; }
+.host-tab--on { background: rgba(232, 200, 114, .18); border-color: var(--gold-bright); color: var(--gold-bright); }
+
+/* 準備檢查（ART 8 S24）：完成的像點亮的蠟燭 */
+.prep { background: var(--bg-stone); border-color: #8a6d32; }
+.prep--done { border-color: var(--moss); background: linear-gradient(180deg, rgba(74, 107, 58, .25), var(--bg-stone)); }
+.prep__title { font-family: var(--font-title); }
+
+/* 減少動態效果：動畫改成淡入（SPEC C9.2 #13） */
+@media (prefers-reduced-motion: reduce) {
+  .dialog, .toast { animation: fade 300ms; }
+  button.btn--suggest::after, .conn--reconnecting::before { animation: none; }
+  button.btn--error { animation: none; }
+  .cell--on, .tab--on { transform: none; }
+  .ring__sparks { display: none; }
+  .ring[data-zone="urgent"] .ring__num { animation: none; }
+  @keyframes fade { from { opacity: 0; } }
+}
