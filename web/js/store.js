@@ -124,7 +124,8 @@ const HANDLERS = {
         row.death_cause = dead.cause;
       }
       const history = historyRow(s);
-      history.deaths.push(dead.id);
+      // 同一則死亡可能收到兩次（例如重連時狀態已經算進去，事件又補送一次），不能重複列名
+      if (!history.deaths.includes(dead.id)) history.deaths.push(dead.id);
       history.causes = { ...history.causes, [dead.id]: dead.cause };
     }
   },

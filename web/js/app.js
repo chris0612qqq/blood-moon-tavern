@@ -5,9 +5,10 @@ import { STEP } from './protocol.js';
 import { resolveScreen } from './router.js';
 import './wake.js';
 import './pwa.js';
-import { coinDrops, diceRoll } from './sfx.js';
+import { speaksHere } from './narrator.js';
+import { coinDrops, diceRoll, setAmbience, setNight, uiSound } from './sfx.js';
 import { lightboxLayer } from './ui/media.js';
-import { tickClocks, watchFrames } from './ui/clock.js';
+import { onRingWarn, tickClocks, watchFrames } from './ui/clock.js';
 import { clearAdminToken, clearPlayerToken, loadTokens } from './session.js';
 import { changed, store, subscribe } from './store.js';
 import { stepName, t } from './strings.js';
@@ -210,6 +211,7 @@ function draw() {
     h('div', { class: 'rotate' }, t('rotate')));
   settleChatScroll();
   screenSounds(screen);
+  stateSounds(server);
 }
 
 // 每支手機自己的畫面音效（ART 12.4）：剛換到這個畫面時播一次，跟著畫面上的動畫
@@ -221,6 +223,58 @@ function screenSounds(screen) {
   if (screen === 'S6' && document.querySelector('.crest--roll')) diceRoll();
   if (screen === 'S15') coinDrops(document.querySelectorAll('.coin').length);
 }
+
+/** 環境音的種類（ART 12.3）：大廳與結算每支手機都有；夜晚、白天只在旁白手機。 */
+function ambienceOf(server) {
+  if (!server?.room && !server?.phase) return null;
+  if (server.phase === 'lobby' || server.step === 'END') return 'tavern';
+  if (server.phase !== 'game' || !speaksHere(server)) return null;
+  return NIGHT_STEPS.has(server.step) ? 'night' : 'day';
+}
+
+// 只在狀態「剛變」的那一次出聲：對話框打開、短提示、暫停、輪到你發言、千面狼換臉
+const heard = { dialog: null, toast: null, paused: false, turn: null, next: null, disguise: undefined, swapPending: false };
+const SWAP_MS = 900;
+
+function stateSounds(server) {
+  const isNight = NIGHT_STEPS.has(server?.step);
+  setNight(isNight);
+  setAmbience(ambienceOf(server));
+  if (store.ui.dialog && store.ui.dialog !== heard.dialog) uiSound('dialog');
+  heard.dialog = store.ui.dialog;
+  if (store.ui.toast && store.ui.toast !== heard.toast) uiSound('toast');
+  heard.toast = store.ui.toast;
+  const paused = Boolean(server?.paused);
+  if (paused && !heard.paused) uiSound('pause');
+  heard.paused = paused;
+  const me = server?.me;
+  if (!me) return;
+  // 輪到你發言兩聲鈴、下一個是你一聲（只在自己手機、只在白天，ART 12.4）
+  const seq = server.step_seq;
+  if (server.speaker === me.id && heard.turn !== seq) {
+    heard.turn = seq;
+    uiSound('turn');
+  } else if (server.speak_queue?.[0] === me.id && server.speaker !== me.id && heard.next !== seq) {
+    heard.next = seq;
+    uiSound('next');
+  }
+  // 千面狼換了假扮對象：夜晚換期時面板靜默，等到白天看得到面板時才演一次（ART 11.2）
+  const target = me.disguise_info?.target ?? null;
+  if (heard.disguise !== undefined && target !== heard.disguise && target) heard.swapPending = true;
+  heard.disguise = me.disguise_info ? target : undefined;
+  if (heard.swapPending && !isNight && server.step !== 'DEAL' && document.querySelector('[data-testid="disguise-panel"]')) {
+    heard.swapPending = false;
+    store.ui.disguiseSwapUntil = performance.now() + SWAP_MS;
+    uiSound('swap');
+    changed();
+    setTimeout(changed, SWAP_MS + 50);
+  }
+}
+
+// 倒數剩 10 秒：沙漏翻轉，只響在要行動的人手機上（ART 12.5）
+onRingWarn(() => {
+  if (store.server?.me?.is_actor) uiSound('countdown');
+});
 
 // 單一時鐘（UI_RULES Q5、U6）：每影格以 deadline − 校正後的伺服器時間重算，不用計數器
 let lastHostRedraw = 0;
