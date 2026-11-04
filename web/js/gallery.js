@@ -30,5 +30,14 @@ render(document.getElementById('app'), h('div', { class: 'main' },
   scene('獵人：收弓', hunterBow('holster')),
   scene('出局', snuffedCandle()),
   scene('投票揭曉', h('div', { class: 'coins' }, [0, 1, 2, 3].map(coin))),
+  scene('千面狼面板：換臉（點一下重播）',
+    h('div', {
+      class: 'panel disguise disguise--swap',
+      onclick: (e) => {
+        const panel = e.currentTarget;
+        panel.classList.remove('disguise--swap');
+        requestAnimationFrame(() => panel.classList.add('disguise--swap'));
+      },
+    }, roleEmblem('faceless', 28), h('span', { class: 'disguise__text' }, '本期假扮：小明，剩 2 回合'))),
   scene('結算：好人勝', victory('village')),
   scene('結算：狼人勝', victory('wolf'))));

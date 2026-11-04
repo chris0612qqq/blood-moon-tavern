@@ -97,6 +97,20 @@
   100% { transform: none; filter: none; }
 }
 
+/* 千面狼面板（ART 8 S19）：紫色小卡＋面具；換臉時面具裂開碎掉再拼回來、文字淡入（0.8 秒） */
+.disguise { display: flex; align-items: center; gap: var(--gap-1); border-color: #8d78d6; background: linear-gradient(90deg, rgba(61, 47, 79, .9), var(--bg-stone)); }
+.disguise .emblem { flex: none; }
+.disguise--swap .emblem { animation: mask-swap .8s ease-in-out; }
+.disguise--swap .disguise__text { animation: fade-in .5s ease-out .4s backwards; }
+@keyframes mask-swap {
+  0% { transform: none; }
+  20% { transform: rotate(-14deg) scale(1.15); filter: drop-shadow(0 0 6px #b9a6f0); }
+  45% { transform: scale(.2) rotate(40deg); opacity: 0; }
+  60% { transform: scale(.2) rotate(-40deg); opacity: 0; }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes fade-in { from { opacity: 0; } }
+
 /* 獵人：箭頭反光；出局：殘火明滅 */
 .art-glint { animation: glint 2.6s ease-in-out infinite; }
 @keyframes glint { 0%, 70%, 100% { opacity: .75; } 80% { opacity: 1; } }
@@ -119,6 +133,6 @@ html[data-lowfx] .hero *, html[data-lowfx] .emblem * { animation: none !importan
 @media (prefers-reduced-motion: reduce) {
   .hero *, .emblem *, .card__face, .card__face .emblem, .crest--roll { animation: none !important; }
   .coin, .dead-reveal, .end-reveal { animation: fade-in 300ms backwards; }
-  .end-reveal--faceless .emblem--faceless { animation: none; }
+  .end-reveal--faceless .emblem--faceless, .disguise--swap .emblem { animation: none; }
   @keyframes fade-in { from { opacity: 0; } }
 }

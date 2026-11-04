@@ -329,6 +329,9 @@ export function s19(server) {
   const text = info.target
     ? t('s19.panel', { name: nameOf(server, info.target), n: info.rounds_left })
     : t('s19.none');
-  return h('div', { class: 'panel', testid: 'disguise-panel' }, text);
+  // 換了假扮對象：白天才演面具碎裂重組（ART 11.2）；app.js 偵測到換臉時設定演出時間
+  const swapping = (store.ui.disguiseSwapUntil ?? 0) > performance.now();
+  return h('div', { class: `panel disguise ${swapping ? 'disguise--swap' : ''}`, testid: 'disguise-panel' },
+    roleEmblem('faceless', 28), h('span', { class: 'disguise__text' }, text));
 }
 

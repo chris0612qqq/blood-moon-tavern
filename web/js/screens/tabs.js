@@ -4,6 +4,7 @@ import { api, send } from '../net.js';
 import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
 import { causeJoke, causePlain, deathLabel, errorText, roleName, t } from '../strings.js';
+import { soundPrefs, uiSound } from '../sfx.js';
 import { roleEmblem, victory } from '../ui/art.js';
 import { actionButton, avatar, button, field, nameOf, pauseToggle, toast } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
@@ -227,6 +228,7 @@ export function chatTab(server) {
     const result = await send('chat.send', { ...identity(), kind, content: draft });
     if (result.ok) {
       store.ui.drafts[draftKey] = '';
+      uiSound('chat');
       changed();
     }
     return result;
@@ -464,6 +466,24 @@ function voiceSettings(server) {
   ];
 }
 
+/** 這支手機的環境音、介面音效開關（ART 12.3、12.5）。存在手機上，不影響別人。 */
+function soundSettings() {
+  const toggle = (name, label) => {
+    const on = soundPrefs[name];
+    return h('button', {
+      class: `btn btn--small ${on ? 'btn--suggest' : 'btn--secondary'}`,
+      testid: `sound-${name}`,
+      'aria-pressed': on ? 'true' : 'false',
+      onclick: () => { soundPrefs[name] = !on; changed(); },
+    }, t(on ? 's21.soundOn' : 's21.soundOff', { what: label }));
+  };
+  return [
+    h('h2', {}, t('s21.sound')),
+    h('div', { class: 'row' }, toggle('ambience', t('s21.ambience')), toggle('ui', t('s21.uiSound'))),
+    h('p', { class: 'hint' }, t('s21.soundHint')),
+  ];
+}
+
 export function s21() {
   const server = store.server;
   const close = () => { store.ui.overlay = null; changed(); };
@@ -478,6 +498,7 @@ export function s21() {
       count: store.voice.voices,
     })),
     voiceSettings(server),
+    soundSettings(),
     installGuideButton(),
     button(t('s21.export'), () => {
       const text = JSON.stringify(store.errorLog ?? [], null, 1);

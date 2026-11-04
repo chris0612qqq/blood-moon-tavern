@@ -29,9 +29,18 @@ export function ringState(deadline, opens, now, paused = false) {
   return { frac, zone };
 }
 
+let warnHook = null;
+/** 倒數環剛從平靜轉到剩 10 秒時呼叫（沙漏音效，ART 12.5）。 */
+export function onRingWarn(fn) {
+  warnHook = fn;
+}
+
 function tickRing(el, now) {
   const { frac, zone } = ringState(Number(el.dataset.ringDeadline), Number(el.dataset.ringOpens) || null, now);
-  if (el.dataset.zone !== zone) el.dataset.zone = zone;
+  if (el.dataset.zone !== zone) {
+    if (el.dataset.zone === 'calm' && zone === 'warn') warnHook?.();
+    el.dataset.zone = zone;
+  }
   const shown = Number(el.style.getPropertyValue('--frac'));
   if (Math.abs(shown - frac) > FRAC_STEP || (frac === 0 && shown !== 0)) el.style.setProperty('--frac', frac.toFixed(4));
 }
