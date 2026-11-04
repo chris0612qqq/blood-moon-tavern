@@ -2,14 +2,23 @@
 // 有 data-id 的子節點依 id 比對，所以選取、捲動、輸入中的文字都不會被重置。
 
 const EVENT_PREFIX = 'on';
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** 建立元素。屬性 testid → data-testid（CODING_RULES V9），id → data-id（U5）。 */
 export function h(tag, props = {}, ...children) {
-  const el = document.createElement(tag);
+  return build(document.createElement(tag), props, children);
+}
+
+/** 建立 SVG 元素（向量插畫），用法和 h() 一樣。 */
+export function s(tag, props = {}, ...children) {
+  return build(document.createElementNS(SVG_NS, tag), props, children);
+}
+
+function build(el, props, children) {
   for (const [key, value] of Object.entries(props ?? {})) {
     if (value === undefined || value === null || value === false) continue;
     if (key.startsWith(EVENT_PREFIX)) el[key] = value;
-    else if (key === 'class') el.className = value;
+    else if (key === 'class') el.setAttribute('class', value); // SVG 的 className 不能直接指定
     else if (key === 'testid') el.dataset.testid = value;
     else if (key === 'key') el.dataset.id = value;
     else if (key === 'value') el.__value = String(value);

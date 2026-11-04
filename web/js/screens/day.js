@@ -3,6 +3,7 @@ import { h } from '../dom.js';
 import { send } from '../net.js';
 import { changed, store } from '../store.js';
 import { causePlain, pauseReason, roleName, t } from '../strings.js';
+import { coin, dawnRise, hunterBow, roleEmblem, snuffedCandle } from '../ui/art.js';
 import { actionButton, avatar, button, countdownRing, nameOf, pickGrid, selection } from '../ui/common.js';
 
 export function s11(server) {
@@ -10,14 +11,17 @@ export function s11(server) {
   const deaths = row?.deaths ?? [];
   // 旁白還在念「天亮請睜眼」，結果還沒公布，不能先顯示平安夜
   if (!server.announced) {
-    return h('h1', { class: 'center', testid: 'screen-s11' }, t('s11.title'));
+    return [dawnRise(), h('h1', { class: 'center', testid: 'screen-s11' }, t('s11.title'))];
   }
+  const peaceful = !deaths.length && !row?.saved && !server.dawn_count;
   return [
+    dawnRise(peaceful),
     h('h1', { class: 'center', testid: 'screen-s11' }, t('s11.title')),
     deaths.length
       ? [
         h('p', { class: 'center' }, t('s11.deaths')),
-        deaths.map((id) => deadRow(server, id)),
+        // 死者一張張翻開（ART 11.2 天亮公布）
+        deaths.map((id, i) => deadRow(server, id, i)),
       ]
       // 公布和死者是兩則訊息，中間可能畫一次：有人要死就不能先說平安夜
       : (row?.saved || server.dawn_count ? null : h('p', { class: 'big center', testid: 'peaceful' }, t('s11.peaceful'))),
@@ -25,14 +29,15 @@ export function s11(server) {
   ];
 }
 
-function deadRow(server, id) {
+function deadRow(server, id, order = null) {
   const player = server.players.find((p) => p.id === id);
-  return h('div', { class: 'list-row', key: id },
+  const reveal = order === null ? {} : { class: 'list-row dead-reveal', style: `--i:${order}` };
+  return h('div', { class: 'list-row', key: id, ...reveal },
     avatar(server, id),
     h('span', { class: 'grow' }, player?.name ?? ''),
     player?.death_cause ? h('span', { class: 'hint' }, causePlain(player.death_cause)) : null,
     player?.public_role ?? player?.role
-      ? h('span', { class: 'badge' }, roleName(player?.public_role ?? player?.role))
+      ? h('span', { class: 'badge' }, roleEmblem(player?.public_role ?? player?.role), roleName(player?.public_role ?? player?.role))
       : null);
 }
 
@@ -41,6 +46,7 @@ export function s12(server) {
   const hunter = server.public_actors?.[0];
   if (!me?.is_actor) {
     return [
+      hunterBow(),
       h('h1', { class: 'center', testid: 'screen-s12' }, t('s12.others', { name: nameOf(server, hunter) })),
       countdownRing(server, t('s12.timeout')),
     ];
@@ -48,6 +54,7 @@ export function s12(server) {
   if (me.done) return h('p', { class: 'center' }, t('done'));
   const sel = selection('hunter');
   return [
+    hunterBow(),
     h('h1', { testid: 'screen-s12-mine' }, t('s12.mine')),
     countdownRing(server, t('s12.timeout')),
     pickGrid({ ids: me.eligible_targets ?? [], server, selected: sel.value, onPick: sel.set }),
@@ -206,6 +213,12 @@ function tallyLine(server, ballots) {
   return names.length ? h('p', { class: 'center keep-words', testid: 'reveal-tally' }, names.join('、')) : null;
 }
 
+/** 被放逐者拿到的票，一票一枚銅幣依序落下（ART 11.2）。 */
+function coinsFor(server, ballots, exiled) {
+  const n = (server.suspect_counts?.[exiled] ?? 0) + ballots.filter(([, to]) => to === exiled).length;
+  return n ? h('div', { class: 'coins', testid: 'reveal-coins' }, Array.from({ length: n }, (_, i) => coin(i))) : null;
+}
+
 export function s15(server) {
   const reveal = store.lastReveal ?? {};
   const ballots = Object.entries(reveal.ballots ?? {});
@@ -215,6 +228,7 @@ export function s15(server) {
       ? t('s15.exiled', { name: nameOf(server, reveal.exiled) })
       : t(server.line_id === 'no_nominee' ? 's15.noNominee' : 's15.tie')),
     reveal.exiled ? deadRow(server, reveal.exiled) : null,
+    reveal.exiled ? coinsFor(server, ballots, reveal.exiled) : null,
     tallyLine(server, ballots),
     ballots.map(([from, to]) => h('div', { class: 'list-row', key: from },
       t('s15.ballot', { from: nameOf(server, from), to: to ? nameOf(server, to) : t('s14.abstain') }))),
@@ -234,6 +248,7 @@ export function s16(server) {
 
 export function s17(server) {
   return [
+    snuffedCandle(),
     h('h1', { class: 'center', testid: 'screen-s17' }, t('s17.title')),
     h('p', { class: 'center hint' }, t('s7.title')),
   ];

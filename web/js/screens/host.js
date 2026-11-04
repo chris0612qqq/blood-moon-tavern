@@ -46,6 +46,7 @@ function playerRow(server, row) {
     h('span', {}, `#${player.seat}`),
     avatar(server, row.id),
     h('span', { class: 'grow' }, player.name),
+    // 控制台名單太擠，不加角色徽章（最小的手機會把右邊的狀態擠出畫面）
     h('span', { class: 'badge', testid: `host-role-${row.id}` }, roleName(row.role)),
     isFaceless && disguise.target_id ? h('span', { class: 'badge' }, nameOf(server, disguise.target_id)) : null,
     h('span', { class: 'hint' }, row.alive ? playerStatus(server, row.id) : '☠'));

@@ -1,0 +1,92 @@
+/* 內建向量美術的版面與動畫（圖在 js/ui/art.js；ART 9.3、11.2、11.3）。
+   只動 transform、opacity 和描線（UI_RULES Q6）；html[data-lowfx] 與減少動態效果時全部停住。 */
+
+/* 角色徽章：跟在名字旁、角色卡上方 */
+.emblem { display: inline-block; vertical-align: -3px; flex: none; }
+.badge .emblem { margin-right: 3px; }
+.card .emblem { display: block; margin: 0 auto 6px; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .6)); }
+
+/* 卡背的二十面骰紋章（ART 7.5） */
+.crest { display: block; width: 76px; height: 76px; margin: 0 auto 10px; opacity: .9; }
+
+/* 發牌：二十面骰從上方落下、彈兩下、滾停（ART 11.2，約 1.6 秒） */
+.crest--roll { animation: dice-roll 1.6s cubic-bezier(.3, .7, .2, 1) backwards; }
+@keyframes dice-roll {
+  0% { transform: translateY(-120px) rotate(-200deg); opacity: 0; }
+  30% { transform: translateY(0) rotate(-40deg); opacity: 1; }
+  45% { transform: translateY(-26px) rotate(10deg); }
+  60% { transform: translateY(0) rotate(30deg); }
+  72% { transform: translateY(-8px) rotate(8deg); }
+  84%, 100% { transform: none; }
+}
+
+/* 天亮：死者一列列翻開，每列間隔 --dur-reveal-each */
+.dead-reveal { animation: reveal-row .6s var(--ease-out) calc(var(--i) * var(--dur-reveal-each)) backwards; }
+@keyframes reveal-row { from { transform: perspective(600px) rotateX(-90deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* 角色卡翻開：繞 Y 軸轉進來（ART 11.2 翻牌） */
+.card__face { width: 100%; pointer-events: none; animation: card-flip var(--dur-flip) cubic-bezier(.3, .7, .2, 1); }
+@keyframes card-flip { from { transform: perspective(700px) rotateY(90deg); } to { transform: perspective(700px) rotateY(0); } }
+.card__face .emblem { animation: stamp .35s var(--ease-out) .2s backwards; }
+@keyframes stamp { from { transform: scale(1.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* 畫面主圖 */
+.hero { display: block; width: 100%; max-width: 260px; height: auto; max-height: 150px; margin: 0 auto 4px; overflow: visible; }
+
+/* 星點閃、燈火晃、光暈呼吸 */
+.art-twinkle { transform-box: fill-box; transform-origin: center; animation: twinkle 2.4s ease-in-out calc(var(--i, 0) * -0.7s) infinite; }
+@keyframes twinkle { 0%, 100% { opacity: .35; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.1); } }
+.art-flame { transform-box: fill-box; transform-origin: 50% 90%; animation: flame 1.6s ease-in-out infinite alternate; }
+@keyframes flame { from { transform: scale(.9, 1); } to { transform: scale(1.08, .92) rotate(3deg); } }
+.art-glow { transform-box: fill-box; transform-origin: center; animation: glow 3.5s ease-in-out infinite alternate; }
+@keyframes glow { from { opacity: .5; transform: scale(.95); } to { opacity: 1; transform: scale(1.05); } }
+
+/* 水晶球：紫霧慢轉；結果從霧中浮出 */
+.art-swirl { transform-origin: 100px 54px; animation: swirl 9s linear infinite; }
+@keyframes swirl { to { transform: rotate(360deg); } }
+.art-rise { animation: rise 1.2s var(--ease-out) backwards; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* 小鍋冒泡、蒸氣描線往上飄 */
+.art-bubble { transform-box: fill-box; transform-origin: center; animation: bubble 2.2s ease-in calc(var(--i) * .55s) infinite; }
+@keyframes bubble { 0% { opacity: 0; transform: translateY(6px) scale(.6); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-18px) scale(1.1); } }
+.art-steam path, .art-smoke path { stroke-dasharray: .35 .65; animation: drift 3s linear calc(var(--i) * -1.5s) infinite; }
+@keyframes drift { from { stroke-dashoffset: 0; opacity: .9; } to { stroke-dashoffset: -1; opacity: .9; } }
+
+/* 天亮：太陽升起、光芒緩轉、白鳥飛過 */
+.art-sunrise { animation: sunrise var(--dur-night) ease-out backwards; }
+@keyframes sunrise { from { transform: translateY(26px); opacity: .3; } to { transform: none; opacity: 1; } }
+.art-rays { transform-origin: 100px 88px; animation: sway 6s ease-in-out infinite alternate; }
+@keyframes sway { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
+/* 有山的圖左右兩邊淡掉，不會看到山被切齊的邊 */
+.hero--dawn, .hero--victory-wolf {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+}
+.art-bird { animation: fly 7s linear calc(var(--i) * -.6s) infinite; }
+@keyframes fly { from { transform: translate(-40px, 6px); } to { transform: translate(200px, -14px); } }
+
+/* 獵人：箭頭反光；出局：殘火明滅 */
+.art-glint { animation: glint 2.6s ease-in-out infinite; }
+@keyframes glint { 0%, 70%, 100% { opacity: .75; } 80% { opacity: 1; } }
+.art-ember { animation: ember 1.8s ease-in-out infinite alternate; }
+@keyframes ember { from { opacity: .2; } to { opacity: 1; } }
+
+/* 狼人勝：血月放大 */
+.art-moonrise { transform-origin: 100px 56px; animation: moonrise var(--dur-victory) var(--ease-out) backwards; }
+@keyframes moonrise { from { transform: scale(.55); opacity: .4; } to { transform: none; opacity: 1; } }
+
+/* S15 揭曉：每一票一枚銅幣依序落下（ART 11.2 投票揭曉） */
+.coins { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.coin { width: 22px; height: 22px; animation: coin-drop .4s var(--ease-out) calc(var(--i) * .4s) backwards; }
+@keyframes coin-drop { from { transform: translateY(-28px) rotate(-90deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* 舊手機掉幀：只留靜態圖（ART 11.3） */
+html[data-lowfx] .hero *, html[data-lowfx] .emblem * { animation: none !important; }
+
+/* 減少動態效果：不動，只淡入（SPEC C9.2 #13） */
+@media (prefers-reduced-motion: reduce) {
+  .hero *, .emblem *, .card__face, .card__face .emblem, .crest--roll { animation: none !important; }
+  .coin, .dead-reveal { animation: fade-in 300ms backwards; }
+  @keyframes fade-in { from { opacity: 0; } }
+}
