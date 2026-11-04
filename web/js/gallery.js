@@ -4,6 +4,7 @@ import { roleName } from './strings.js';
 import {
   coin, d20Crest, dawnRise, hunterBow, roleEmblem, seerOrb, snuffedCandle, victory, witchBrew,
 } from './ui/art.js';
+import { openingSound } from './sfx.js';
 
 const ROLES = ['wolf', 'faceless', 'villager', 'seer', 'witch', 'hunter'];
 
@@ -40,4 +41,12 @@ render(document.getElementById('app'), h('div', { class: 'main' },
       },
     }, roleEmblem('faceless', 28), h('span', { class: 'disguise__text' }, '本期假扮：小明，剩 2 回合'))),
   scene('結算：好人勝', victory('village')),
-  scene('結算：狼人勝', victory('wolf'))));
+  scene('結算：狼人勝', victory('wolf')),
+  // 錄音在第一次點畫面時才下載，所以按第二下才會是錄音版
+  scene('試聽錄音（第一下載入，再按一次）',
+    h('p', { class: 'center' }, [
+      ['雞鳴', () => openingSound('dawn')],
+      ['好人勝', () => openingSound('win', 'village')],
+      ['狼人勝', () => openingSound('win', 'wolf')],
+      ['狼嚎', () => openingSound('wolf_open')],
+    ].map(([label, play]) => h('button', { class: 'btn btn--secondary btn--small', onclick: play }, label))))));
