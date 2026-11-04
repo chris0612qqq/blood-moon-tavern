@@ -3,7 +3,8 @@
 //
 // audio/wolf_howl.wav：美國魚類及野生動物管理局錄的狼嚎（公有領域），取自 Wikimedia Commons
 // 「File:Wolf howls.ogg」12.9–15.7 秒，濾掉低頻雜音與高頻嘶聲、前後淡入淡出。
-// audio/rooster.wav：Wikimedia Commons「File:Medium rooster crowing.ogg」（alys，公有領域）2.75–5.55 秒。
+// audio/rooster.wav：Wikimedia Commons「File:Medium rooster crowing.ogg」（alys，公有領域）2.75–4.97 秒，
+// 只留長長的那一聲，後面兩小聲不要（使用者要求）。
 // audio/win_village.wav：OpenGameArt「Just a random fanfare」（Spring Spring，CC0）前 8.6 秒、尾段淡出。
 // audio/win_wolf.wav：OpenGameArt「String and piano horror stings」的 abyss.ogg（congusbongus，CC0）。
 // 都轉成單聲道並把峰值調到 −1 dBFS（iPhone 舊版 Safari 不一定解得開 ogg，所以用 wav）。
