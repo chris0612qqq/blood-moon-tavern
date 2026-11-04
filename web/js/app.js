@@ -6,7 +6,7 @@ import { resolveScreen } from './router.js';
 import './wake.js';
 import './pwa.js';
 import { speaksHere } from './narrator.js';
-import { coinDrops, diceRoll, setAmbience, setNight, uiSound } from './sfx.js';
+import { coinDrops, diceRoll, preloadRecordings, setAmbience, setNight, uiSound } from './sfx.js';
 import { lightboxLayer } from './ui/media.js';
 import { onRingWarn, tickClocks, watchFrames } from './ui/clock.js';
 import { clearAdminToken, clearPlayerToken, loadTokens } from './session.js';
@@ -240,6 +240,8 @@ function stateSounds(server) {
   const isNight = NIGHT_STEPS.has(server?.step);
   setNight(isNight);
   setAmbience(ambienceOf(server));
+  // 狼嚎、雞鳴、勝利音樂只有旁白手機會放，其他手機不必下載
+  if (speaksHere(server)) preloadRecordings();
   if (store.ui.dialog && store.ui.dialog !== heard.dialog) uiSound('dialog');
   heard.dialog = store.ui.dialog;
   if (store.ui.toast && store.ui.toast !== heard.toast) uiSound('toast');

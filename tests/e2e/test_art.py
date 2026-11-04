@@ -158,47 +158,98 @@ def test_gallery_draws_every_illustration(server_url: str) -> None:  # noqa: F81
         browser.close()
 
 
+SOUND = "async (line) => (await import('/js/sfx.js')).openingSound(line)"
+# 結算音效：回傳要等幾毫秒，以及實際開始放的錄音長度（秒），用長度分辨放的是哪一個檔
+WIN = """async (winner) => {
+    const m = await import('/js/sfx.js');
+    const started = [];
+    const original = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+        started.push(Math.round(this.buffer.duration * 10) / 10);
+        return original.apply(this, args);
+    };
+    try {
+        return { ms: m.openingSound('win', winner), started: started.sort() };
+    } finally {
+        AudioBufferSourceNode.prototype.start = original;
+    }
+}"""
+HOWL_S, WIN_VILLAGE_S, WIN_WOLF_S = 2.8, 8.6, 7.5
+
+
+def open_sound(page: Page) -> None:
+    """第一次點擊才開聲音；等錄音下載完，每個音效只放一次就能檢查。"""
+    page.locator('[data-testid="screen-s8"]').click()
+    page.evaluate("async () => { const m = await import('/js/sfx.js'); m.preloadRecordings(); await m.recordingsReady(); }")
+
+
 def test_opening_sounds_wait_only_where_the_server_leaves_time(server_url: str) -> None:  # noqa: F811
     """量產第三輪音效：伺服器有預留時間的句子放完才念；沒預留的跟旁白一起出來，不等（免得被下一句打斷）。"""
-    sound = "async (line) => (await import('/js/sfx.js')).openingSound(line)"
     with sync_playwright() as driver:
         browser = driver.chromium.launch()
         page = browser.new_context(viewport=MOBILE).new_page()
         errors: list[str] = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         preview(page, server_url)
-        page.locator('[data-testid="screen-s8"]').click()  # 第一次點擊才開聲音
-        page.wait_for_timeout(300)
-        assert page.evaluate(sound, "seer_open") == 1200
-        assert page.evaluate(sound, "night_start") == 2200
-        assert page.evaluate(sound, "witch_open") == 1500
+        open_sound(page)
+        assert page.evaluate(SOUND, "seer_open") == 1200
+        assert page.evaluate(SOUND, "night_start") == 2200
+        assert page.evaluate(SOUND, "witch_open") == 1500
         # 雞鳴錄音 2.22 秒＋停 0.3 秒，伺服器預留 2.6 秒放得完（SPEC v4.36）
-        page.wait_for_function(f"({sound})('dawn').then((ms) => ms === 2520)", timeout=8000)
-        # 結算：好人、狼人各有自己的勝利音效，前奏 2.5 秒後才念
-        win = "async (w) => (await import('/js/sfx.js')).openingSound('win', w)"
-        page.wait_for_function(f"({win})('village').then((ms) => ms === 2500)", timeout=8000)
-        page.wait_for_function(f"({win})('wolf').then((ms) => ms === 2500)", timeout=8000)
+        assert page.evaluate(SOUND, "dawn") == 2520
+        # 結算：好人放號角；狼人先狼嚎、再進低沉弦樂。前奏 2.5 秒後才念（SPEC v4.36）
+        assert page.evaluate(WIN, "village") == {"ms": 2500, "started": [WIN_VILLAGE_S]}
+        assert page.evaluate(WIN, "wolf") == {"ms": 2500, "started": [HOWL_S, WIN_WOLF_S]}
         for line in ("peaceful", "deaths", "hunter", "vote", "wolf_close", "seer_close"):
-            assert page.evaluate(sound, line) == 0, line
+            assert page.evaluate(SOUND, line) == 0, line
         page.evaluate("async () => { const m = await import('/js/sfx.js'); m.diceRoll(); m.coinDrops(3); }")
         assert errors == []
         browser.close()
 
 
-def test_recorded_howl_with_synth_fallback(server_url: str) -> None:  # noqa: F811
+def test_recorded_sounds_with_synth_fallback(server_url: str) -> None:  # noqa: F811
     howl = "async () => (await import('/js/sfx.js')).wolfHowl()"
     with sync_playwright() as driver:
         browser = driver.chromium.launch()
         page = browser.new_context(viewport=MOBILE).new_page()
         preview(page, server_url)
-        page.locator('[data-testid="screen-s8"]').click()  # 第一次點擊才開聲音、下載錄音
+        open_sound(page)
         # 錄音 2.8 秒＋停 0.3 秒才念旁白
-        page.wait_for_function(f"({howl})().then((ms) => ms === 3100)", timeout=8000)
-        # 錄音載不到就用合成的，旁白照樣會念
+        assert page.evaluate(howl) == 3100
+        # 錄音載不到就用合成的，旁白照樣會念；勝利音效也有合成的，不會沒聲音
         broken = browser.new_context(viewport=MOBILE).new_page()
-        broken.route("**/audio/wolf_howl.wav", lambda route: route.fulfill(status=404))
+        errors: list[str] = []
+        broken.on("pageerror", lambda e: errors.append(str(e)))
+        broken.route("**/audio/*.wav", lambda route: route.fulfill(status=404))
         preview(broken, server_url)
-        broken.locator('[data-testid="screen-s8"]').click()
-        broken.wait_for_timeout(1000)
+        open_sound(broken)
         assert broken.evaluate(howl) == 2300
+        assert broken.evaluate(SOUND, "dawn") == 1500
+        assert broken.evaluate(WIN, "village") == {"ms": 2500, "started": []}
+        assert broken.evaluate(WIN, "wolf") == {"ms": 2500, "started": []}
+        assert errors == []
+        browser.close()
+
+
+def test_only_narrator_phones_download_recordings(server_url: str) -> None:  # noqa: F811
+    """錄音只有旁白手機會放；沒說要下載的頁面點了畫面也不下載（省行動網路）。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        fetched: list[str] = []
+        page.on("request", lambda r: fetched.append(r.url) if r.url.endswith(".wav") else None)
+        page.goto(f"{server_url}/gallery.html")
+        page.wait_for_selector(".gallery__scene")
+        page.evaluate("async () => { await import('/js/sfx.js'); }")
+        page.locator("h1").click()
+        page.wait_for_timeout(500)
+        assert len(fetched) == 4  # 總覽頁說要下載：四個都抓
+        plain = browser.new_context(viewport=MOBILE).new_page()
+        plain_fetched: list[str] = []
+        plain.on("request", lambda r: plain_fetched.append(r.url) if r.url.endswith(".wav") else None)
+        plain.goto(f"{server_url}/")
+        plain.evaluate("async () => { await import('/js/sfx.js'); }")
+        plain.mouse.click(2, 2)  # 點角落，不要按到任何按鈕
+        plain.wait_for_timeout(500)
+        assert plain_fetched == []  # 沒進房、不是旁白手機：不抓
         browser.close()
