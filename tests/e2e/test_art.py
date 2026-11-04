@@ -146,7 +146,36 @@ def test_gallery_draws_every_illustration(server_url: str) -> None:  # noqa: F81
             box = page.locator(f'[data-testid="hero-{kind}"]').first.bounding_box()
             assert box and box["width"] > 100 and box["height"] > 50, kind
         assert page.locator(".hero--wolf").count() == 1 and page.locator(".hero--good").count() == 1
+        for state in ("pour-save", "pour-poison", "shot", "holster"):
+            assert page.locator(f".hero--{state}").count() == 1, state
+        # 紅綠色弱看不出藥瓶顏色：解藥圓瓶「＋」、毒藥方瓶「×」，形狀要不同（ART 3.5）
+        shapes = page.evaluate(
+            """() => [...document.querySelectorAll('.emblem--witch path[stroke-width="2"]')].slice(0, 2).map((p) => p.getAttribute('d'))"""
+        )
+        assert len(set(shapes)) == 2
         assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+        assert errors == []
+        browser.close()
+
+
+def test_opening_sounds_wait_only_where_the_server_leaves_time(server_url: str) -> None:  # noqa: F811
+    """量產第三輪音效：伺服器有預留時間的句子放完才念；沒預留的跟旁白一起出來，不等（免得被下一句打斷）。"""
+    sound = "async (line) => (await import('/js/sfx.js')).openingSound(line)"
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        preview(page, server_url)
+        page.locator('[data-testid="screen-s8"]').click()  # 第一次點擊才開聲音
+        page.wait_for_timeout(300)
+        assert page.evaluate(sound, "seer_open") == 1200
+        assert page.evaluate(sound, "night_start") == 2200
+        assert page.evaluate(sound, "witch_open") == 1500
+        assert page.evaluate(sound, "dawn") == 1500
+        for line in ("peaceful", "deaths", "hunter", "vote", "wolf_close", "seer_close"):
+            assert page.evaluate(sound, line) == 0, line
+        page.evaluate("async () => { const m = await import('/js/sfx.js'); m.diceRoll(); m.coinDrops(3); }")
         assert errors == []
         browser.close()
 

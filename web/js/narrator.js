@@ -5,7 +5,7 @@
 // 所以任何第一次點擊都先念一個無聲的字解鎖，之後伺服器叫念才念得出來（CODING_RULES V13）。
 
 import { LIMITS } from './protocol.js';
-import { wolfHowl } from './sfx.js';
+import { openingSound } from './sfx.js';
 import { changed, store } from './store.js';
 
 const PITCH = 0.9;
@@ -20,9 +20,8 @@ const UNLOCK_TEXT = '。';
 let current = null;
 const queued = [];
 const QUEUE_KEEP = 20;
-// 角色開場音效。垂直切片只有狼人；其他角色量產時加進來（ART 12.4）
-const OPENING_SFX = Object.freeze({ wolf_open: wolfHowl });
-let openingPlayedAt = null;
+// 每句旁白前的音效只播一次：重念、催促時不再播（ART 12.4）
+let openingPlayed = null;
 
 store.voice = { supported: Boolean(window.speechSynthesis), unlocked: false, voices: 0, name: '', last: '' };
 
@@ -140,11 +139,10 @@ export function speaksHere(server) {
 /** 收到 narrate 時呼叫：只有旁白主機或主持人手機發聲。 */
 export function onNarrate(msg) {
   if (!msg.speak || !speaksHere(store.server)) return;
-  // 狼人請睜眼之前先狼嚎（ART 12.4），嚎完才念；重念、催促時不再嚎
-  const howl = OPENING_SFX[msg.line_id];
-  const seq = store.server.step_seq;
-  const waitMs = howl && seq !== openingPlayedAt ? howl() : 0;
-  if (howl) openingPlayedAt = seq;
+  // 先播這句的音效（狼嚎、鐘聲、風鈴…，ART 12.4），播完才念
+  const key = `${store.server.step_seq}:${msg.line_id}`;
+  const waitMs = key === openingPlayed ? 0 : openingSound(msg.line_id);
+  openingPlayed = key;
   // 主持人選了「我自己念」：繼續後的重念也只顯示字幕
   if (store.server.host && !store.ui.speakAloud) return;
   if (waitMs) setTimeout(() => speak(msg.text), waitMs);

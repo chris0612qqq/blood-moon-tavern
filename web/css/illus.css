@@ -66,6 +66,37 @@
 .art-bird { animation: fly 7s linear calc(var(--i) * -.6s) infinite; }
 @keyframes fly { from { transform: translate(-40px, 6px); } to { transform: translate(200px, -14px); } }
 
+/* 獵人開弓：箭破空飛出畫面；收弓：箭慢慢退回、淡掉 */
+.art-arrow--shot { animation: arrow-fly .3s ease-in forwards; }
+@keyframes arrow-fly { from { transform: none; } to { transform: translateY(-160px); opacity: 0; } }
+.art-arrow--holster { animation: arrow-back 1s ease-out forwards; }
+@keyframes arrow-back { to { transform: translateY(26px); opacity: .25; } }
+.art-string-release { animation: twang .5s ease-out; }
+@keyframes twang { 0%, 100% { transform: none; } 20% { transform: translateY(-3px); } 50% { transform: translateY(2px); } }
+
+/* 女巫用藥：那瓶倒向小鍋、鍋上冒出紅光（救）或綠煙（毒） */
+/* 先舉到鍋口上方再傾倒（位移是瓶子自己的座標，主圖裡放大 1.6 倍） */
+.art-pour { transform-box: fill-box; transform-origin: 50% 50%; animation: pour 1.4s var(--ease-out) forwards; }
+.art-pour--save { --lift: translate(18px, -22px); --tilt: 110deg; }
+.art-pour--poison { --lift: translate(-24px, -20px); --tilt: -110deg; }
+@keyframes pour {
+  35% { transform: var(--lift) rotate(0); }
+  60% { transform: var(--lift) rotate(var(--tilt)); opacity: 1; }
+  100% { transform: var(--lift) rotate(var(--tilt)); opacity: .15; }
+}
+.art-puff { transform-box: fill-box; transform-origin: 50% 100%; animation: puff 1.6s ease-out .5s backwards; opacity: 0; }
+@keyframes puff { from { opacity: .7; transform: scale(.3); } to { opacity: 0; transform: translateY(-24px) scale(1.4); } }
+
+/* 結算：角色一列列翻開，千面狼最後面具碎裂揭曉（ART 11.2 勝利） */
+.end-reveal { animation: reveal-row .5s var(--ease-out) calc(var(--i) * .25s) backwards; }
+.end-reveal--faceless .emblem--faceless { animation: shatter .9s ease-out calc(var(--i) * .25s + .5s) backwards; }
+@keyframes shatter {
+  0% { transform: scale(1.8) rotate(0); filter: drop-shadow(0 0 0 #8d78d6); }
+  30% { transform: scale(1.8) rotate(-12deg); }
+  45% { transform: scale(1.8) rotate(10deg); filter: drop-shadow(0 0 8px #b9a6f0); }
+  100% { transform: none; filter: none; }
+}
+
 /* 獵人：箭頭反光；出局：殘火明滅 */
 .art-glint { animation: glint 2.6s ease-in-out infinite; }
 @keyframes glint { 0%, 70%, 100% { opacity: .75; } 80% { opacity: 1; } }
@@ -87,6 +118,7 @@ html[data-lowfx] .hero *, html[data-lowfx] .emblem * { animation: none !importan
 /* 減少動態效果：不動，只淡入（SPEC C9.2 #13） */
 @media (prefers-reduced-motion: reduce) {
   .hero *, .emblem *, .card__face, .card__face .emblem, .crest--roll { animation: none !important; }
-  .coin, .dead-reveal { animation: fade-in 300ms backwards; }
+  .coin, .dead-reveal, .end-reveal { animation: fade-in 300ms backwards; }
+  .end-reveal--faceless .emblem--faceless { animation: none; }
   @keyframes fade-in { from { opacity: 0; } }
 }

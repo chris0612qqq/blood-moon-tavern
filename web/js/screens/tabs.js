@@ -368,7 +368,12 @@ function truthSummary(server, truth, name) {
   const periods = truth.disguise?.periods ?? [];
   return [
     h('h2', {}, t('s18.roles')),
-    [...server.players].sort((a, b) => a.seat - b.seat).map((p) => h('div', { class: 'list-row', key: p.id },
+    // 角色一列列翻開，千面狼排在最後才揭曉（ART 11.2 勝利）
+    [...server.players].sort((a, b) => a.seat - b.seat).map((p, i, all) => h('div', {
+      class: `list-row end-reveal ${p.role === ROLE.FACELESS ? 'end-reveal--faceless' : ''}`,
+      key: p.id,
+      style: `--i:${p.role === ROLE.FACELESS ? all.length : i}`,
+    },
       avatar(server, p.id),
       h('span', { class: 'nowrap' }, p.name),
       // 夜晚死因結算才公開（SPEC A2）
