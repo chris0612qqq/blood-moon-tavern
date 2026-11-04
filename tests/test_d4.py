@@ -283,7 +283,10 @@ def test_D4_40_any_player_can_take_over_narration(game: Game) -> None:
 
 def test_day_lines_run_at_day_pace() -> None:
     assert timers.step_gap("speak") == pytest.approx(4 / balance.DAY_PACE)
-    assert timers.step_gap("dawn") == pytest.approx(4 / balance.DAY_PACE)
+    # 天亮的雞鳴錄音比白天節奏的間隔長，要等它放完（SPEC v4.36）
+    assert timers.step_gap("dawn") == pytest.approx(
+        balance.SFX_SECONDS["dawn"] + balance.SFX_GAP_PADDING_SECONDS
+    )
     assert timers.step_gap("wolf_close") == 4  # 夜晚不變
 
 
