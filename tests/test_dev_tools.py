@@ -48,6 +48,40 @@ def test_production_admin_can_add_bots_in_lobby_only(env: Env) -> None:
             ws.close()
 
 
+def test_admin_removes_bots_in_lobby_only(env: Env) -> None:
+    """加多了可以移除：一個或全部；座位往前補；真人不能移除；開局後不行（SPEC v4.38）。"""
+    with TestClient(create_app(env.service, dev=False)) as client:
+        open_room(env, client)
+        headers = admin_headers(env, client)
+        assert client.delete("/api/admin/bots").status_code == 401
+        bots = client.post("/api/admin/bots?count=6", headers=headers).json()["added"]
+        humans = [r["id"] for r in env.service.roster_rows() if not r["is_bot"]]
+        assert all(r["is_bot"] for r in env.service.roster_rows() if r["id"] in bots)
+        # 移除第一個機器人：後面的人座位往前補，不留空位
+        res = client.delete(f"/api/admin/bots?player={bots[0]}", headers=headers)
+        assert res.json()["removed"] == [bots[0]]
+        seats = sorted(r["seat"] for r in env.service.roster_rows() if not r["is_spectator"])
+        assert seats == list(range(1, len(seats) + 1))
+        # 真人、不存在的人都不能用這個移除
+        for target in [*humans, "nobody"]:
+            res = client.delete(f"/api/admin/bots?player={target}", headers=headers)
+            assert res.status_code == 409, target
+        # 全部移除：只剩真人；資料庫裡也刪掉，重開伺服器不會回來
+        removed = client.delete("/api/admin/bots", headers=headers).json()["removed"]
+        assert sorted(removed) == sorted(bots[1:])
+        assert [r["id"] for r in env.service.roster_rows()] == humans
+        left = env.service.db.rows("SELECT id FROM player WHERE device_id LIKE 'bot-%'")
+        assert left == []
+        # 開局後不能移除
+        client.post("/api/admin/bots?count=6", headers=headers)
+        admin = Ws(client, env.admin_token)
+        admin.reply("admin.start")
+        assert client.delete("/api/admin/bots", headers=headers).status_code == 403
+        admin.close()
+        for ws in list(_OPEN):
+            ws.close()
+
+
 def test_D1_bots_finish_a_game_alone(dev_client: TestClient, env: Env) -> None:
     open_room(env, dev_client)
     res = dev_client.post("/api/admin/bots?count=8", headers=admin_headers(env, dev_client))

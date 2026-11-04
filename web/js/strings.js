@@ -90,6 +90,8 @@ const TEXT = Object.freeze({
   's5.startGo': '開始發牌',
   'sound.line': '如果聽到這句話，聲音就是正常的',
   's5.addBots': '加入機器人',
+  's5.removeBots': '移除全部機器人',
+  's5.removeBot': '移除這個機器人',
   's5.joinFirst': '管理員也是玩家：請按鑰匙回管理員選單，選「我也要玩」加入後才能開始',
   's6.title': '長按卡片看你的角色',
   's6.hold': '長按這裡',
