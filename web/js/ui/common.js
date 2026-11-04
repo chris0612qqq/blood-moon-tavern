@@ -2,6 +2,7 @@
 import { h } from '../dom.js';
 import { send, serverNow } from '../net.js';
 import { changed, store } from '../store.js';
+import { uiSound } from '../sfx.js';
 import { errorText, t } from '../strings.js';
 import { ringState } from './clock.js';
 
@@ -51,6 +52,7 @@ async function press(key, o) {
   if (result?.ok === false) {
     const message = result.code === null || result.code === undefined ? t('btn.timeout') : errorText(result.code);
     store.ui.buttons[key] = { state: 'error', message };
+    uiSound('error');
     changed();
     setTimeout(() => {
       delete store.ui.buttons[key];
@@ -59,6 +61,7 @@ async function press(key, o) {
     return;
   }
   store.ui.buttons[key] = { state: 'success' };
+  uiSound('success');
   changed();
   setTimeout(() => {
     delete store.ui.buttons[key];
@@ -175,7 +178,7 @@ export function pickGrid({
       class: `cell ${selected === id ? 'cell--on' : ''} ${stateOf(id)}`,
       key: id,
       testid: `${prefix}-${id}`,
-      onclick: () => onPick(id),
+      onclick: () => { uiSound('select'); onPick(id); },
     },
     avatar(server, id),
     h('div', { class: 'cell__name' },
@@ -187,7 +190,7 @@ export function pickGrid({
     class: `cell cell--empty ${selected === e.value ? 'cell--on' : ''} ${stateOf(e.value)}`,
     key: `extra-${e.value}`,
     testid: `${prefix}-${e.value}`,
-    onclick: () => onPick(e.value),
+    onclick: () => { uiSound('select'); onPick(e.value); },
   }, h('div', { class: 'cell__name' }, e.label), h('div', { class: 'cell__marks' }, marks?.[e.value] ?? '')));
   return h('div', { class: `grid ${marks ? 'grid--marks' : ''} ${look}` }, cells, specials);
 }

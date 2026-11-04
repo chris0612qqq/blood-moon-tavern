@@ -4,6 +4,8 @@
 // audio/wolf_howl.wav：美國魚類及野生動物管理局錄的狼嚎（公有領域），取自 Wikimedia Commons
 // 「File:Wolf howls.ogg」12.9–15.7 秒，濾掉低頻雜音與高頻嘶聲、前後淡入淡出。
 
+import { load, save } from './storage.js';
+
 const HOWL_FILE = 'audio/wolf_howl.wav';
 const HOWL_S = 1.8;
 /** 合成狼嚎加回音的長度。 */
@@ -342,4 +344,177 @@ export function coinDrops(count) {
       tone(ac, { freq: 3900, at, decay: 0.25, peak: 0.1 });
     }
   } catch { /* 沒聲音不影響遊戲 */ }
+}
+
+// ── 個人設定：每支手機自己決定要不要環境音、介面音效（ART 12.3、12.5「可關」）──────
+
+export const soundPrefs = {
+  get ambience() { return load('sound_ambience', true); },
+  set ambience(on) { save('sound_ambience', on); },
+  get ui() { return load('sound_ui', true); },
+  set ui(on) { save('sound_ui', on); },
+};
+
+let night = false;
+/** 夜晚介面音效對所有手機一律靜音，只留畫面回饋（ART 12.5、SPEC A8.2）。app.js 每次重畫告訴這裡。 */
+export function setNight(value) {
+  night = value;
+}
+
+const UI_SOUNDS = {
+  // 選中格子：木牌翻起的輕響
+  select(ac, at) { burst(ac, { at, dur: 0.04, freq: 1800, q: 5, peak: 0.25 }); },
+  // 送出成功：蠟封蓋章「啵」＋小鈴
+  success(ac, at) {
+    tone(ac, { freq: 180, at, decay: 0.08, peak: 0.25 });
+    tone(ac, { freq: 1568, at: at + 0.06, decay: 0.35, peak: 0.1 });
+  },
+  // 送出失敗：低沉木頭「咚」＋短促否定音
+  error(ac, at) {
+    tone(ac, { freq: 140, at, decay: 0.18, peak: 0.3 });
+    tone(ac, { freq: 220, type: 'square', at: at + 0.12, decay: 0.12, peak: 0.05 });
+  },
+  // 短提示：紙卷展開「沙」
+  toast(ac, at) { burst(ac, { at, dur: 0.18, freq: 3500, q: 0.6, type: 'highpass', peak: 0.12, attack: 0.05 }); },
+  // 對話框：較長的卷軸展開聲
+  dialog(ac, at) { burst(ac, { at, dur: 0.35, freq: 2500, q: 0.6, type: 'highpass', peak: 0.12, attack: 0.12 }); },
+  // 聊天送出：羽毛筆劃過紙面
+  chat(ac, at) { burst(ac, { at, dur: 0.22, freq: 5000, q: 1.5, peak: 0.12, attack: 0.08 }); },
+  // 倒數剩 10 秒：沙漏翻轉（木頭輕碰＋沙子流）
+  countdown(ac, at) {
+    burst(ac, { at, dur: 0.05, freq: 900, q: 4, peak: 0.35 });
+    burst(ac, { at: at + 0.08, dur: 0.6, freq: 6000, q: 0.5, type: 'highpass', peak: 0.05, attack: 0.1 });
+  },
+  // 暫停：大鐘停擺「鏗」
+  pause(ac, at) { bell(ac, at, 330, 0.9); },
+  // 輪到你發言：清脆小銅鈴兩下；下一個是你：一下、較輕
+  turn(ac, at) {
+    tone(ac, { freq: 2093, at, decay: 0.4, peak: 0.18 });
+    tone(ac, { freq: 2093, at: at + 0.22, decay: 0.5, peak: 0.18 });
+  },
+  next(ac, at) { tone(ac, { freq: 2093, at, decay: 0.35, peak: 0.1 }); },
+  // 千面狼換臉（只在他手機、只在白天）：瓷面具碎裂「喀啦」＋布料翻動
+  swap(ac, at) {
+    for (let i = 0; i < 6; i += 1) {
+      burst(ac, { at: at + i * 0.035 + Math.random() * 0.02, dur: 0.03, freq: 3000 + Math.random() * 2500, q: 6, peak: 0.6 });
+    }
+    burst(ac, { at: at + 0.3, dur: 0.5, freq: 900, q: 0.8, peak: 0.2, attack: 0.15 });
+  },
+};
+
+/** 介面與個人提醒音效。夜晚、或這支手機關掉介面音效時不出聲。 */
+export function uiSound(name) {
+  if (night || !soundPrefs.ui) return;
+  const play = UI_SOUNDS[name];
+  try {
+    const ac = context; // 還沒點過畫面就不要開聲音（iOS 也不允許）
+    if (!play || !ac || ac.state !== 'running') return;
+    play(ac, ac.currentTime + 0.01);
+  } catch { /* 沒聲音不影響遊戲 */ }
+}
+
+// ── 環境音（ART 12.3）：循環的底噪＋不定時的點綴，比旁白低 18 dB，旁白念的時候再壓低 ──────
+
+const AMB_GAIN = 0.07;
+const AMB_DUCK = 0.3; // 旁白念的時候環境音剩三成（約 −10 dB，ART 12.2）
+const AMB_TICK_MS = 250;
+let ambience = null; // { kind, bed, gain, timer, next }
+
+/** 一直循環的濾波噪音：火堆的低鳴、夜風、竹林風。 */
+function bedOf(ac, kind) {
+  const source = ac.createBufferSource();
+  source.buffer = noiseBuffer(ac);
+  source.loop = true;
+  const filter = ac.createBiquadFilter();
+  filter.type = kind === 'tavern' ? 'lowpass' : 'bandpass';
+  filter.frequency.value = { tavern: 220, night: 420, day: 900 }[kind];
+  filter.Q.value = kind === 'tavern' ? 0.7 : 0.9;
+  const gain = ac.createGain();
+  gain.gain.value = 0;
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(ac.destination);
+  source.start();
+  // 風聲要一陣一陣：用很慢的低頻震盪推動音量
+  let gust = null;
+  if (kind !== 'tavern') {
+    gust = ac.createOscillator();
+    gust.frequency.value = 0.13;
+    const depth = ac.createGain();
+    depth.gain.value = AMB_GAIN * 0.4;
+    gust.connect(depth);
+    depth.connect(gain.gain);
+    gust.start();
+  }
+  return { source, gain, gust };
+}
+
+/** 不定時的點綴：柴火劈啪與酒杯、貓頭鷹、鳥叫。回傳下一次要等幾秒。 */
+const ACCENTS = {
+  tavern(ac, at) {
+    if (Math.random() < 0.85) {
+      for (let i = 0; i < 1 + Math.floor(Math.random() * 3); i += 1) {
+        burst(ac, { at: at + i * 0.06, dur: 0.02, freq: 2500 + Math.random() * 2000, q: 2, peak: 0.05 });
+      }
+      return 0.4 + Math.random() * 1.2;
+    }
+    tone(ac, { freq: 2794, at, decay: 0.5, peak: 0.03 }); // 遠處酒杯碰一下
+    tone(ac, { freq: 3322, at: at + 0.02, decay: 0.4, peak: 0.02 });
+    return 3 + Math.random() * 4;
+  },
+  night(ac, at) {
+    // 遠處貓頭鷹「咕—咕」
+    tone(ac, { freq: 410, at, decay: 0.35, peak: 0.05, attack: 0.06 });
+    tone(ac, { freq: 380, at: at + 0.55, decay: 0.5, peak: 0.05, attack: 0.06 });
+    return 14 + Math.random() * 12;
+  },
+  day(ac, at) {
+    const chirps = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < chirps; i += 1) {
+      const osc = tone(ac, { freq: 2600 + Math.random() * 900, at: at + i * 0.14, decay: 0.09, peak: 0.03 });
+      osc.frequency.exponentialRampToValueAtTime(3800 + Math.random() * 600, at + i * 0.14 + 0.08);
+    }
+    return 4 + Math.random() * 6;
+  },
+};
+
+function stopAmbience() {
+  if (!ambience) return;
+  clearInterval(ambience.timer);
+  const { bed } = ambience;
+  try {
+    const ac = context;
+    bed.gain.gain.setTargetAtTime(0, ac.currentTime, 0.3);
+    setTimeout(() => {
+      bed.source.stop();
+      bed.gust?.stop();
+    }, 1500);
+  } catch { /* 已經停了 */ }
+  ambience = null;
+}
+
+/** 目前在放哪一種環境音（測試與設定頁用）。 */
+export const ambienceKind = () => ambience?.kind ?? null;
+
+/** 切換環境音：'tavern' 大廳與結算、'night' 夜晚、'day' 白天，null 停止。同一種重複呼叫不重開。 */
+export function setAmbience(kind) {
+  const want = kind && soundPrefs.ambience ? kind : null;
+  if ((ambience?.kind ?? null) === want) return;
+  stopAmbience();
+  if (!want) return;
+  ambience = { kind: want, bed: null, timer: null, next: 0 };
+  const state = ambience;
+  state.timer = setInterval(() => {
+    const ac = context;
+    if (!ac || ac.state !== 'running') return; // 還沒點過畫面，等聲音開了才開始
+    try {
+      if (!state.bed) state.bed = bedOf(ac, want);
+      const target = AMB_GAIN * (window.speechSynthesis?.speaking ? AMB_DUCK : 1);
+      state.bed.gain.gain.setTargetAtTime(target, ac.currentTime, 0.25);
+      if (ac.currentTime >= state.next) {
+        const at = ac.currentTime + 0.05;
+        state.next = at + ACCENTS[want](ac, at);
+      }
+    } catch { /* 沒聲音不影響遊戲 */ }
+  }, AMB_TICK_MS);
 }
