@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from server import balance, config, protocol  # noqa: E402
+from server import balance, config, protocol, views  # noqa: E402
 from server.enums import (  # noqa: E402
     Action,
     Channel,
@@ -46,6 +46,8 @@ def render() -> str:
         "CHANNEL": {c.name: c.value for c in Channel},
         "CHAT_KIND": {k.name: k.value for k in ChatKind},
         "DEATH_CAUSE": {c.name: c.value for c in DeathCause},
+        # 手機看到的死因代號（咬死是 bite，不是 wolf）
+        "PUBLIC_CAUSE": {c.name: views.public_cause(c) for c in DeathCause},
         "ERROR": {e.name: e.value for e in ErrorCode},
         "MEDIA_KIND": {k.name: k.value for k in MediaKind},
         "MODE": {m.name: m.value for m in Mode},

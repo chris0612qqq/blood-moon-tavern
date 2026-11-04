@@ -7,6 +7,7 @@ export const ACTION = Object.freeze({"ADMIN_END": "admin.end", "ADMIN_NARRATOR":
 export const CHANNEL = Object.freeze({"PUBLIC": "public", "WOLF": "wolf"});
 export const CHAT_KIND = Object.freeze({"PHOTO": "photo", "SYSTEM": "system", "TEXT": "text", "TTS": "tts", "VOICE": "voice"});
 export const DEATH_CAUSE = Object.freeze({"HUNTER": "hunter", "MANUAL": "manual", "POISON": "poison", "VOTE": "vote", "WOLF": "wolf"});
+export const PUBLIC_CAUSE = Object.freeze({"HUNTER": "hunter", "MANUAL": "manual", "POISON": "poison", "VOTE": "vote", "WOLF": "bite"});
 export const ERROR = Object.freeze({"BAD_REQUEST": "bad_request", "DEADLINE_PASSED": "deadline_passed", "FILE_INVALID": "file_invalid", "FILE_TOO_LARGE": "file_too_large", "FORBIDDEN": "forbidden", "INTERNAL_ERROR": "internal_error", "INVALID_TARGET": "invalid_target", "LOCKED": "locked", "NAME_INVALID": "name_invalid", "NAME_TAKEN": "name_taken", "NO_ROOM": "no_room", "RATE_LIMITED": "rate_limited", "ROLE_PLAN_FULL": "role_plan_full", "ROOM_CLOSED": "room_closed", "ROOM_FULL": "room_full", "STALE_STEP": "stale_step", "STEP_NOT_OPEN": "step_not_open", "STORAGE_FULL": "storage_full", "UNAUTHORIZED": "unauthorized", "VERSION_MISMATCH": "version_mismatch", "WRONG_PASSWORD": "wrong_password", "WRONG_PIN": "wrong_pin"});
 export const MEDIA_KIND = Object.freeze({"AVATAR": "avatar", "PHOTO": "photo", "VOICE": "voice"});
 export const MODE = Object.freeze({"AUTO": "auto", "GOD": "god"});

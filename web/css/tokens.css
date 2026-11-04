@@ -49,5 +49,6 @@
   --dur-slash: 400ms;
   --dur-victory: 3000ms;
   --dur-reveal-each: 1500ms;
+  --dur-bite-at: 600ms; /* 死者那列翻開後，爪痕才劃下（SPEC v4.37；sfx.js BITE_AT_S 同步） */
   --ease-out: cubic-bezier(.2, .8, .2, 1);
 }
