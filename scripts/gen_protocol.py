@@ -10,7 +10,17 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from server import balance, config, protocol  # noqa: E402
-from server.enums import Action, Channel, ChatKind, DeathCause, Mode, PauseReason, Role, Step  # noqa: E402
+from server.enums import (  # noqa: E402
+    Action,
+    Channel,
+    ChatKind,
+    DeathCause,
+    Mode,
+    PauseReason,
+    Role,
+    Step,
+    Winner,
+)
 from server.errors import ErrorCode  # noqa: E402
 from server.media import MediaKind  # noqa: E402
 
@@ -42,6 +52,7 @@ def render() -> str:
         "PAUSE_REASON": {r.name: r.value for r in PauseReason},
         "ROLE": {r.name: r.value for r in Role},
         "STEP": {s.name: s.value for s in Step},
+        "WINNER": {w.name: w.value for w in Winner},
         "LIMITS": {
             "NAME_GRAPHEMES": protocol.NAME_GRAPHEMES,
             "PIN_DIGITS": config.PIN_DIGITS,

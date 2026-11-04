@@ -4,7 +4,7 @@ import { h, render } from './dom.js';
 import { serverNow } from './net.js';
 import { speak } from './narrator.js';
 import { s8 } from './screens/night.js';
-import { wolfHowl } from './sfx.js';
+import { preloadRecordings, wolfHowl } from './sfx.js';
 import { changed, store, subscribe } from './store.js';
 import { tickClocks, watchFrames } from './ui/clock.js';
 
@@ -96,6 +96,8 @@ function frame(ms) {
   requestAnimationFrame(frame);
 }
 
+// 預覽頁當成旁白手機：點一下畫面就下載狼嚎錄音
+preloadRecordings();
 subscribe(draw);
 setState('picking');
 requestAnimationFrame(frame);
