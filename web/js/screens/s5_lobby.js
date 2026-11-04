@@ -207,6 +207,14 @@ export function lobbyMenu(server, playerId) {
     server.room?.mode === 'auto'
       ? actionButton({ id: 'btn-set-narrator', label: t('s5.setNarrator'), run: () => closeAfter(send('admin.narrator', { player: playerId })) })
       : null,
+    player.is_bot
+      ? actionButton({
+        id: `btn-remove-bot-${playerId}`,
+        label: t('s5.removeBot'),
+        kind: 'secondary',
+        run: () => closeAfter(api(`/api/admin/bots?player=${playerId}`, { method: 'DELETE', auth: loadTokens().admin })),
+      })
+      : null,
     actionButton({
       id: `btn-reset-pin-${playerId}`,
       label: t('s5.resetPin'),
@@ -267,5 +275,14 @@ export function lobbyAdmin(server, players, need) {
     button(t('s5.addBots'), () => {
       api(`/api/admin/bots?count=${Math.max(need, 1)}`, { method: 'POST', auth: loadTokens().admin });
     }, { testid: 'btn-add-bots' }),
+    // 加多了可以拿掉；真人不能移除（SPEC v4.16、v4.38）
+    players.some((p) => p.is_bot)
+      ? actionButton({
+        id: 'btn-remove-bots',
+        label: t('s5.removeBots'),
+        kind: 'secondary',
+        run: () => api('/api/admin/bots', { method: 'DELETE', auth: loadTokens().admin }),
+      })
+      : null,
   ];
 }

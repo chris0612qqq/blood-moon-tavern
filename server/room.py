@@ -706,6 +706,7 @@ class RoomService:
                     "is_spectator": player.is_spectator,
                     "offline": player.id in offline,
                     "is_admin": self.room is not None and self.room.admin_player_id == player.id,
+                    "is_bot": player.id in self.bot_ids,
                     "prep": dict(player.prep),
                     "avatar_url": self.media_url(avatar) if avatar else None,
                 }
@@ -1085,6 +1086,44 @@ class RoomService:
         self.db.write([_player_statement(room.id, self.players[p]) for p in added])
         self.broadcast_roster()
         return added
+
+    def remove_bots(self, player_id: str | None = None) -> list[str]:
+        """移除機器人：指定一個，或沒指定就全部（SPEC v4.38）。
+
+        只在大廳；真人不能移除（v4.16 不踢人）。
+
+        剩下的人座位往前補，順序不變；旁白主機若是被移除的機器人，改回管理員或第一位真人。
+        """
+        room = self.require_room()
+        if room.state != _LOBBY:
+            raise GameError(ErrorCode.FORBIDDEN)
+        if player_id is not None and player_id not in self.bot_ids:
+            raise GameError(ErrorCode.INVALID_TARGET)
+        removed = [player_id] if player_id is not None else list(self.bot_ids)
+        for pid in removed:
+            del self.players[pid]
+            self.role_plan.pop(pid, None)
+        self.bot_ids = [pid for pid in self.bot_ids if pid not in removed]
+        seated = sorted(
+            (p for p in self.players.values() if not p.is_spectator), key=lambda p: p.seat
+        )
+        for seat, player in enumerate(seated, start=1):
+            player.seat = seat
+        statements: list[tuple[str, tuple[Any, ...]]] = [
+            ("DELETE FROM player WHERE id=?", (pid,)) for pid in removed
+        ]
+        statements += [_player_statement(room.id, p) for p in seated]
+        narrator_gone = room.narrator_id in removed
+        if narrator_gone:
+            humans = [p.id for p in seated]
+            room.narrator_id = room.admin_player_id or (humans[0] if humans else None)
+            statements.append(_room_statement(room))
+        self.db.write(statements)
+        self.broadcast_roster()
+        if narrator_gone:
+            for other in self.conns:
+                other.send(views.narrator_message(room.narrator_id), self.now)
+        return removed
 
     def _run_bots(self) -> None:
         engine = self.engine

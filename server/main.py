@@ -164,6 +164,13 @@ def _install_bot_route(app: FastAPI) -> None:
         service = _service(request)
         return {"added": await service.submit(lambda: service.add_bots(count))}
 
+    @app.delete("/api/admin/bots")
+    async def remove_bots(request: Request, player: str | None = None) -> dict[str, list[str]]:
+        """移除機器人：帶 player 只移除那一個，不帶就全部（SPEC v4.38）。"""
+        _require_admin(request)
+        service = _service(request)
+        return {"removed": await service.submit(lambda: service.remove_bots(player))}
+
     _install_media_routes(app)
 
 

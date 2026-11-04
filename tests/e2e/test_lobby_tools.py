@@ -235,6 +235,10 @@ def test_drag_works_with_a_finger(server_url: str) -> None:  # noqa: F811
         page = context.new_page()
         order = _lobby_with_bots(page, server_url)
         first = order[0]
+        # 名單捲到畫面中間：太靠近底部，手指拖過去會觸發自動捲動（大廳按鈕變多後名單變低）
+        page.locator(f'[data-testid="lobby-row-{order[1]}"]').evaluate(
+            "(el) => el.scrollIntoView({ block: 'center' })"
+        )
         handle = page.locator(f'[data-testid="seat-handle-{first}"]').bounding_box()
         target = page.locator(f'[data-testid="lobby-row-{order[2]}"]').bounding_box()
         assert handle and target
@@ -642,4 +646,26 @@ def test_admin_sets_roles_before_start(server_url: str) -> None:  # noqa: F811
         wait(host, "btn-host-next")
         roles = store(host, "Object.fromEntries(s.server.host.players.map((p) => [p.id, p.role]))")
         assert roles[first] == "seer" and roles[second] == "wolf"
+        browser.close()
+
+
+def test_admin_removes_one_bot_or_all(server_url: str) -> None:  # noqa: F811
+    """加多了的機器人可以拿掉：點機器人那列的選單移除一個，或一次全部移除（SPEC v4.38）。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        order = _lobby_with_bots(page, server_url)
+        bots = store(page, "s.server.roster.filter((r) => r.is_bot).map((r) => r.id)")
+        me = store(page, "s.server.me.id")
+        # 真人的選單沒有移除鍵（v4.16 不踢人）
+        press(page, f"lobby-menu-{me}")
+        assert not has(page, f"btn-remove-bot-{me}")
+        press(page, "lobby-menu-close")
+        press(page, f"lobby-menu-{bots[0]}")
+        press(page, f"btn-remove-bot-{bots[0]}")
+        page.wait_for_function("(n) => window.__bmt.server.roster.length === n", arg=len(order) - 1)
+        press(page, "btn-remove-bots")
+        page.wait_for_function("window.__bmt.server.roster.every((r) => !r.is_bot)")
+        assert not has(page, "btn-remove-bots")
+        assert store(page, "s.server.roster.map((r) => r.seat)") == [1]
         browser.close()

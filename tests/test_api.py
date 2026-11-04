@@ -1441,6 +1441,11 @@ def test_P3_twenty_clients_play_a_full_game(
                 bots = [Bot(url, token) for token in tokens]
                 admin = Bot(url, admin_token, is_host=True)
                 tasks = [asyncio.create_task(b.run()) for b in [*bots, admin]]
+                # 等每條連線真的建好；整輪測試時電腦忙，固定等 0.3 秒有時還沒連上
+                for _ in range(500):
+                    if all(b.ws is not None for b in [*bots, admin]):
+                        break
+                    await asyncio.sleep(0.02)
                 await asyncio.sleep(0.3)
                 await admin.ws.send(json.dumps({"t": "admin.start", "msg_id": "start"}))
                 if mode is Mode.GOD:
