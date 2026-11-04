@@ -9,6 +9,7 @@
 // audio/win_wolf.wav：OpenGameArt「String and piano horror stings」的 abyss.ogg（congusbongus，CC0）。
 // 都轉成單聲道並把峰值調到 −1 dBFS（iPhone 舊版 Safari 不一定解得開 ogg，所以用 wav）。
 
+import { WINNER } from './protocol.js';
 import { load, save } from './storage.js';
 
 const RECORDING_FILES = {
@@ -27,9 +28,15 @@ const CLEANUP_MS = 5000;
 // 原本比旁白低 4 dB（ART 12.2），使用者試聽後要再大聲三倍
 const SFX_GAIN = 3 * 10 ** (-4 / 20);
 
+// 下載逾時跟 net.js 一樣 8 秒（CODING_RULES E10、N7）；這裡不 import net.js，免得總覽頁也連伺服器
+const FETCH_TIMEOUT_MS = 8000;
+
 let context = null;
 /** 已經解碼好的錄音；還沒載到或失敗就沒有這一項，改用合成的。 */
 const recordings = {};
+/** 要不要下載錄音：只有會出聲的旁白手機要，其他人省下約 1 MB 行動網路。 */
+let wantRecordings = false;
+let loading = null;
 
 // iPhone 預設把 Web Audio 當「環境音」，側邊靜音鍵一開就沒聲音（旁白語音不受影響）；
 // 改成「播放」類，像音樂一樣不理靜音鍵（Safari 17 起支援，舊版沒有就照舊）
@@ -37,23 +44,40 @@ try {
   if (navigator.audioSession) navigator.audioSession.type = 'playback';
 } catch { /* 不支援就算了 */ }
 
-/** 第一次開聲音時順便下載錄音；下載或解碼失敗就一直用合成的。 */
+/** 下載並解碼一段錄音；逾時、下載或解碼失敗就一直用合成的。 */
 async function loadRecording(ac, name) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(RECORDING_FILES[name]);
+    const response = await fetch(RECORDING_FILES[name], { signal: controller.signal });
     if (!response.ok) return;
     const bytes = await response.arrayBuffer();
     // 舊版 Safari 的 decodeAudioData 只有回呼寫法
     recordings[name] = await new Promise((resolve, reject) => { ac.decodeAudioData(bytes, resolve, reject); });
-  } catch { /* 用合成的 */ }
+  } catch { /* 用合成的 */ } finally {
+    clearTimeout(timer);
+  }
 }
+
+function startLoading(ac) {
+  loading ??= Promise.all(Object.keys(RECORDING_FILES).map((name) => loadRecording(ac, name)));
+}
+
+/** 這支手機會念旁白：聲音一開就下載錄音（app.js 每次重畫告訴這裡，重複呼叫沒關係）。 */
+export function preloadRecordings() {
+  wantRecordings = true;
+  if (context) startLoading(context);
+}
+
+/** 錄音都下載完（或失敗）時完成；還沒開始下載就立刻完成（測試、試聽用）。 */
+export const recordingsReady = () => loading ?? Promise.resolve();
 
 function audio() {
   if (!context) {
     const Context = window.AudioContext ?? window.webkitAudioContext;
     if (!Context) return null;
     context = new Context();
-    for (const name of Object.keys(RECORDING_FILES)) loadRecording(context, name);
+    if (wantRecordings) startLoading(context);
   }
   if (context.state === 'suspended') context.resume();
   return context;
@@ -92,14 +116,19 @@ export function wolfHowl() {
   }
 }
 
-/** 放一段錄音。回傳放完再稍停一下的毫秒數；gain 給呼叫的人之後壓低音量用。 */
-function playRecording(ac, buffer, { at = ac.currentTime, out = null } = {}) {
+/** 音效的總音量節點，已接到限幅器。 */
+function sfxGain(ac) {
+  const gain = ac.createGain();
+  gain.gain.value = SFX_GAIN;
+  gain.connect(sfxOut(ac));
+  return gain;
+}
+
+/** 放一段錄音，接到 out（預設新開一個音效音量）。回傳放完再稍停一下的毫秒數。 */
+function playRecording(ac, buffer, { at = ac.currentTime, out = sfxGain(ac) } = {}) {
   const source = ac.createBufferSource();
   source.buffer = buffer;
-  const gain = out ?? ac.createGain();
-  if (!out) gain.gain.value = SFX_GAIN;
-  source.connect(gain);
-  if (!out) gain.connect(sfxOut(ac));
+  source.connect(out);
   source.start(at);
   return Math.round(buffer.duration * 1000) + AFTER_RECORDING_MS;
 }
@@ -107,44 +136,61 @@ function playRecording(ac, buffer, { at = ac.currentTime, out = null } = {}) {
 // 結算勝利音效：前奏先響，旁白念「好人／狼人獲勝」時壓低，讓字聽得清楚，之後放完
 const WIN_LEAD_MS = 2500;
 const WIN_DUCK = 0.35;
+const WIN_DUCK_RAMP_S = 0.3;
 const WOLF_STING_AT_S = 1.2; // 狼嚎響到一半，低沉弦樂進來
 
-function victorySound(ac, winner) {
-  const music = recordings[winner === 'wolf' ? 'win_wolf' : 'win_village'];
-  if (!music) return 0;
-  const now = ac.currentTime + 0.03;
+/** 勝利音效（ART 12.4）。錄音沒載到就合成：好人是明亮的號角琶音，狼人是狼嚎＋低沉和弦。 */
+function victorySound(ac, at, winner) {
+  const isWolf = winner === WINNER.WOLF;
+  const music = recordings[isWolf ? 'win_wolf' : 'win_village'];
   const out = ac.createGain();
-  const duckAt = now + WIN_LEAD_MS / 1000;
-  out.gain.setValueAtTime(SFX_GAIN, now);
-  out.gain.setValueAtTime(SFX_GAIN, duckAt - 0.3);
+  const duckAt = at + WIN_LEAD_MS / 1000;
+  out.gain.setValueAtTime(SFX_GAIN, at);
+  out.gain.setValueAtTime(SFX_GAIN, duckAt - WIN_DUCK_RAMP_S);
   out.gain.linearRampToValueAtTime(SFX_GAIN * WIN_DUCK, duckAt);
   out.connect(sfxOut(ac));
-  if (winner === 'wolf' && recordings.howl) {
-    playRecording(ac, recordings.howl, { at: now, out });
-    playRecording(ac, music, { at: now + WOLF_STING_AT_S, out });
-  } else {
-    playRecording(ac, music, { at: now, out });
+  if (isWolf) {
+    if (recordings.howl) playRecording(ac, recordings.howl, { at, out });
+    else synthHowl(ac, out);
   }
+  const musicAt = isWolf ? at + WOLF_STING_AT_S : at;
+  if (music) playRecording(ac, music, { at: musicAt, out });
+  else (isWolf ? synthWolfChord : synthFanfare)(ac, musicAt, out);
   return WIN_LEAD_MS;
 }
 
+/** 合成好人勝利：C 大調號角琶音往上，最後一個和弦拉長。 */
+function synthFanfare(ac, at, out) {
+  [523, 659, 784].forEach((freq, i) => {
+    tone(ac, { freq, type: 'sawtooth', at: at + i * 0.18, decay: 0.3, peak: 0.12, out });
+  });
+  for (const freq of [523, 659, 784, 1047]) {
+    tone(ac, { freq, type: 'sawtooth', at: at + 0.6, decay: 2.4, peak: 0.08, attack: 0.05, out });
+  }
+}
+
+/** 合成狼人勝利：低音小三和弦慢慢浮出來。 */
+function synthWolfChord(ac, at, out) {
+  for (const freq of [55, 65.4, 82.4]) {
+    tone(ac, { freq, type: 'sawtooth', at, decay: 3, peak: 0.2, attack: 0.6, out });
+  }
+}
+
 /** 合成狼嚎：兩支微微走音的鋸齒波，300→700→450 Hz 滑音、尾段加顫音，經低通濾波，最後回音。 */
-function synthHowl(ac) {
+function synthHowl(ac, dest = sfxGain(ac)) {
   const t0 = ac.currentTime + 0.05;
   const end = t0 + HOWL_S;
 
   const out = ac.createGain();
-  out.gain.value = SFX_GAIN;
   const echo = ac.createDelay(1);
   echo.delayTime.value = ECHO_S;
   const feedback = ac.createGain();
   feedback.gain.value = ECHO_FEEDBACK;
-  const master = sfxOut(ac);
-  out.connect(master);
+  out.connect(dest);
   out.connect(echo);
   echo.connect(feedback);
   feedback.connect(echo);
-  feedback.connect(master);
+  feedback.connect(dest);
 
   const envelope = ac.createGain();
   envelope.gain.setValueAtTime(0.0001, t0);
@@ -203,17 +249,17 @@ function noiseBuffer(ac) {
   return noise;
 }
 
-/** 一個音：起音很快，之後指數衰減到幾乎無聲。 */
-function tone(ac, { freq, type = 'sine', at, decay, peak = 0.3, attack = 0.005 }) {
+/** 一個音：起音很快，之後指數衰減到幾乎無聲。給了 out 就接到它（它已經含音效音量）。 */
+function tone(ac, { freq, type = 'sine', at, decay, peak = 0.3, attack = 0.005, out = null }) {
   const osc = ac.createOscillator();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, at);
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0.0001, at);
-  gain.gain.exponentialRampToValueAtTime(peak * SFX_GAIN, at + attack);
+  gain.gain.exponentialRampToValueAtTime(out ? peak : peak * SFX_GAIN, at + attack);
   gain.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
   osc.connect(gain);
-  gain.connect(sfxOut(ac));
+  gain.connect(out ?? sfxOut(ac));
   osc.start(at);
   osc.stop(at + attack + decay + 0.05);
   return osc;
@@ -333,24 +379,23 @@ const SOUNDS = {
   },
 };
 SOUNDS.vote = SOUNDS.suspect_vote;
+// 結算：依勝方放不同的音樂（SPEC v4.36）
+SOUNDS.win = victorySound;
 
 // 伺服器有替這幾句預留音效時間（server/balance.py SFX_SECONDS）：放完才念。
+// 結算（win）沒有預留，但它是最後一句，後面沒有句子會打斷，所以也等前奏。
 // 其他句子沒有預留，等的話下一句會來打斷，所以音效和旁白一起出來。
-const LEAD_LINES = new Set(['night_start', 'wolf_open', 'seer_open', 'witch_open', 'dawn']);
+const LEAD_LINES = new Set(['night_start', 'wolf_open', 'seer_open', 'witch_open', 'dawn', 'win']);
 
-/**
- * 旁白念這一句之前的音效（ART 12.4）。回傳要等幾毫秒再念；不用等或沒播出來回傳 0。
- * 結算那句（win）依勝方放不同的音樂；它是最後一句，後面沒有句子會打斷，所以也等前奏。
- */
+/** 旁白念這一句之前的音效（ART 12.4）。winner 只有結算那句用。回傳要等幾毫秒再念；不用等或沒播出來回傳 0。 */
 export function openingSound(lineId, winner = null) {
   if (lineId === 'wolf_open') return wolfHowl();
-  const play = lineId === 'win' ? (ac) => victorySound(ac, winner) : SOUNDS[lineId];
+  const play = SOUNDS[lineId];
   if (!play) return 0;
   try {
     const ac = audio();
     if (!ac || ac.state !== 'running') return 0;
-    const ms = play(ac, ac.currentTime + 0.03);
-    if (lineId === 'win') return ms;
+    const ms = play(ac, ac.currentTime + 0.03, winner);
     return LEAD_LINES.has(lineId) ? ms : 0;
   } catch {
     return 0;

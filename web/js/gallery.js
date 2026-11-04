@@ -4,7 +4,10 @@ import { roleName } from './strings.js';
 import {
   coin, d20Crest, dawnRise, hunterBow, roleEmblem, seerOrb, snuffedCandle, victory, witchBrew,
 } from './ui/art.js';
-import { openingSound } from './sfx.js';
+import { openingSound, preloadRecordings } from './sfx.js';
+
+// 總覽頁可以試聽錄音，所以也要下載
+preloadRecordings();
 
 const ROLES = ['wolf', 'faceless', 'villager', 'seer', 'witch', 'hunter'];
 
@@ -49,4 +52,6 @@ render(document.getElementById('app'), h('div', { class: 'main' },
       ['好人勝', () => openingSound('win', 'village')],
       ['狼人勝', () => openingSound('win', 'wolf')],
       ['狼嚎', () => openingSound('wolf_open')],
-    ].map(([label, play]) => h('button', { class: 'btn btn--secondary btn--small', onclick: play }, label))))));
+    ].map(([label, play], i) => h('button', {
+      class: 'btn btn--secondary btn--small', testid: `listen-${i}`, onclick: play,
+    }, label))))));

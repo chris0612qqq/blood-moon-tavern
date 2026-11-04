@@ -7,7 +7,7 @@ import { causeJoke, causePlain, deathLabel, errorText, roleName, t } from '../st
 import { soundPrefs, uiSound } from '../sfx.js';
 import { roleEmblem, victory } from '../ui/art.js';
 import { actionButton, avatar, button, field, nameOf, pauseToggle, toast } from '../ui/common.js';
-import { ROLE } from '../protocol.js';
+import { ROLE, WINNER } from '../protocol.js';
 import { installGuideButton } from './install.js';
 import { roleCard } from './night.js';
 import { speak, VOICE_STYLE } from '../narrator.js';
@@ -396,7 +396,7 @@ function truthSummary(server, truth, name) {
 export function s18(server) {
   const truth = server.truth ?? {};
   const name = (id) => (id ? nameOf(server, id) : t('s20.nobody'));
-  const title = { village: 's18.village', wolf: 's18.wolf', none: 's18.none' }[server.winner] ?? 's18.none';
+  const title = { [WINNER.VILLAGE]: 's18.village', [WINNER.WOLF]: 's18.wolf', [WINNER.NONE]: 's18.none' }[server.winner] ?? 's18.none';
   const nights = truth.nights ?? [];
   const current = store.ui.truthTab ?? 'summary';
   const tab = (id, label) => h('button', {
@@ -407,7 +407,7 @@ export function s18(server) {
   }, label);
   const night = nights.find((n) => String(n.round_no) === current);
   return [
-    server.winner === 'village' || server.winner === 'wolf' ? victory(server.winner) : null,
+    server.winner === WINNER.VILLAGE || server.winner === WINNER.WOLF ? victory(server.winner) : null,
     h('h1', { class: 'center', testid: 'screen-s18' }, t(title)),
     store.closesAt ? h('p', { class: 'center hint' }, t('s18.closing'),
       h('div', { class: 'count', 'data-deadline': store.closesAt, 'data-clock': 'mmss' }, '')) : null,

@@ -13,4 +13,5 @@ export const MODE = Object.freeze({"AUTO": "auto", "GOD": "god"});
 export const PAUSE_REASON = Object.freeze({"ADMIN": "admin", "HOST_OFFLINE": "host_offline", "PRESENCE": "presence", "SYSTEM": "system"});
 export const ROLE = Object.freeze({"FACELESS": "faceless", "HUNTER": "hunter", "SEER": "seer", "VILLAGER": "villager", "WITCH": "witch", "WOLF": "wolf"});
 export const STEP = Object.freeze({"DAWN": "DAWN", "DAY_SPEAK": "DAY_SPEAK", "DEAL": "DEAL", "DEFENSE": "DEFENSE", "END": "END", "HUNTER": "HUNTER", "LAST_WORDS": "LAST_WORDS", "NIGHT_START": "NIGHT_START", "REVEAL": "REVEAL", "SEER": "SEER", "SEER_END": "SEER_END", "SUSPECT_VOTE": "SUSPECT_VOTE", "VOTE": "VOTE", "WITCH": "WITCH", "WITCH_END": "WITCH_END", "WOLF": "WOLF", "WOLF_END": "WOLF_END"});
+export const WINNER = Object.freeze({"NONE": "none", "VILLAGE": "village", "WOLF": "wolf"});
 export const LIMITS = Object.freeze({"BROADCAST_MAX_INTERVAL": 30, "CHAT_MAX_CHARS": 500, "COUNTDOWN_MAX_SECONDS": 300, "COUNTDOWN_MIN_SECONDS": 10, "MAX_PLAYERS": 20, "MIN_PLAYERS": 6, "NAME_GRAPHEMES": 2, "NARRATION_RATE": 0.45, "PIN_DIGITS": 4, "ROOM_PASSWORD_DIGITS": 4});
