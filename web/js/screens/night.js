@@ -1,8 +1,9 @@
 // S6 發牌、S7 夜晚旁觀、S8 狼人、S9 預言家、S10 女巫、S19 千面狼面板。
-import { h } from '../dom.js';
+import { h, s } from '../dom.js';
 import { send } from '../net.js';
 import { store, changed } from '../store.js';
 import { errorText, roleAbility, roleName, roleStory, stepName, t } from '../strings.js';
+import { d20Crest, roleEmblem, seerOrb, witchBrew } from '../ui/art.js';
 import {
   actionButton, avatar, countdownRing, nameOf, pickGrid, selection, toast,
 } from '../ui/common.js';
@@ -18,6 +19,7 @@ export function roleCard(server) {
     onpointerdown: (e) => {
       e.preventDefault();
       store.ui.cardHeld = true;
+      store.ui.cardSeen = true;
       changed();
     },
     onpointerup: release,
@@ -25,14 +27,16 @@ export function roleCard(server) {
     onpointerleave: release,
     oncontextmenu: (e) => e.preventDefault(),
   }, held
-    ? [
+    // 只翻裡面的內容：卡片外框若跟著轉到側面會變成 0 寬，手指就像「離開」了卡片而立刻蓋回
+    ? h('div', { class: 'card__face' },
+      roleEmblem(me.role, 72),
       h('div', { class: 'big', testid: 'role-name' }, roleName(me.role)),
       h('p', { class: 'hint', testid: 'role-faction' }, t(me.wolf_pack ? 's6.factionWolf' : 's6.factionGood')),
       h('p', { testid: 'role-ability' }, roleAbility(me.role)),
       h('p', { class: 'hint', testid: 'role-story' }, roleStory(me.role)),
-      roleSecrets(server),
-    ]
-    : t('s6.hold'));
+      roleSecrets(server))
+    // 骰子擲出來只演第一次；看過角色後放開就不再滾（ART 11.2 發牌）
+    : [d20Crest(store.ui.cardSeen ? '' : 'crest--roll'), t('s6.hold')]);
 }
 
 /** 只有本人知道的資訊，一律放在卡片裡，放開就離開 DOM（CODING_RULES V19）。 */
@@ -106,6 +110,57 @@ function wolfStatus(server, info) {
   return parts.length ? t('s8.disagree', { detail: parts.join('、') }) : t('s8.title');
 }
 
+/** 血月：月面漸層＋坑洞＋右下暗面，外圈光暈慢慢呼吸，一條夜霧從月前飄過。動畫在 s8.css。 */
+function bloodMoon() {
+  return s('svg', { class: 's8__moon', viewBox: '0 0 120 120', 'aria-hidden': 'true' },
+    s('defs', {},
+      s('radialGradient', { id: 's8-moon-face', cx: '38%', cy: '34%', r: '70%' },
+        s('stop', { offset: '0%', 'stop-color': '#e2614c' }),
+        s('stop', { offset: '55%', 'stop-color': '#8e1b1b' }),
+        s('stop', { offset: '100%', 'stop-color': '#3a0909' })),
+      s('radialGradient', { id: 's8-moon-halo' },
+        s('stop', { offset: '45%', 'stop-color': '#c8322a', 'stop-opacity': '.55' }),
+        s('stop', { offset: '100%', 'stop-color': '#c8322a', 'stop-opacity': '0' })),
+      // 右下暗面：從亮面柔和地暗下去，讓月亮有立體感
+      s('radialGradient', { id: 's8-moon-shade', cx: '32%', cy: '30%', r: '85%' },
+        s('stop', { offset: '45%', 'stop-color': '#140303', 'stop-opacity': '0' }),
+        s('stop', { offset: '100%', 'stop-color': '#140303', 'stop-opacity': '.75' })),
+      // 霧帶兩頭淡掉，不會看起來像一片灰盤子
+      s('linearGradient', { id: 's8-mist' },
+        s('stop', { offset: '0%', 'stop-color': '#8b93a0', 'stop-opacity': '0' }),
+        s('stop', { offset: '50%', 'stop-color': '#8b93a0', 'stop-opacity': '.3' }),
+        s('stop', { offset: '100%', 'stop-color': '#8b93a0', 'stop-opacity': '0' }))),
+    s('circle', { class: 's8__halo', cx: 60, cy: 60, r: 58, fill: 'url(#s8-moon-halo)' }),
+    s('circle', { cx: 60, cy: 60, r: 30, fill: 'url(#s8-moon-face)' }),
+    s('g', { fill: '#4a0d0d' },
+      s('circle', { cx: 50, cy: 50, r: 5, opacity: '.5' }),
+      s('circle', { cx: 68, cy: 66, r: 7, opacity: '.4' }),
+      s('circle', { cx: 63, cy: 44, r: 3, opacity: '.45' }),
+      s('circle', { cx: 46, cy: 70, r: 3.5, opacity: '.35' })),
+    s('circle', { cx: 60, cy: 60, r: 30, fill: 'url(#s8-moon-shade)' }),
+    s('g', { class: 's8__mist', fill: 'url(#s8-mist)' },
+      s('ellipse', { cx: 44, cy: 76, rx: 50, ry: 4 }),
+      s('ellipse', { cx: 82, cy: 85, rx: 36, ry: 3, opacity: '.7' })));
+}
+
+// 三道爪痕，由右上往左下劃：center 是描線的路線，blade 是頭尾尖、中間寬的刀痕形狀
+const CLAWS = [
+  { center: 'M70 6 Q52 46 26 92', blade: 'M70 6 Q48 46 26 92 Q58 47 70 6Z' },
+  { center: 'M86 10 Q66 52 42 98', blade: 'M86 10 Q62 52 42 98 Q72 53 86 10Z' },
+  { center: 'M100 16 Q80 56 58 100', blade: 'M100 16 Q77 56 58 100 Q85 57 100 16Z' },
+];
+
+/** 確認後的爪痕：刀痕形狀被一條沿路線描出的遮罩依序「劃開」（svg-animations 的 mask＋描線做法）。 */
+function clawSlash() {
+  return s('svg', { class: 'slash', viewBox: '0 0 120 110', preserveAspectRatio: 'none', 'aria-hidden': 'true' },
+    s('defs', {}, CLAWS.map(({ center }, i) => s('mask', {
+      id: `slash-reveal-${i}`, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: 120, height: 110,
+    }, s('path', { class: 'slash__reveal', d: center, pathLength: 1, style: `--i:${i}` })))),
+    CLAWS.map(({ blade }, i) => s('g', { class: 'slash__claw', mask: `url(#slash-reveal-${i})`, style: `--i:${i}` },
+      s('path', { class: 'slash__glow', d: blade }),
+      s('path', { class: 'slash__cut', d: blade }))));
+}
+
 export function s8(server) {
   const me = server.me;
   const info = me.wolf_pack;
@@ -128,7 +183,7 @@ export function s8(server) {
     });
   };
   // 美術垂直切片（DEV_PLAN P8）：血月、爪痕暗角、倒數環、木牌格子；畫面樣式在 css/s8.css
-  const moon = h('div', { class: 's8__moon', 'aria-hidden': 'true' });
+  const moon = bloodMoon();
   if (info.decided) {
     const victim = info.decided_target;
     return h('div', { class: 's8 s8--done center' },
@@ -137,7 +192,7 @@ export function s8(server) {
       h('div', { class: `victim ${victim ? '' : 'victim--none'}`, testid: 'wolf-victim' },
         victim ? avatar(server, victim) : null,
         h('div', { class: 'victim__name' }, victim ? nameOf(server, victim) : t('s8.empty')),
-        victim ? h('span', { class: 'slash', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')) : null),
+        victim ? clawSlash() : null),
       h('div', { class: 'panel s8__status', testid: 'wolf-status' }, wolfStatus(server, info)));
   }
   const agreed = info.confirming_until ? (picks[me.id] ?? 'none') : undefined;
@@ -167,6 +222,7 @@ export function s9(server) {
   if (today) {
     const key = today.is_wolf ? 's9.wolf' : 's9.good';
     return [
+      seerOrb(today.is_wolf ? 'wolf' : 'good'),
       h('h1', { class: 'center', testid: 'seer-result' }, t(key, { name: nameOf(server, today.target) })),
       me.done
         ? h('p', { class: 'center' }, t('pending'))
@@ -175,6 +231,7 @@ export function s9(server) {
   }
   const sel = selection('seer');
   return [
+    seerOrb(),
     h('h1', { testid: 'screen-s9' }, t('s9.title')),
     countdownRing(server, t('s9.timeout')),
     pickGrid({ ids: me.eligible_targets ?? [], server, selected: sel.value, onPick: sel.set }),
@@ -193,6 +250,7 @@ export function s10(server) {
   const info = me.witch_info;
   const potionState = (used) => t(used ? 's10.used' : 's10.left');
   const head = [
+    witchBrew(info.antidote_used, info.poison_used),
     h('h1', { testid: 'screen-s10' }, stepName(server.step)),
     countdownRing(server, t('s10.timeout')),
     h('p', { class: 'center' }, t('s10.potions', {

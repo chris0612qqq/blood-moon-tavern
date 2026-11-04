@@ -47,5 +47,7 @@
   --dur-night: 1000ms;
   --dur-confirm: 3000ms; /* 狼人全員一致後自動確認（SPEC C8.1） */
   --dur-slash: 400ms;
+  --dur-victory: 3000ms;
+  --dur-reveal-each: 1500ms;
   --ease-out: cubic-bezier(.2, .8, .2, 1);
 }

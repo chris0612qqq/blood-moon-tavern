@@ -4,6 +4,7 @@ import { api, send } from '../net.js';
 import { loadTokens, clearPlayerToken } from '../session.js';
 import { changed, store } from '../store.js';
 import { causeJoke, causePlain, deathLabel, errorText, roleName, t } from '../strings.js';
+import { roleEmblem, victory } from '../ui/art.js';
 import { actionButton, avatar, button, field, nameOf, pauseToggle, toast } from '../ui/common.js';
 import { ROLE } from '../protocol.js';
 import { installGuideButton } from './install.js';
@@ -259,7 +260,9 @@ export function playersTab(server) {
       h('span', { class: 'grow' }, p.name),
       offline.has(p.id) ? h('span', { class: 'badge' }, t('s5.offlineTag')) : null,
       p.alive === false ? h('span', { class: 'hint', testid: `player-cause-${p.id}` }, causePlain(p.death_cause)) : null,
-      p.alive === false ? h('span', { class: 'badge' }, `☠ ${roleName(p.public_role ?? p.role)}`.trim()) : null)),
+      p.alive === false
+        ? h('span', { class: 'badge' }, roleEmblem(p.public_role ?? p.role), `☠ ${roleName(p.public_role ?? p.role)}`.trim())
+        : null)),
     (server.history ?? []).length ? h('h2', {}, t('players.log')) : null,
     (server.history ?? []).map((row) => h('div', { class: 'panel', key: `round${row.round_no}` },
       h('b', {}, t('players.round', { n: row.round_no })),
@@ -372,7 +375,7 @@ function truthSummary(server, truth, name) {
       truth.death_causes?.[p.id]
         ? h('span', { class: 'hint end-cause', testid: `end-cause-${p.id}` }, causeJoke(truth.death_causes[p.id], p.role))
         : null,
-      h('span', { class: 'badge', testid: `end-role-${p.id}` }, roleName(p.role)))),
+      h('span', { class: 'badge', testid: `end-role-${p.id}` }, roleEmblem(p.role), roleName(p.role)))),
     h('h2', {}, t('s18.disguise')),
     periods.map((period, i) => h('p', { key: `p${i}` }, t('s18.period', { from: period.from_round, name: name(period.target_id) }))),
     (truth.disguised_messages ?? []).map((m) => h('p', { key: `f${m.id}` }, t('s18.fakeMsg', {
@@ -397,6 +400,7 @@ export function s18(server) {
   }, label);
   const night = nights.find((n) => String(n.round_no) === current);
   return [
+    server.winner === 'village' || server.winner === 'wolf' ? victory(server.winner) : null,
     h('h1', { class: 'center', testid: 'screen-s18' }, t(title)),
     store.closesAt ? h('p', { class: 'center hint' }, t('s18.closing'),
       h('div', { class: 'count', 'data-deadline': store.closesAt, 'data-clock': 'mmss' }, '')) : null,
