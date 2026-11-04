@@ -141,7 +141,7 @@ export function onNarrate(msg) {
   if (!msg.speak || !speaksHere(store.server)) return;
   // 先播這句的音效（狼嚎、鐘聲、風鈴…，ART 12.4），播完才念
   const key = `${store.server.step_seq}:${msg.line_id}`;
-  const waitMs = key === openingPlayed ? 0 : openingSound(msg.line_id);
+  const waitMs = key === openingPlayed ? 0 : openingSound(msg.line_id, store.server.winner);
   openingPlayed = key;
   // 主持人選了「我自己念」：繼續後的重念也只顯示字幕
   if (store.server.host && !store.ui.speakAloud) return;
