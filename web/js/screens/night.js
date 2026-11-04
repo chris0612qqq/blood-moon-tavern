@@ -3,7 +3,7 @@ import { h, s } from '../dom.js';
 import { send } from '../net.js';
 import { store, changed } from '../store.js';
 import { errorText, roleAbility, roleName, roleStory, stepName, t } from '../strings.js';
-import { d20Crest, roleEmblem, seerOrb, witchBrew } from '../ui/art.js';
+import { clawSlash, d20Crest, roleEmblem, seerOrb, witchBrew } from '../ui/art.js';
 import {
   actionButton, avatar, countdownRing, nameOf, pickGrid, selection, toast,
 } from '../ui/common.js';
@@ -143,24 +143,6 @@ function bloodMoon() {
       s('ellipse', { cx: 82, cy: 85, rx: 36, ry: 3, opacity: '.7' })));
 }
 
-// 三道爪痕，由右上往左下劃：center 是描線的路線，blade 是頭尾尖、中間寬的刀痕形狀
-const CLAWS = [
-  { center: 'M70 6 Q52 46 26 92', blade: 'M70 6 Q48 46 26 92 Q58 47 70 6Z' },
-  { center: 'M86 10 Q66 52 42 98', blade: 'M86 10 Q62 52 42 98 Q72 53 86 10Z' },
-  { center: 'M100 16 Q80 56 58 100', blade: 'M100 16 Q77 56 58 100 Q85 57 100 16Z' },
-];
-
-/** 確認後的爪痕：刀痕形狀被一條沿路線描出的遮罩依序「劃開」（svg-animations 的 mask＋描線做法）。 */
-function clawSlash() {
-  return s('svg', { class: 'slash', viewBox: '0 0 120 110', preserveAspectRatio: 'none', 'aria-hidden': 'true' },
-    s('defs', {}, CLAWS.map(({ center }, i) => s('mask', {
-      id: `slash-reveal-${i}`, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: 120, height: 110,
-    }, s('path', { class: 'slash__reveal', d: center, pathLength: 1, style: `--i:${i}` })))),
-    CLAWS.map(({ blade }, i) => s('g', { class: 'slash__claw', mask: `url(#slash-reveal-${i})`, style: `--i:${i}` },
-      s('path', { class: 'slash__glow', d: blade }),
-      s('path', { class: 'slash__cut', d: blade }))));
-}
-
 export function s8(server) {
   const me = server.me;
   const info = me.wolf_pack;
@@ -192,7 +174,7 @@ export function s8(server) {
       h('div', { class: `victim ${victim ? '' : 'victim--none'}`, testid: 'wolf-victim' },
         victim ? avatar(server, victim) : null,
         h('div', { class: 'victim__name' }, victim ? nameOf(server, victim) : t('s8.empty')),
-        victim ? clawSlash() : null),
+        victim ? clawSlash('wolf-pick') : null),
       h('div', { class: 'panel s8__status', testid: 'wolf-status' }, wolfStatus(server, info)));
   }
   const agreed = info.confirming_until ? (picks[me.id] ?? 'none') : undefined;

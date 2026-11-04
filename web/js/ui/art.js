@@ -256,3 +256,24 @@ export function victory(winner) {
     }),
   ]);
 }
+
+// 三道爪痕，由右上往左下劃：center 是描線的路線，blade 是頭尾尖、中間寬的刀痕形狀
+const CLAWS = [
+  { center: 'M70 6 Q52 46 26 92', blade: 'M70 6 Q48 46 26 92 Q58 47 70 6Z' },
+  { center: 'M86 10 Q66 52 42 98', blade: 'M86 10 Q62 52 42 98 Q72 53 86 10Z' },
+  { center: 'M100 16 Q80 56 58 100', blade: 'M100 16 Q77 56 58 100 Q85 57 100 16Z' },
+];
+
+/**
+ * 爪痕：刀痕形狀被一條沿路線描出的遮罩依序「劃開」（svg-animations 的 mask＋描線做法）。
+ * 夜晚狼人確認、天亮公布被咬死都用；key 讓同一頁的多組爪痕遮罩 id 不重複，各自照自己的時間劃。
+ */
+export function clawSlash(key) {
+  return s('svg', { class: 'slash', viewBox: '0 0 120 110', preserveAspectRatio: 'none', 'aria-hidden': 'true' },
+    s('defs', {}, CLAWS.map(({ center }, i) => s('mask', {
+      id: `slash-${key}-${i}`, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: 120, height: 110,
+    }, s('path', { class: 'slash__reveal', d: center, pathLength: 1, style: `--i:${i}` })))),
+    CLAWS.map(({ blade }, i) => s('g', { class: 'slash__claw', mask: `url(#slash-${key}-${i})`, style: `--i:${i}` },
+      s('path', { class: 'slash__glow', d: blade }),
+      s('path', { class: 'slash__cut', d: blade }))));
+}

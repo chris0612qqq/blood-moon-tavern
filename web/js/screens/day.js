@@ -3,7 +3,8 @@ import { h } from '../dom.js';
 import { send } from '../net.js';
 import { changed, store } from '../store.js';
 import { causePlain, pauseReason, roleName, t } from '../strings.js';
-import { coin, dawnRise, hunterBow, roleEmblem, snuffedCandle } from '../ui/art.js';
+import { clawSlash, coin, dawnRise, hunterBow, roleEmblem, snuffedCandle } from '../ui/art.js';
+import { PUBLIC_CAUSE } from '../protocol.js';
 import { actionButton, avatar, button, countdownRing, nameOf, pickGrid, selection } from '../ui/common.js';
 
 export function s11(server) {
@@ -31,11 +32,19 @@ export function s11(server) {
 
 function deadRow(server, id, order = null) {
   const player = server.players.find((p) => p.id === id);
-  const reveal = order === null ? {} : { class: 'list-row dead-reveal', style: `--i:${order}` };
+  // 天亮公布被狼咬死：翻開後爪痕劃過頭像、頭像一震、整列閃血光，旁白手機同時放咬的音效（SPEC v4.37）
+  const bitten = order !== null && player?.death_cause === PUBLIC_CAUSE.WOLF;
+  const reveal = order === null ? {} : {
+    class: `list-row dead-reveal${bitten ? ' dead-bite' : ''}`,
+    style: `--i:${order}`,
+    testid: bitten ? `dead-bite-${id}` : null,
+  };
   return h('div', { class: 'list-row', key: id, ...reveal },
-    avatar(server, id),
+    bitten ? h('span', { class: 'bite__mark' }, avatar(server, id), clawSlash(`bite-${id}`)) : avatar(server, id),
     h('span', { class: 'grow' }, player?.name ?? ''),
-    player?.death_cause ? h('span', { class: 'hint' }, causePlain(player.death_cause)) : null,
+    player?.death_cause
+      ? h('span', { class: bitten ? 'bite__cause' : 'hint' }, causePlain(player.death_cause))
+      : null,
     player?.public_role ?? player?.role
       ? h('span', { class: 'badge' }, roleEmblem(player?.public_role ?? player?.role), roleName(player?.public_role ?? player?.role))
       : null);

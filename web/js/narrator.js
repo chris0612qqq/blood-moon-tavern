@@ -4,7 +4,7 @@
 // iOS 只允許「手指點擊當下」開始第一次發聲，而旁白是收到伺服器訊息才念，不算點擊當下。
 // 所以任何第一次點擊都先念一個無聲的字解鎖，之後伺服器叫念才念得出來（CODING_RULES V13）。
 
-import { LIMITS } from './protocol.js';
+import { LIMITS, PUBLIC_CAUSE } from './protocol.js';
 import { openingSound } from './sfx.js';
 import { changed, store } from './store.js';
 
@@ -136,12 +136,19 @@ export function speaksHere(server) {
   return narrator === me || Boolean(server.voices?.all) || Boolean(server.voices?.players.includes(me));
 }
 
+/** 音效需要的狀態：誰贏了、天亮死者名單裡第幾個是被狼咬死的（和 S11 一列列翻開的順序相同）。 */
+function soundContext(server) {
+  const row = (server.history ?? []).find((h) => h.round_no === server.round_no);
+  const bites = (row?.deaths ?? []).flatMap((id, i) => (row.causes?.[id] === PUBLIC_CAUSE.WOLF ? [i] : []));
+  return { winner: server.winner, bites };
+}
+
 /** 收到 narrate 時呼叫：只有旁白主機或主持人手機發聲。 */
 export function onNarrate(msg) {
   if (!msg.speak || !speaksHere(store.server)) return;
   // 先播這句的音效（狼嚎、鐘聲、風鈴…，ART 12.4），播完才念
   const key = `${store.server.step_seq}:${msg.line_id}`;
-  const waitMs = key === openingPlayed ? 0 : openingSound(msg.line_id, store.server.winner);
+  const waitMs = key === openingPlayed ? 0 : openingSound(msg.line_id, soundContext(store.server));
   openingPlayed = key;
   // 主持人選了「我自己念」：繼續後的重念也只顯示字幕
   if (store.server.host && !store.ui.speakAloud) return;
