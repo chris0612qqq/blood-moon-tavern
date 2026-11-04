@@ -44,13 +44,13 @@ function messageBody(server, msg) {
   if (msg.kind === 'system') return t(msg.content);
   if (msg.kind === 'tts') {
     // 點一下才念：白天大家講話時，收到就念會很吵（使用者決定）。
-    // 只能用聽的：發的人、上帝主持人、結算後才看得到原文（SPEC v4.25）
-    const showText = msg.mine || server.host || server.step === 'END';
+    // 只能用聽的，泡泡只有喇叭，誰都看不到原文（SPEC v4.36）
     return h('button', {
       class: 'tts',
       testid: `chat-tts-${msg.id}`,
+      'aria-label': t('chat.ttsLabel'),
       onclick: () => speak(msg.content, msg.is_wolf_mask ? VOICE_STYLE.wolf : VOICE_STYLE.normal),
-    }, showText ? `🔊 ${msg.content}` : t('chat.ttsHidden'));
+    }, '🔊');
   }
   return msg.content;
 }
