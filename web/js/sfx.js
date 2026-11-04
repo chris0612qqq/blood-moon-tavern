@@ -3,10 +3,19 @@
 //
 // audio/wolf_howl.wav：美國魚類及野生動物管理局錄的狼嚎（公有領域），取自 Wikimedia Commons
 // 「File:Wolf howls.ogg」12.9–15.7 秒，濾掉低頻雜音與高頻嘶聲、前後淡入淡出。
+// audio/rooster.wav：Wikimedia Commons「File:Medium rooster crowing.ogg」（alys，公有領域）2.75–5.55 秒。
+// audio/win_village.wav：OpenGameArt「Just a random fanfare」（Spring Spring，CC0）前 8.6 秒、尾段淡出。
+// audio/win_wolf.wav：OpenGameArt「String and piano horror stings」的 abyss.ogg（congusbongus，CC0）。
+// 都轉成單聲道並把峰值調到 −1 dBFS（iPhone 舊版 Safari 不一定解得開 ogg，所以用 wav）。
 
 import { load, save } from './storage.js';
 
-const HOWL_FILE = 'audio/wolf_howl.wav';
+const RECORDING_FILES = {
+  howl: 'audio/wolf_howl.wav',
+  rooster: 'audio/rooster.wav',
+  win_village: 'audio/win_village.wav',
+  win_wolf: 'audio/win_wolf.wav',
+};
 const HOWL_S = 1.8;
 /** 合成狼嚎加回音的長度。 */
 const SYNTH_HOWL_MS = 2300;
@@ -18,7 +27,8 @@ const CLEANUP_MS = 5000;
 const SFX_GAIN = 3 * 10 ** (-4 / 20);
 
 let context = null;
-let howlRecording = null;
+/** 已經解碼好的錄音；還沒載到或失敗就沒有這一項，改用合成的。 */
+const recordings = {};
 
 // iPhone 預設把 Web Audio 當「環境音」，側邊靜音鍵一開就沒聲音（旁白語音不受影響）；
 // 改成「播放」類，像音樂一樣不理靜音鍵（Safari 17 起支援，舊版沒有就照舊）
@@ -27,16 +37,14 @@ try {
 } catch { /* 不支援就算了 */ }
 
 /** 第一次開聲音時順便下載錄音；下載或解碼失敗就一直用合成的。 */
-async function loadHowl(ac) {
+async function loadRecording(ac, name) {
   try {
-    const response = await fetch(HOWL_FILE);
+    const response = await fetch(RECORDING_FILES[name]);
     if (!response.ok) return;
     const bytes = await response.arrayBuffer();
     // 舊版 Safari 的 decodeAudioData 只有回呼寫法
-    howlRecording = await new Promise((resolve, reject) => { ac.decodeAudioData(bytes, resolve, reject); });
-  } catch {
-    howlRecording = null;
-  }
+    recordings[name] = await new Promise((resolve, reject) => { ac.decodeAudioData(bytes, resolve, reject); });
+  } catch { /* 用合成的 */ }
 }
 
 function audio() {
@@ -44,7 +52,7 @@ function audio() {
     const Context = window.AudioContext ?? window.webkitAudioContext;
     if (!Context) return null;
     context = new Context();
-    loadHowl(context);
+    for (const name of Object.keys(RECORDING_FILES)) loadRecording(context, name);
   }
   if (context.state === 'suspended') context.resume();
   return context;
@@ -75,7 +83,7 @@ export function wolfHowl() {
   try {
     const ac = audio();
     if (!ac) return 0;
-    if (howlRecording) return playRecording(ac, howlRecording);
+    if (recordings.howl) return playRecording(ac, recordings.howl);
     synthHowl(ac);
     return SYNTH_HOWL_MS;
   } catch {
@@ -83,15 +91,40 @@ export function wolfHowl() {
   }
 }
 
-function playRecording(ac, buffer) {
+/** 放一段錄音。回傳放完再稍停一下的毫秒數；gain 給呼叫的人之後壓低音量用。 */
+function playRecording(ac, buffer, { at = ac.currentTime, out = null } = {}) {
   const source = ac.createBufferSource();
   source.buffer = buffer;
-  const gain = ac.createGain();
-  gain.gain.value = SFX_GAIN;
+  const gain = out ?? ac.createGain();
+  if (!out) gain.gain.value = SFX_GAIN;
   source.connect(gain);
-  gain.connect(sfxOut(ac));
-  source.start();
+  if (!out) gain.connect(sfxOut(ac));
+  source.start(at);
   return Math.round(buffer.duration * 1000) + AFTER_RECORDING_MS;
+}
+
+// 結算勝利音效：前奏先響，旁白念「好人／狼人獲勝」時壓低，讓字聽得清楚，之後放完
+const WIN_LEAD_MS = 2500;
+const WIN_DUCK = 0.35;
+const WOLF_STING_AT_S = 1.2; // 狼嚎響到一半，低沉弦樂進來
+
+function victorySound(ac, winner) {
+  const music = recordings[winner === 'wolf' ? 'win_wolf' : 'win_village'];
+  if (!music) return 0;
+  const now = ac.currentTime + 0.03;
+  const out = ac.createGain();
+  const duckAt = now + WIN_LEAD_MS / 1000;
+  out.gain.setValueAtTime(SFX_GAIN, now);
+  out.gain.setValueAtTime(SFX_GAIN, duckAt - 0.3);
+  out.gain.linearRampToValueAtTime(SFX_GAIN * WIN_DUCK, duckAt);
+  out.connect(sfxOut(ac));
+  if (winner === 'wolf' && recordings.howl) {
+    playRecording(ac, recordings.howl, { at: now, out });
+    playRecording(ac, music, { at: now + WOLF_STING_AT_S, out });
+  } else {
+    playRecording(ac, music, { at: now, out });
+  }
+  return WIN_LEAD_MS;
 }
 
 /** 合成狼嚎：兩支微微走音的鋸齒波，300→700→450 Hz 滑音、尾段加顫音，經低通濾波，最後回音。 */
@@ -239,8 +272,9 @@ const SOUNDS = {
     tone(ac, { freq: 2637, at: at + 1.0, decay: 0.5, peak: 0.2 });
     return 1500;
   },
-  // 天亮請睜眼之前：一聲雞鳴（方波階梯滑音＋顫音）
+  // 天亮請睜眼之前：一聲雞鳴。錄音沒載到才用合成的（方波階梯滑音＋顫音）
   dawn(ac, at) {
+    if (recordings.rooster) return playRecording(ac, recordings.rooster, { at });
     const osc = ac.createOscillator();
     osc.type = 'square';
     osc.frequency.setValueAtTime(600, at);
@@ -303,15 +337,19 @@ SOUNDS.vote = SOUNDS.suspect_vote;
 // 其他句子沒有預留，等的話下一句會來打斷，所以音效和旁白一起出來。
 const LEAD_LINES = new Set(['night_start', 'wolf_open', 'seer_open', 'witch_open', 'dawn']);
 
-/** 旁白念這一句之前的音效（ART 12.4）。回傳要等幾毫秒再念；不用等或沒播出來回傳 0。 */
-export function openingSound(lineId) {
+/**
+ * 旁白念這一句之前的音效（ART 12.4）。回傳要等幾毫秒再念；不用等或沒播出來回傳 0。
+ * 結算那句（win）依勝方放不同的音樂；它是最後一句，後面沒有句子會打斷，所以也等前奏。
+ */
+export function openingSound(lineId, winner = null) {
   if (lineId === 'wolf_open') return wolfHowl();
-  const play = SOUNDS[lineId];
+  const play = lineId === 'win' ? (ac) => victorySound(ac, winner) : SOUNDS[lineId];
   if (!play) return 0;
   try {
     const ac = audio();
     if (!ac || ac.state !== 'running') return 0;
     const ms = play(ac, ac.currentTime + 0.03);
+    if (lineId === 'win') return ms;
     return LEAD_LINES.has(lineId) ? ms : 0;
   } catch {
     return 0;

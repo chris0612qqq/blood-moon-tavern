@@ -92,5 +92,5 @@ SFX_SECONDS: Final[dict[str, float]] = {
     "wolf_open": 1.8,
     "seer_open": 1.2,
     "witch_open": 1.5,
-    "dawn": 1.5,
+    "dawn": 3.1,  # 雞鳴錄音 2.8 秒，放完稍停 0.3 秒（SPEC v4.36）
 }

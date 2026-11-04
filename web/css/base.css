@@ -98,7 +98,7 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .bubble--wolf { border: 2px solid #c44; }
 .bubble--system { white-space: pre-line; border: 1px dashed #b8a; background: #2a1f2e; }
 .chat-photo { display: block; max-width: 200px; max-height: 200px; border-radius: 4px; margin-top: 4px; }
-.tts { background: none; border: 1px solid #888; color: inherit; border-radius: 4px; padding: 6px 8px; margin-top: 4px; text-align: left; min-height: 44px; font: inherit; }
+.tts { background: none; border: 1px solid #888; color: inherit; border-radius: 4px; padding: 6px 8px; margin-top: 4px; text-align: center; min-height: 44px; min-width: 56px; font: inherit; font-size: 1.3em; }
 .chat__photo { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; }
 .chat__photo input { position: absolute; inset: 0; opacity: 0; }
 .lightbox { position: fixed; inset: 0; background: #000; z-index: 40; display: flex; align-items: center; justify-content: center; overflow: hidden; }
