@@ -5,6 +5,7 @@ import { STEP } from './protocol.js';
 import { resolveScreen } from './router.js';
 import './wake.js';
 import './pwa.js';
+import { coinDrops, diceRoll } from './sfx.js';
 import { lightboxLayer } from './ui/media.js';
 import { tickClocks, watchFrames } from './ui/clock.js';
 import { clearAdminToken, clearPlayerToken, loadTokens } from './session.js';
@@ -208,6 +209,17 @@ function draw() {
     toastLayer(),
     h('div', { class: 'rotate' }, t('rotate')));
   settleChatScroll();
+  screenSounds(screen);
+}
+
+// 每支手機自己的畫面音效（ART 12.4）：剛換到這個畫面時播一次，跟著畫面上的動畫
+let soundedScreen = null;
+
+function screenSounds(screen) {
+  if (screen === soundedScreen) return;
+  soundedScreen = screen;
+  if (screen === 'S6' && document.querySelector('.crest--roll')) diceRoll();
+  if (screen === 'S15') coinDrops(document.querySelectorAll('.coin').length);
 }
 
 // 單一時鐘（UI_RULES Q5、U6）：每影格以 deadline − 校正後的伺服器時間重算，不用計數器

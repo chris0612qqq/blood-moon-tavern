@@ -51,7 +51,11 @@ export function s12(server) {
       countdownRing(server, t('s12.timeout')),
     ];
   }
-  if (me.done) return h('p', { class: 'center' }, t('done'));
+  // 剛按完：箭射出去或收回（ART 11.2）
+  const shotKey = `hunterShot@${server.step_seq}`;
+  if (me.done) {
+    return [hunterBow(store.ui.picks[shotKey] ?? 'holster'), h('p', { class: 'center' }, t('done'))];
+  }
   const sel = selection('hunter');
   return [
     hunterBow(),
@@ -64,14 +68,20 @@ export function s12(server) {
         label: t('s12.shoot', { name: nameOf(server, sel.value) }),
         kind: 'danger',
         confirm: t('s12.shootConfirm', { name: nameOf(server, sel.value) }),
-        run: () => send('hunter.shoot', { target: sel.value }),
+        run: () => {
+          store.ui.picks[shotKey] = 'shot';
+          return send('hunter.shoot', { target: sel.value });
+        },
       })
       : null,
     actionButton({
       id: 'btn-hunter-holster',
       label: t('s12.holster'),
       kind: 'secondary',
-      run: () => send('hunter.shoot', { target: null }),
+      run: () => {
+        store.ui.picks[shotKey] = 'holster';
+        return send('hunter.shoot', { target: null });
+      },
     }),
   ];
 }

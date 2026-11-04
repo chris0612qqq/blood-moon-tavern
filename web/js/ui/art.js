@@ -14,15 +14,22 @@ function star(x, y, r, i) {
   return s('path', { class: 'art-twinkle', d, fill: '#f3ecff', style: `--i:${i}` });
 }
 
-/** 藥瓶（左紅圓瓶、右綠高瓶）。用過的變成空瓶：只剩虛線輪廓。 */
-function flask(color, used) {
+// 解藥圓瓶貼「＋」、毒藥方高瓶貼「×」：紅綠色弱的人看兩瓶顏色差不多，要靠形狀和記號分（ART 3.5）
+const FLASKS = {
+  save: { body: 'M10 8H16V16Q22 20 21 29Q20 38 13 38Q6 38 5 29Q4 20 10 16Z', cork: 9, mark: 'M13 24V32M9 28H17' },
+  poison: { body: 'M10 8H16V15L21 22V37Q21 40 18 40H8Q5 40 5 37V22L10 15Z', cork: 9, mark: 'M10 26L16 32M16 26L10 32' },
+};
+
+/** 藥瓶。用過的變成空瓶：只剩虛線輪廓。 */
+function flask(kind, color, used) {
+  const shape = FLASKS[kind];
   const glass = used
     ? { fill: 'rgba(232, 217, 181, .06)', stroke: '#8b93a0', 'stroke-dasharray': '3 3' }
     : { fill: color, stroke: GOLD };
   return [
-    s('path', { d: 'M10 8H16V16Q22 20 21 29Q20 38 13 38Q6 38 5 29Q4 20 10 16Z', 'stroke-width': 2, 'stroke-linejoin': 'round', ...glass }),
-    used ? null : s('path', { d: 'M8 26Q13 29 18 26', fill: 'none', stroke: 'rgba(255,255,255,.35)', 'stroke-width': 1.5 }),
-    s('rect', { x: 9, y: 4, width: 8, height: 5, rx: 1, fill: used ? 'none' : '#7a5532', stroke: used ? '#8b93a0' : 'none' }),
+    s('path', { d: shape.body, 'stroke-width': 2, 'stroke-linejoin': 'round', ...glass }),
+    used ? null : s('path', { d: shape.mark, fill: 'none', stroke: '#f4ead2', 'stroke-width': 2.2, 'stroke-linecap': 'round' }),
+    s('rect', { x: shape.cork, y: 4, width: 8, height: 5, rx: 1, fill: used ? 'none' : '#7a5532', stroke: used ? '#8b93a0' : 'none' }),
   ];
 }
 
@@ -61,10 +68,8 @@ const EMBLEMS = {
   ],
   // 女巫：紅解藥、綠毒藥
   witch: () => [
-    s('g', { transform: 'translate(2 4)' }, flask('#b5373a', false)),
-    s('path', { d: 'M30 6H36V14L41 22V38Q41 41 38 41H28Q25 41 25 38V22L30 14Z', ...LINE, fill: '#3f8f5a' }),
-    s('rect', { x: 29, y: 2, width: 8, height: 5, rx: 1, fill: '#7a5532' }),
-    s('path', { d: 'M28 30H38', fill: 'none', stroke: 'rgba(255,255,255,.35)', 'stroke-width': 1.5 }),
+    s('g', { transform: 'translate(2 4)' }, flask('save', '#b5373a', false)),
+    s('g', { transform: 'translate(22 2)' }, flask('poison', '#3f8f5a', false)),
   ],
   // 獵人：長弓搭箭（箭袋只剩最後一支）
   hunter: () => [
@@ -148,9 +153,14 @@ export function seerOrb(result = null) {
   ], result);
 }
 
-/** S10 女巫：冒泡的小鍋＋兩瓶藥，用過的變空瓶（ART 8）。 */
-export function witchBrew(antidoteUsed, poisonUsed) {
+/** S10 女巫：冒泡的小鍋＋兩瓶藥，用過的變空瓶（ART 8）。
+ *  pouring 是這一步剛用的藥（'save' 或 'poison'）：那瓶倒向小鍋，鍋上冒出紅光或綠煙（ART 11.2）。 */
+export function witchBrew(antidoteUsed, poisonUsed, pouring = null) {
   const bubble = (cx, r, i) => s('circle', { class: 'art-bubble', cx, cy: 66, r, fill: '#7fd39a', style: `--i:${i}` });
+  const bottle = (kind, x, y, color, used) => (pouring === kind
+    ? s('g', { transform: `translate(${x} ${y}) scale(1.6)` },
+      s('g', { class: `art-pour art-pour--${kind}` }, flask(kind, color, false)))
+    : s('g', { transform: `translate(${x} ${y}) scale(1.6)` }, flask(kind, color, used)));
   return hero('witch', [
     s('g', { class: 'art-steam', fill: 'none', stroke: 'rgba(200, 230, 210, .35)', 'stroke-width': 3, 'stroke-linecap': 'round' },
       s('path', { d: 'M88 54Q82 44 90 36Q98 28 92 18', pathLength: 1, style: '--i:0' }),
@@ -159,9 +169,14 @@ export function witchBrew(antidoteUsed, poisonUsed) {
     s('path', { d: 'M60 70Q60 108 100 108Q140 108 140 70Z', fill: '#1d1a17', stroke: '#8b93a0', 'stroke-width': 2 }),
     s('ellipse', { cx: 100, cy: 70, rx: 42, ry: 7, fill: '#2f6b44', stroke: '#8b93a0', 'stroke-width': 2 }),
     s('path', { d: 'M70 108L64 116M130 108L136 116', ...LINE, stroke: '#8b93a0' }),
-    s('g', { transform: 'translate(18 50) scale(1.6)' }, flask('#b5373a', antidoteUsed)),
-    s('g', { transform: 'translate(150 48) scale(1.6)' }, flask('#3f8f5a', poisonUsed)),
-  ]);
+    bottle('save', 18, 50, '#b5373a', antidoteUsed),
+    bottle('poison', 150, 48, '#3f8f5a', poisonUsed),
+    pouring
+      ? s('ellipse', {
+        class: 'art-puff', cx: 100, cy: 58, rx: 34, ry: 16, fill: pouring === 'save' ? '#e2483a' : '#5fd08a',
+      })
+      : null,
+  ], pouring ? `pour-${pouring}` : '');
 }
 
 /** S11 天亮：太陽從山後升起、光芒緩轉；平安夜時一群白鳥飛過（ART 11.2）。 */
@@ -191,16 +206,19 @@ export function dawnRise(peaceful = false) {
   ]);
 }
 
-/** S12 獵人：拉滿的長弓剪影橫過畫面上方，箭頭微微反光（ART 8）。 */
-export function hunterBow() {
+/** S12 獵人：拉滿的長弓剪影橫過畫面上方，箭頭微微反光（ART 8）。
+ *  shot：箭射出去飛離畫面、弓弦彈回；holster：箭慢慢收回、弓弦放鬆（ART 11.2）。 */
+export function hunterBow(after = null) {
+  const string = after ? 'M22 58L100 66L178 58' : 'M22 58L100 92L178 58';
   return hero('hunter', [
     s('path', { d: 'M22 58Q100 2 178 58', fill: 'none', stroke: '#a0733f', 'stroke-width': 6, 'stroke-linecap': 'round' }),
-    s('path', { d: 'M22 58L100 92L178 58', fill: 'none', stroke: '#e8d9b5', 'stroke-width': 1.5 }),
-    s('path', { d: 'M100 92V14', ...LINE, 'stroke-width': 3 }),
-    s('path', { class: 'art-glint', d: 'M100 4L93 18H107Z', fill: '#e8c872' }),
-    s('path', { d: 'M100 92L92 104M100 92L108 104M100 84L92 96M100 84L108 96', fill: 'none', stroke: '#e8d9b5', 'stroke-width': 2, 'stroke-linecap': 'round' }),
+    s('path', { class: after ? 'art-string-release' : null, d: string, fill: 'none', stroke: '#e8d9b5', 'stroke-width': 1.5 }),
+    s('g', { class: after ? `art-arrow art-arrow--${after}` : 'art-arrow' },
+      s('path', { d: 'M100 92V14', ...LINE, 'stroke-width': 3 }),
+      s('path', { class: 'art-glint', d: 'M100 4L93 18H107Z', fill: '#e8c872' }),
+      s('path', { d: 'M100 92L92 104M100 92L108 104M100 84L92 96M100 84L108 96', fill: 'none', stroke: '#e8d9b5', 'stroke-width': 2, 'stroke-linecap': 'round' })),
     s('path', { d: 'M88 30Q100 26 112 30', fill: 'none', stroke: '#5a3e24', 'stroke-width': 8, 'stroke-linecap': 'round' }),
-  ]);
+  ], after ?? '');
 }
 
 /** S17 出局：一支剛熄滅的蠟燭，青煙一縷縷升起（ART 8）。 */

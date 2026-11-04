@@ -249,8 +249,10 @@ export function s10(server) {
   const me = server.me;
   const info = me.witch_info;
   const potionState = (used) => t(used ? 's10.used' : 's10.left');
+  // 這一步剛用的藥：倒進小鍋的演出（ART 11.2）
+  const pouring = info.acted || me.done ? store.ui.picks[`witchUsed@${server.step_seq}`] : null;
   const head = [
-    witchBrew(info.antidote_used, info.poison_used),
+    witchBrew(info.antidote_used, info.poison_used, pouring),
     h('h1', { testid: 'screen-s10' }, stepName(server.step)),
     countdownRing(server, t('s10.timeout')),
     h('p', { class: 'center' }, t('s10.potions', {
@@ -283,7 +285,14 @@ function witchSave(server, info, stageKey) {
   return [
     h('p', { class: 'big center', testid: 'witch-attacked' }, t('s10.attacked', { name })),
     info.can_save
-      ? actionButton({ id: 'btn-witch-save', label: t('s10.save', { name }), run: () => send('witch.act', { save: true }) })
+      ? actionButton({
+        id: 'btn-witch-save',
+        label: t('s10.save', { name }),
+        run: () => {
+          store.ui.picks[`witchUsed@${server.step_seq}`] = 'save';
+          return send('witch.act', { save: true });
+        },
+      })
       : h('p', { class: 'center hint' }, t('s10.noSelf')),
     actionButton({ id: 'btn-witch-nosave', label: t('s10.noSave'), kind: 'secondary', run: skip }),
   ];
@@ -302,7 +311,10 @@ function witchPoison(server, me, info) {
         id: 'btn-witch-poison',
         label: t('s10.poison', { name: nameOf(server, sel.value) }),
         kind: 'danger',
-        run: () => send('witch.act', { poison: sel.value }),
+        run: () => {
+          store.ui.picks[`witchUsed@${server.step_seq}`] = 'poison';
+          return send('witch.act', { poison: sel.value });
+        },
       })
       : null,
     actionButton({ id: 'btn-witch-nopoison', label: t('s10.noPoison'), kind: 'secondary', run: () => send('witch.act', {}) }),
