@@ -172,8 +172,8 @@ def test_opening_sounds_wait_only_where_the_server_leaves_time(server_url: str) 
         assert page.evaluate(sound, "seer_open") == 1200
         assert page.evaluate(sound, "night_start") == 2200
         assert page.evaluate(sound, "witch_open") == 1500
-        # 雞鳴錄音 2.8 秒＋停 0.3 秒，和伺服器預留的 3.1 秒一樣（SPEC v4.36）
-        page.wait_for_function(f"({sound})('dawn').then((ms) => ms === 3100)", timeout=8000)
+        # 雞鳴錄音 2.22 秒＋停 0.3 秒，伺服器預留 2.6 秒放得完（SPEC v4.36）
+        page.wait_for_function(f"({sound})('dawn').then((ms) => ms === 2520)", timeout=8000)
         # 結算：好人、狼人各有自己的勝利音效，前奏 2.5 秒後才念
         win = "async (w) => (await import('/js/sfx.js')).openingSound('win', w)"
         page.wait_for_function(f"({win})('village').then((ms) => ms === 2500)", timeout=8000)
