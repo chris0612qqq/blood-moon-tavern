@@ -53,7 +53,14 @@ def test_agree_glows_then_claws_the_target(server_url: str) -> None:  # noqa: F8
         page.locator('[data-testid="pick-cell-p3"]').click()  # 跟同伴選一樣
         page.wait_for_selector('[data-testid="pick-cell-p3"].cell--confirming')
         wait(page, "wolf-victim", timeout=6000)  # 3 秒後自動確認
-        assert page.locator('[data-testid="wolf-victim"] .slash i').count() == 3
+        cuts = page.locator('[data-testid="wolf-victim"] .slash__cut')
+        assert cuts.count() == 3
+        # 爪痕要真的劃完（描線從 1 收到 0），不是停在看不見的起點
+        page.wait_for_function(
+            "[...document.querySelectorAll('.slash__reveal')].every((p) => getComputedStyle(p).strokeDashoffset === '0px')",
+            timeout=3000,
+        )
+        assert page.locator(".s8__moon circle").count() >= 2  # 血月是 SVG，有畫出來
         assert "大華" in page.locator('[data-testid="wolf-status"]').inner_text()
         browser.close()
 
@@ -121,6 +128,26 @@ def test_slow_frames_turn_off_decorations(server_url: str) -> None:  # noqa: F81
         page.wait_for_function("document.documentElement.hasAttribute('data-lowfx')", timeout=8000)
         assert page.locator(".ring__sparks").evaluate("(el) => getComputedStyle(el).display") == "none"
         assert not has(page, "dialog")
+        browser.close()
+
+
+def test_gallery_draws_every_illustration(server_url: str) -> None:  # noqa: F811
+    """量產第二輪：角色徽章與各畫面主圖都畫得出來，沒有錯誤，最小的手機也不會左右滑。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport={"width": 320, "height": 568}).new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(f"{server_url}/gallery.html")
+        page.wait_for_selector(".gallery__scene")
+        for role in ("wolf", "faceless", "villager", "seer", "witch", "hunter"):
+            assert page.locator(f".emblem--{role}").count() >= 2, role
+        for kind in ("seer", "witch", "dawn", "hunter", "candle", "victory-wolf"):
+            box = page.locator(f'[data-testid="hero-{kind}"]').first.bounding_box()
+            assert box and box["width"] > 100 and box["height"] > 50, kind
+        assert page.locator(".hero--wolf").count() == 1 and page.locator(".hero--good").count() == 1
+        assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+        assert errors == []
         browser.close()
 
 
