@@ -282,6 +282,7 @@ const TEXT = Object.freeze({
   's21.voicesSome': '指定的人',
   's21.voicesHint': '旁白主機一定會念。大家各自在不同地方測試時才選「全部人」或指定；坐在同一間時好幾支一起念會有回音。伺服器重開會回到只有旁白。',
   's21.sound': '這支手機的聲音',
+  's21.credits': '音效出處：揮爪、咬下 Gravity Sound（CC BY 4.0）；狼嚎、雞鳴取自 Wikimedia Commons（公有領域）；勝利音樂 Spring Spring、congusbongus（CC0）。',
   's21.ambience': '環境音',
   's21.uiSound': '按鍵音效',
   's21.soundOn': '{what}：開',

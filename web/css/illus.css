@@ -24,6 +24,37 @@
 .dead-reveal { animation: reveal-row .6s var(--ease-out) calc(var(--i) * var(--dur-reveal-each)) backwards; }
 @keyframes reveal-row { from { transform: perspective(600px) rotateX(-90deg); opacity: 0; } to { transform: none; opacity: 1; } }
 
+/* 爪痕（SVG 畫在 ui/art.js clawSlash，夜晚狼人確認與天亮被咬死共用）：遮罩路線 pathLength=1，虛線從 1 收到 0，
+   刀痕就從頭到尾被「劃開」；三道依序錯開 70 ms，劃完血光退到暗紅殘影 */
+.slash { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.slash__reveal {
+  fill: none; stroke: #fff; stroke-width: 16; stroke-linecap: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: slash var(--dur-slash) var(--ease-out) calc(var(--i) * 70ms) forwards;
+}
+.slash__glow { fill: rgba(255, 80, 60, .35); stroke: rgba(255, 80, 60, .35); stroke-width: 5; stroke-linejoin: round; }
+.slash__cut { fill: #ff6a55; }
+.slash__claw { animation: slash-fade 1.2s ease-out calc(var(--dur-slash) + var(--i) * 70ms) forwards; }
+@keyframes slash { to { stroke-dashoffset: 0; } }
+@keyframes slash-fade { to { opacity: .55; } }
+
+/* 天亮公布被狼咬死（SPEC v4.37）：這列翻開後，三道爪痕劃過頭像（沿用 s8.css 的 .slash），
+   頭像被撞得一震、整列閃一下血光。--bite-at 在這列上用這列的 --i 算好，爪痕自己的 --i 是第幾道 */
+.dead-bite { --bite-at: calc(var(--i) * var(--dur-reveal-each) + var(--dur-bite-at)); position: relative; }
+.dead-bite::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 28px 50%, var(--blood), transparent 70%);
+  animation: bite-flash 900ms ease-out var(--bite-at);
+}
+.bite__mark { position: relative; display: inline-flex; flex: none; }
+.bite__mark .slash { position: absolute; inset: -8px; width: calc(100% + 16px); height: calc(100% + 16px); }
+.dead-bite .bite__mark { animation: bite-jolt 350ms ease-out calc(var(--bite-at) + 120ms); }
+.dead-bite .slash__reveal { animation-delay: calc(var(--bite-at) + var(--i) * 70ms); }
+.dead-bite .slash__claw { animation-delay: calc(var(--bite-at) + var(--dur-slash) + var(--i) * 70ms); }
+.bite__cause { color: #ff6a55; font-weight: 700; }
+@keyframes bite-flash { 15% { opacity: .8; } 100% { opacity: 0; } }
+@keyframes bite-jolt { 20% { transform: translate(-4px, 3px) rotate(-6deg); } 50% { transform: translate(3px, -2px) rotate(4deg); } 100% { transform: none; } }
+
 /* 角色卡翻開：繞 Y 軸轉進來（ART 11.2 翻牌） */
 .card__face { width: 100%; pointer-events: none; animation: card-flip var(--dur-flip) cubic-bezier(.3, .7, .2, 1); }
 @keyframes card-flip { from { transform: perspective(700px) rotateY(90deg); } to { transform: perspective(700px) rotateY(0); } }
@@ -128,11 +159,16 @@
 
 /* 舊手機掉幀：只留靜態圖（ART 11.3） */
 html[data-lowfx] .hero *, html[data-lowfx] .emblem * { animation: none !important; }
+html[data-lowfx] .dead-bite::after { display: none; }
 
 /* 減少動態效果：不動，只淡入（SPEC C9.2 #13） */
 @media (prefers-reduced-motion: reduce) {
   .hero *, .emblem *, .card__face, .card__face .emblem, .crest--roll { animation: none !important; }
   .coin, .dead-reveal, .end-reveal { animation: fade-in 300ms backwards; }
+  .dead-bite::after, .dead-bite .bite__mark { animation: none; }
+  .slash__reveal { stroke-dashoffset: 0; animation: none; }
+  .slash__claw { opacity: 0; animation: slash-in 300ms forwards; }
+  @keyframes slash-in { to { opacity: 1; } }
   .end-reveal--faceless .emblem--faceless, .disguise--swap .emblem { animation: none; }
   @keyframes fade-in { from { opacity: 0; } }
 }

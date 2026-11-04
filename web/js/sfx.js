@@ -7,6 +7,8 @@
 // 只留長長的那一聲，後面兩小聲不要（使用者要求）。
 // audio/win_village.wav：OpenGameArt「Just a random fanfare」（Spring Spring，CC0）前 8.6 秒、尾段淡出。
 // audio/win_wolf.wav：OpenGameArt「String and piano horror stings」的 abyss.ogg（congusbongus，CC0）。
+// audio/claw_swipe.wav、audio/bite.wav：Gravity Sound 錄製，CC BY 4.0（要標示出處），取自 Wikimedia Commons
+// 「File:Sword Swipe (Gravity Sound).mp3」前 0.2 秒、「File:Big bite (Gravity Sound).wav」前 0.42 秒。
 // 都轉成單聲道並把峰值調到 −1 dBFS（iPhone 舊版 Safari 不一定解得開 ogg，所以用 wav）。
 
 import { WINNER } from './protocol.js';
@@ -17,6 +19,8 @@ const RECORDING_FILES = {
   rooster: 'audio/rooster.wav',
   win_village: 'audio/win_village.wav',
   win_wolf: 'audio/win_wolf.wav',
+  slash: 'audio/claw_swipe.wav',
+  bite: 'audio/bite.wav',
 };
 const HOWL_S = 1.8;
 /** 合成狼嚎加回音的長度。 */
@@ -140,7 +144,7 @@ const WIN_DUCK_RAMP_S = 0.3;
 const WOLF_STING_AT_S = 1.2; // 狼嚎響到一半，低沉弦樂進來
 
 /** 勝利音效（ART 12.4）。錄音沒載到就合成：好人是明亮的號角琶音，狼人是狼嚎＋低沉和弦。 */
-function victorySound(ac, at, winner) {
+function victorySound(ac, at, { winner = null } = {}) {
   const isWolf = winner === WINNER.WOLF;
   const music = recordings[isWolf ? 'win_wolf' : 'win_village'];
   const out = ac.createGain();
@@ -359,9 +363,10 @@ const SOUNDS = {
     });
     return 1300;
   },
-  // 公布死者：寺廟喪鐘低鳴
-  deaths(ac, at) {
-    bell(ac, at, 98, 2.6);
+  // 公布死者：寺廟喪鐘低鳴；有人被狼咬死，就在他那列翻開、爪痕劃下時放咬的聲音（SPEC v4.37）
+  deaths(ac, at, { bites = [] } = {}) {
+    if (!bites.length) bell(ac, at, 98, 2.6);
+    for (const order of bites) biteSound(ac, at + order * REVEAL_EACH_S + BITE_AT_S);
     return 1800;
   },
   // 獵人請發動技能：弓弦慢慢拉緊的吱嘎聲
@@ -379,6 +384,26 @@ const SOUNDS = {
   },
 };
 SOUNDS.vote = SOUNDS.suspect_vote;
+
+// 和畫面上死者一列列翻開對齊：css/tokens.css --dur-reveal-each、--dur-bite-at
+const REVEAL_EACH_S = 1.5;
+const BITE_AT_S = 0.6;
+const BITE_CRUNCH_S = 0.12; // 爪子揮過去，緊接著咬下去
+
+/** 咬死：爪子劃過的破風聲＋一口咬下的悶響。有錄音用錄音，沒有就合成。 */
+function biteSound(ac, at) {
+  if (recordings.slash) playRecording(ac, recordings.slash, { at });
+  else burst(ac, { at, dur: 0.18, freq: 2400, q: 0.7, type: 'highpass', peak: 0.5, attack: 0.04 });
+  const crunch = at + BITE_CRUNCH_S;
+  if (recordings.bite) {
+    playRecording(ac, recordings.bite, { at: crunch });
+    return;
+  }
+  tone(ac, { freq: 85, at: crunch, decay: 0.25, peak: 0.6 });
+  for (let i = 0; i < 4; i += 1) {
+    burst(ac, { at: crunch + i * 0.03, dur: 0.04, freq: 1200 + Math.random() * 1500, q: 3, peak: 0.7 });
+  }
+}
 // 結算：依勝方放不同的音樂（SPEC v4.36）
 SOUNDS.win = victorySound;
 
@@ -387,15 +412,18 @@ SOUNDS.win = victorySound;
 // 其他句子沒有預留，等的話下一句會來打斷，所以音效和旁白一起出來。
 const LEAD_LINES = new Set(['night_start', 'wolf_open', 'seer_open', 'witch_open', 'dawn', 'win']);
 
-/** 旁白念這一句之前的音效（ART 12.4）。winner 只有結算那句用。回傳要等幾毫秒再念；不用等或沒播出來回傳 0。 */
-export function openingSound(lineId, winner = null) {
+/**
+ * 旁白念這一句之前的音效（ART 12.4）。回傳要等幾毫秒再念；不用等或沒播出來回傳 0。
+ * extra 是這句需要的狀態：結算 {winner}、公布死者 {bites}（被咬死的人在死者名單第幾個）。
+ */
+export function openingSound(lineId, extra = {}) {
   if (lineId === 'wolf_open') return wolfHowl();
   const play = SOUNDS[lineId];
   if (!play) return 0;
   try {
     const ac = audio();
     if (!ac || ac.state !== 'running') return 0;
-    const ms = play(ac, ac.currentTime + 0.03, winner);
+    const ms = play(ac, ac.currentTime + 0.03, extra);
     return LEAD_LINES.has(lineId) ? ms : 0;
   } catch {
     return 0;

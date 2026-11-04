@@ -5,9 +5,20 @@ import {
   coin, d20Crest, dawnRise, hunterBow, roleEmblem, seerOrb, snuffedCandle, victory, witchBrew,
 } from './ui/art.js';
 import { openingSound, preloadRecordings } from './sfx.js';
+import { s11 } from './screens/day.js';
 
 // 總覽頁可以試聽錄音，所以也要下載
 preloadRecordings();
+
+const DAWN_DEMO = {
+  round_no: 1,
+  announced: true,
+  history: [{ round_no: 1, deaths: ['p1', 'p2'], causes: { p1: 'bite', p2: 'poison' } }],
+  players: [
+    { id: 'p1', name: '小美', alive: false, death_cause: 'bite' },
+    { id: 'p2', name: '阿志', alive: false, death_cause: 'poison', public_role: 'wolf' },
+  ],
+};
 
 const ROLES = ['wolf', 'faceless', 'villager', 'seer', 'witch', 'hunter'];
 
@@ -43,15 +54,23 @@ render(document.getElementById('app'), h('div', { class: 'main' },
         requestAnimationFrame(() => panel.classList.add('disguise--swap'));
       },
     }, roleEmblem('faceless', 28), h('span', { class: 'disguise__text' }, '本期假扮：小明，剩 2 回合'))),
+  // 天亮公布：小美被咬死、阿志被毒死（SPEC v4.37）。點一下重播動畫並放音效
+  scene('天亮：被狼咬死（點一下重播）', h('div', { testid: 'dawn-demo', onclick: (e) => {
+    const box = e.currentTarget;
+    box.replaceChildren();
+    render(box, s11(DAWN_DEMO));
+    openingSound('deaths', { bites: [0] });
+  } }, s11(DAWN_DEMO))),
   scene('結算：好人勝', victory('village')),
   scene('結算：狼人勝', victory('wolf')),
   // 錄音在第一次點畫面時才下載，所以按第二下才會是錄音版
   scene('試聽錄音（第一下載入，再按一次）',
     h('p', { class: 'center' }, [
       ['雞鳴', () => openingSound('dawn')],
-      ['好人勝', () => openingSound('win', 'village')],
-      ['狼人勝', () => openingSound('win', 'wolf')],
+      ['好人勝', () => openingSound('win', { winner: 'village' })],
+      ['狼人勝', () => openingSound('win', { winner: 'wolf' })],
       ['狼嚎', () => openingSound('wolf_open')],
+      ['咬死', () => openingSound('deaths', { bites: [0] })],
     ].map(([label, play], i) => h('button', {
       class: 'btn btn--secondary btn--small', testid: `listen-${i}`, onclick: play,
     }, label))))));

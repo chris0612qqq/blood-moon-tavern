@@ -169,12 +169,12 @@ WIN = """async (winner) => {
         return original.apply(this, args);
     };
     try {
-        return { ms: m.openingSound('win', winner), started: started.sort() };
+        return { ms: m.openingSound('win', { winner }), started: started.sort() };
     } finally {
         AudioBufferSourceNode.prototype.start = original;
     }
 }"""
-HOWL_S, WIN_VILLAGE_S, WIN_WOLF_S = 2.8, 8.6, 7.5
+HOWL_S, WIN_VILLAGE_S, WIN_WOLF_S, CLAW_S, BITE_S = 2.8, 8.6, 7.5, 0.2, 0.4
 
 
 def open_sound(page: Page) -> None:
@@ -203,6 +203,10 @@ def test_opening_sounds_wait_only_where_the_server_leaves_time(server_url: str) 
         for line in ("peaceful", "deaths", "hunter", "vote", "wolf_close", "seer_close"):
             assert page.evaluate(SOUND, line) == 0, line
         page.evaluate("async () => { const m = await import('/js/sfx.js'); m.diceRoll(); m.coinDrops(3); }")
+        # 天亮有人被咬死：和旁白一起出來，不等（SPEC v4.37）
+        # 第 1、3 位死者被咬：各一聲揮爪＋一口咬下，都用錄音（SPEC v4.37）
+        bites = WIN.replace("openingSound('win', { winner })", "openingSound('deaths', { bites: [0, 2] })")
+        assert page.evaluate(bites, None) == {"ms": 0, "started": [CLAW_S, CLAW_S, BITE_S, BITE_S]}
         assert errors == []
         browser.close()
 
@@ -231,6 +235,32 @@ def test_recorded_sounds_with_synth_fallback(server_url: str) -> None:  # noqa: 
         browser.close()
 
 
+def test_dawn_bite_claws_the_bitten_row_only(server_url: str) -> None:  # noqa: F811
+    """天亮公布：被狼咬死的那列有爪痕、血光、紅字；被毒死的照舊（SPEC v4.37）。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_context(viewport=MOBILE).new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(f"{server_url}/gallery.html")
+        demo = page.locator('[data-testid="dawn-demo"]')
+        demo.click()  # 重播一次，同時放咬的音效
+        bitten = demo.locator('[data-testid="dead-bite-p1"]')
+        assert bitten.locator(".slash__cut").count() == 3
+        assert "被狼人咬死" in bitten.locator(".bite__cause").inner_text()
+        assert demo.locator(".dead-bite").count() == 1  # 阿志是被毒死的，沒有爪痕
+        # 爪痕要真的劃完，而且畫在頭像上，不是撐大整列
+        page.wait_for_function(
+            "[...document.querySelectorAll('.dead-bite .slash__reveal')]"
+            ".every((p) => getComputedStyle(p).strokeDashoffset === '0px')",
+            timeout=4000,
+        )
+        mark = bitten.locator(".bite__mark").bounding_box()
+        assert mark and mark["height"] < 60
+        assert errors == []
+        browser.close()
+
+
 def test_only_narrator_phones_download_recordings(server_url: str) -> None:  # noqa: F811
     """錄音只有旁白手機會放；沒說要下載的頁面點了畫面也不下載（省行動網路）。"""
     with sync_playwright() as driver:
@@ -241,9 +271,9 @@ def test_only_narrator_phones_download_recordings(server_url: str) -> None:  # n
         page.goto(f"{server_url}/gallery.html")
         page.wait_for_selector(".gallery__scene")
         page.evaluate("async () => { await import('/js/sfx.js'); }")
-        page.locator("h1").click()
+        page.mouse.click(2, 2)  # 第一次點擊才開聲音
         page.wait_for_timeout(500)
-        assert len(fetched) == 4  # 總覽頁說要下載：四個都抓
+        assert len(fetched) == 6  # 總覽頁說要下載：六個都抓
         plain = browser.new_context(viewport=MOBILE).new_page()
         plain_fetched: list[str] = []
         plain.on("request", lambda r: plain_fetched.append(r.url) if r.url.endswith(".wav") else None)

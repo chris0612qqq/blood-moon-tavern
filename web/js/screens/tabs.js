@@ -511,6 +511,8 @@ export function s21() {
     }),
     button(t('common.close'), close, { testid: 'btn-settings-close' }),
     h('p', { class: 'hint center' }, t('s21.version', { v: store.health?.version ?? '' })),
+    // 咬死音效是 CC BY 4.0，要在畫面上標示出處（SPEC v4.37）
+    h('p', { class: 'hint center', testid: 'sound-credits' }, t('s21.credits')),
   ];
 }
 

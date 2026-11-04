@@ -128,19 +128,6 @@ html[data-screen="S8"] body {
 .victim .avatar { width: 64px; height: 64px; font-size: 26px; background: #3a2d22; color: var(--parchment); }
 .victim__name { margin-top: 6px; font: 700 18px var(--font-title); }
 .victim--none { border-style: dashed; border-color: var(--ice); }
-/* 爪痕（SVG 畫在 night.js clawSlash）：遮罩路線 pathLength=1，虛線從 1 收到 0，
-   刀痕就從頭到尾被「劃開」；三道依序錯開 70 ms，劃完血光退到暗紅殘影 */
-.slash { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.slash__reveal {
-  fill: none; stroke: #fff; stroke-width: 16; stroke-linecap: round;
-  stroke-dasharray: 1; stroke-dashoffset: 1;
-  animation: slash var(--dur-slash) var(--ease-out) calc(var(--i) * 70ms) forwards;
-}
-.slash__glow { fill: rgba(255, 80, 60, .35); stroke: rgba(255, 80, 60, .35); stroke-width: 5; stroke-linejoin: round; }
-.slash__cut { fill: #ff6a55; }
-.slash__claw { animation: slash-fade 1.2s ease-out calc(var(--dur-slash) + var(--i) * 70ms) forwards; }
-@keyframes slash { to { stroke-dashoffset: 0; } }
-@keyframes slash-fade { to { opacity: .55; } }
 
 /* 舊手機掉幀時自動關掉霧與火星（ART 11.3） */
 html[data-lowfx] .s8::after { display: none; }
@@ -150,7 +137,5 @@ html[data-lowfx] .s8__halo, html[data-lowfx] .s8__mist { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .s8::after, .s8__halo, .s8__mist { animation: none; }
   .grid--wolf .cell--confirming::before { animation: s8-fade 300ms forwards; }
-  .slash__reveal { stroke-dashoffset: 0; animation: none; }
-  .slash__claw { opacity: 0; animation: s8-fade 300ms forwards; }
   @keyframes s8-fade { from { opacity: 0; } to { opacity: 1; } }
 }
