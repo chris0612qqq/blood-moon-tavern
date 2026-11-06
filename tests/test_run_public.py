@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+import time
 
 import pytest
 
@@ -27,6 +28,36 @@ def test_second_store_refuses_to_open() -> None:
         port = taken.getsockname()[1]
         assert run_public.already_open(port)
     assert not run_public.already_open(port)
+
+
+def test_failed_publish_closes_its_tunnel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """發布沒成功就換通道，舊的要關掉，不能留著一堆 cloudflared（v4.39）。"""
+    opened: list[FakeTunnel] = []
+
+    class FakeTunnel:
+        def __init__(self) -> None:
+            self.url = f"https://try-{len(opened)}.trycloudflare.com"
+            self.closed = False
+            opened.append(self)
+
+        def close(self) -> None:
+            self.closed = True
+
+    def publish(url: str) -> None:
+        if len(opened) == 1:
+            raise RuntimeError("GitHub Pages 一直沒有更新")
+
+    monkeypatch.setattr(run_public, "Tunnel", FakeTunnel)
+    monkeypatch.setattr(run_public, "publish", publish)
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+    returned: object = run_public.open_tunnel()
+    assert returned is opened[1]
+    assert [t.closed for t in opened] == [True, False]
+
+
+def test_waits_long_enough_for_slow_pages() -> None:
+    """實測 GitHub Pages 部署完到外面讀得到要 6 分鐘以上（v4.39）。"""
+    assert run_public.PUBLISH_TIMEOUT_SECONDS >= 10 * 60
 
 
 def test_dead_tunnel_is_replaced_at_once_flaky_one_after_three_fails() -> None:

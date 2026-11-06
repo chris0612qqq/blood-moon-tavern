@@ -31,7 +31,8 @@ REPO = "chris0612qqq/blood-moon-tavern"
 PAGES_URL = "https://chris0612qqq.github.io/blood-moon-tavern/"
 TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 TUNNEL_START_SECONDS = 60
-PUBLISH_TIMEOUT_SECONDS = 300
+# Pages 部署成功後，有時要 6 分鐘以上外面才讀得到；等太短會換網址重來，永遠追不上（v4.39）
+PUBLISH_TIMEOUT_SECONDS = 900
 POLL_SECONDS = 5
 # 遊戲中通道掛了要在 2 分鐘內接回（DEV_PLAN P7），發布本身就要 1 分鐘多，偵測要快
 HEALTH_EVERY_SECONDS = 10
@@ -145,13 +146,17 @@ def healthy(url: str) -> bool:
 def open_tunnel() -> Tunnel:
     """開通道並發布；失敗就等一下再試，直到成功。"""
     while True:
+        tunnel: Tunnel | None = None
         try:
             tunnel = Tunnel()
             assert tunnel.url is not None
-            print(f"通道開好了：{tunnel.url}，正在更新網址（約 1–2 分鐘）…")
+            print(f"通道開好了：{tunnel.url}，正在更新網址（通常 1–2 分鐘，GitHub 慢時要更久）…")
             publish(tunnel.url)
             return tunnel
         except RuntimeError as err:
+            # 沒發布成功的通道要關掉，不然 cloudflared 一直留著（v4.39）
+            if tunnel is not None:
+                tunnel.close()
             print(f"{err}，10 秒後再試…")
             time.sleep(10)
 
