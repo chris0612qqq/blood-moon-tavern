@@ -6,6 +6,7 @@ web/js/protocol.js 由 scripts/gen_protocol.py 依本檔產生，不手改。
 from __future__ import annotations
 
 import unicodedata
+from collections.abc import Callable
 from typing import Annotated, Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -15,8 +16,17 @@ from server.enums import Channel, ChatKind, Mode, Role
 from server.errors import ErrorCode, GameError
 
 Id = Annotated[str, Field(min_length=1, max_length=64)]
-NAME_GRAPHEMES: Final = 2
-_ZERO_WIDTH = frozenset("​‌‍⁠﻿")
+# 三種名字（SPEC v4.40）：顯示名字可帶裝飾符號，語音名字給旁白念，代號放爪痕與投票箭頭
+NAME_MAX_CHARS: Final = 8
+SPOKEN_MAX_CHARS: Final = 6
+MARK_CHARS: Final = 1
+# 異體選擇字元也去掉：♥️ 這類會被手機畫成彩色圖案，去掉後由前端統一用黑白字形
+_ZERO_WIDTH = frozenset("​‌‍⁠﻿︎️")
+# 預設就畫成彩色圖案的字（Unicode Emoji_Presentation，基本平面部分）；其餘補充平面圖案整段擋掉
+_EMOJI_BMP = frozenset(
+    "⌚⌛⏩⏪⏫⏬⏰⏳◽◾☔☕♈♉♊♋♌♍♎♏♐♑♒♓♿⚓⚡⚪⚫⚽⚾⛄⛅⛎⛔⛪⛲⛳⛵⛺⛽✅✊✋✨❌❎❓❔❕❗➕➖➗➰➿⬛⬜⭐⭕"
+)
+_EMOJI_PLANE = range(0x1F000, 0x1FB00)
 
 
 def clean_text(text: str) -> str:
@@ -29,19 +39,60 @@ def clean_text(text: str) -> str:
     return "".join(kept).strip()
 
 
-def _is_name_char(ch: str) -> bool:
-    # 只允許中日韓文字、英文字母、數字；組合字元與 emoji 都不是這些類別（SPEC B8、L21）
-    if ch.isascii():
-        return ch.isalnum()
-    return unicodedata.category(ch) == "Lo" and "CJK" in unicodedata.name(ch, "")
+def _is_emoji(ch: str) -> bool:
+    return ch in _EMOJI_BMP or ord(ch) in _EMOJI_PLANE
+
+
+def _is_word_char(ch: str) -> bool:
+    # 文字、數字；組合字元、空白、標點、符號、emoji 都不算（SPEC B8、L21）
+    return unicodedata.category(ch)[0] in "LN" and not _is_emoji(ch)
+
+
+def _is_display_char(ch: str) -> bool:
+    # 顯示名字多收標點與符號（★、～、の、㊣），但不收空白與 emoji（SPEC v4.40）
+    return unicodedata.category(ch)[0] in "LNPS" and not _is_emoji(ch)
+
+
+def _is_han(ch: str) -> bool:
+    return unicodedata.name(ch, "").startswith("CJK")
+
+
+def _checked(raw: str, max_chars: int, allowed: Callable[[str], bool], exact: bool = False) -> str:
+    # NFC 不用 NFKC：NFKC 會把 ㊣ 變成「正」、把全形字母變半形，裝飾就不見了
+    text = unicodedata.normalize("NFC", clean_text(raw))
+    size_ok = len(text) == max_chars if exact else 1 <= len(text) <= max_chars
+    if not size_ok or not all(allowed(ch) for ch in text):
+        raise GameError(ErrorCode.NAME_INVALID)
+    return text
 
 
 def validate_name(raw: str) -> str:
-    """名字驗證（SPEC B8、CODING_RULES L21）：清理、正規化後恰 2 字且字元合法。"""
-    name = unicodedata.normalize("NFKC", clean_text(raw))
-    if len(name) != NAME_GRAPHEMES or not all(_is_name_char(ch) for ch in name):
-        raise GameError(ErrorCode.NAME_INVALID)
-    return name
+    """顯示名字（SPEC B8、v4.40、CODING_RULES L21）：1–8 字，可帶標點與符號。"""
+    return _checked(raw, NAME_MAX_CHARS, _is_display_char)
+
+
+def validate_spoken(raw: str) -> str:
+    """語音名字（SPEC v4.40）：1–6 字，只能文字與數字，旁白才念得出來。"""
+    return _checked(raw, SPOKEN_MAX_CHARS, _is_word_char)
+
+
+def validate_mark(raw: str) -> str:
+    """代號（SPEC v4.40）：剛好 1 字，放在爪痕與投票箭頭上。"""
+    return _checked(raw, MARK_CHARS, _is_word_char, exact=True)
+
+
+def default_spoken(name: str) -> str:
+    """沒填語音名字時從顯示名字取：有漢字只留漢字，否則留文字數字（和前端自動帶入同規則）。"""
+    han = [ch for ch in name if _is_han(ch)]
+    words = han or [ch for ch in name if _is_word_char(ch)]
+    return "".join(words[:SPOKEN_MAX_CHARS])
+
+
+def names_for_join(name: str, spoken: str | None, mark: str | None) -> tuple[str, str, str]:
+    """加入時的三種名字；語音名字、代號沒填就自動取（SPEC v4.40）。"""
+    shown = validate_name(name)
+    said = validate_spoken(spoken if spoken is not None else default_spoken(shown))
+    return shown, said, validate_mark(mark if mark is not None else said[0])
 
 
 class _Strict(BaseModel):
@@ -293,6 +344,8 @@ class ChangePassword(_Strict):
 class Join(_Strict):
     password: str = Field(pattern=r"^\d{4}$")
     name: str = Field(min_length=1, max_length=32)
+    spoken: str | None = Field(default=None, max_length=32)
+    mark: str | None = Field(default=None, max_length=16)
     pin: str = Field(pattern=r"^\d{4}$")
     device_id: Id
 

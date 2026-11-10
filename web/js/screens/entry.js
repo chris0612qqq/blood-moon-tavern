@@ -5,15 +5,16 @@ import { api, connect } from '../net.js';
 import { speak } from '../narrator.js';
 import { LIMITS } from '../protocol.js';
 import {
-  clearAdminToken, clearPlayerToken, lastName, loadTokens, saveAdminToken, saveLastName, savePlayerToken,
+  clearAdminToken, clearPlayerToken, lastMark, lastName, lastSpoken, loadTokens, saveAdminToken, saveLastNames,
+  savePlayerToken,
 } from '../session.js';
 import { changed, store } from '../store.js';
 import { deviceId } from '../storage.js';
 import { t } from '../strings.js';
 import { qrDataUrl } from '../ui/qr.js';
 import {
-  actionButton, button, cleanName, clearFormError, copyText, errorLine, field, graphemeCount,
-  nameIsValid, setFormError, toast,
+  actionButton, autoMark, autoSpoken, button, cleanName, clearFormError, copyText, errorLine, field,
+  graphemeCount, nameIsValid, setFormError, toast, wordIsValid,
 } from '../ui/common.js';
 
 const form = () => store.ui.form;
@@ -268,13 +269,25 @@ export function s4() {
   const f = form();
   const hash = new URLSearchParams(location.hash.slice(1));
   if (f.join_password === undefined && hash.get('pw')) f.join_password = hash.get('pw');
-  if (f.join_name === undefined && lastName()) f.join_name = lastName();
+  if (f.join_name === undefined && lastName()) {
+    f.join_name = lastName();
+    // 上次自己改過的語音名字、代號才帶入；和自動帶入一樣的就讓它繼續跟著名字變
+    if (lastSpoken() && lastSpoken() !== autoSpoken(f.join_name)) {
+      f.join_spoken = lastSpoken();
+      f.spoken_edited = true;
+    }
+    if (lastMark() && lastMark() !== autoMark(f.join_spoken ?? autoSpoken(f.join_name))) {
+      f.join_mark = lastMark();
+      f.mark_edited = true;
+    }
+  }
   return f.rejoinMode ? rejoinForm() : joinForm();
 }
 
-function afterJoin(data, name) {
+/** names 是加入時的三種名字；回原位只打顯示名字，就不更新記住的名字。 */
+function afterJoin(data, names = null) {
   savePlayerToken(data.token);
-  saveLastName(name);
+  if (names) saveLastNames(...names);
   form().join_pin = '';
   connect(data.token);
   changed();
@@ -282,40 +295,70 @@ function afterJoin(data, name) {
 
 const nameField = (o = {}) => field('join_name', t('s4.name'), {
   ...o,
-  clean: (raw) => cleanName(raw, LIMITS.NAME_GRAPHEMES),
+  placeholder: t('s4.namePlaceholder'),
+  clean: (raw) => cleanName(raw, LIMITS.NAME_MAX_CHARS),
 });
+
+/** 三種名字（SPEC v4.40）：語音名字、代號沒自己改過就跟著名字自動帶入。 */
+function nameFields(f) {
+  const name = f.join_name ?? '';
+  if (!f.spoken_edited) f.join_spoken = autoSpoken(name);
+  const spoken = f.join_spoken ?? '';
+  if (!f.mark_edited) f.join_mark = autoMark(spoken);
+  const mark = f.join_mark ?? '';
+  const nameOk = graphemeCount(name) > 0 && nameIsValid(name);
+  const spokenOk = graphemeCount(spoken) > 0 && wordIsValid(spoken);
+  const markOk = graphemeCount(mark) === LIMITS.MARK_CHARS && wordIsValid(mark);
+  const spokenError = spoken ? t('s4.wordChars') : name && t('s4.spokenEmpty');
+  const fields = [
+    nameField({
+      hint: t('s4.nameHint'),
+      error: nameIsValid(name) ? null : t('s4.nameChars'),
+    }),
+    field('join_spoken', t('s4.spoken'), {
+      clean: (raw) => cleanName(raw, LIMITS.SPOKEN_MAX_CHARS),
+      oncommit: () => { f.spoken_edited = true; },
+      error: spokenOk ? null : spokenError || null,
+    }),
+    field('join_mark', t('s4.mark'), {
+      clean: (raw) => cleanName(raw, LIMITS.MARK_CHARS),
+      oncommit: () => { f.mark_edited = true; },
+      error: markOk || !mark ? null : t('s4.wordChars'),
+    }),
+    nameOk && spokenOk && markOk
+      ? h('p', { class: 'hint', testid: 'name-preview' }, t('s4.preview', { name, spoken, mark }))
+      : null,
+  ];
+  return { fields, ok: nameOk && spokenOk && markOk, names: [name, spoken, mark] };
+}
 
 function joinForm() {
   const f = form();
-  const name = f.join_name ?? '';
-  const left = LIMITS.NAME_GRAPHEMES - graphemeCount(name);
-  const nameOk = nameIsValid(name);
+  const { fields, ok, names } = nameFields(f);
+  const [name, spoken, mark] = names;
   const pinOk = /^\d{4}$/.test(f.join_pin ?? '');
   return [
     h('h1', { testid: 'screen-s4' }, t('s4.title')),
     field('join_password', t('s4.password'), { inputmode: 'numeric', maxlength: LIMITS.ROOM_PASSWORD_DIGITS }),
-    nameField({
-      hint: left > 0 && nameOk ? t('s4.nameLeft', { n: left }) : null,
-      error: nameOk ? null : t('s4.nameChars'),
-    }),
+    fields,
     field('join_pin', t('s4.pin'), { inputmode: 'numeric', maxlength: LIMITS.PIN_DIGITS, type: 'password', hint: t('s4.pinHint') }),
     errorLine('join'),
     actionButton({
       id: 'btn-join',
       label: t('s4.join'),
-      disabled: !f.join_password || left > 0 || !nameOk || !pinOk ? ' ' : null,
+      disabled: !f.join_password || !ok || !pinOk ? ' ' : null,
       run: async () => {
         clearFormError('join');
         const res = await api('/api/join', {
           method: 'POST',
           auth: adminToken(),
-          body: { password: f.join_password, name, pin: f.join_pin, device_id: deviceId() },
+          body: { password: f.join_password, name, spoken, mark, pin: f.join_pin, device_id: deviceId() },
         });
         if (!res.ok) {
           setFormError('join', res.code);
           return res;
         }
-        afterJoin(res.data, name);
+        afterJoin(res.data, names);
         return res;
       },
     }),
@@ -346,7 +389,7 @@ function rejoinForm() {
           setFormError('rejoin', res.code);
           return res;
         }
-        afterJoin(res.data, name);
+        afterJoin(res.data);
         return res;
       },
     }),

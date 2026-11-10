@@ -29,7 +29,7 @@ from server.enums import Mode, PauseReason, Role, Step
 from server.errors import ErrorCode, GameError
 from server.main import build_default_service, create_app
 from server.migrations import MIGRATIONS, SchemaTooNew, upgrade_event, upgrade_events
-from server.room import Paths, RoomService
+from server.room import Paths, RoomPlayer, RoomService
 from server.state import SCHEMA_VERSION, GameState
 
 JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
@@ -282,16 +282,71 @@ def test_no_room_errors(client: TestClient) -> None:
 # ---- 加入 ----
 
 
-@pytest.mark.parametrize("name", ["小美", "AJ", "a1", "ＡＢ", " 小美 ", "小​美"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "小美", "AJ", "a1", "ＡＢ", " 小美 ", "小\u200b美", "美",
+        # 80 年代線上遊戲風（SPEC v4.40）：裝飾符號、注音、日文都可以，最多 8 個字
+        "Oo風花雪月oO", "★小美☆", "～阿豪～", "㊣夜神", "ㄚ豪ㄉ",
+        "殘月の狼","♥\ufe0f小雨", "一二三四五六七八",
+    ],
+)  # fmt: skip
 def test_L21_valid_names(env: Env, client: TestClient, name: str) -> None:
     open_room(env, client)
     assert join(client, name).status_code == 200
 
 
-@pytest.mark.parametrize("name", ["小", "小美人", "😀😀", "A B", "éa", "小!", "ㄒㄧ"])
+@pytest.mark.parametrize("name", ["😀😀", "A B", "小⭐", "一二三四五六七八九", "小\u0301", "🐺狼"])
 def test_L21_invalid_names(env: Env, client: TestClient, name: str) -> None:
     open_room(env, client)
     assert err(join(client, name)) == "name_invalid"
+
+
+def test_three_names_default_from_display_name(env: Env, client: TestClient) -> None:
+    """語音名字、代號沒填就從顯示名字取：有漢字只留漢字（SPEC v4.40）。"""
+    open_room(env, client)
+    assert join(client, "Oo風花雪月oO").status_code == 200
+    assert join(client, "♥\ufe0fKen").status_code == 200
+    rows = {r["name"]: r for r in env.service.roster_rows()}
+    assert (rows["Oo風花雪月oO"]["spoken"], rows["Oo風花雪月oO"]["mark"]) == ("風花雪月", "風")
+    # 異體選擇字元會去掉，存的是黑白字形的 ♥
+    assert (rows["♥Ken"]["spoken"], rows["♥Ken"]["mark"]) == ("Ken", "K")
+    # 名字全是符號、又沒填語音名字：念不出來，不能加入
+    assert err(join(client, "★☆")) == "name_invalid"
+
+
+@pytest.mark.parametrize(
+    ("spoken", "mark", "ok"),
+    [
+        ("小美", "美", True),
+        ("AJ", "J", True),
+        ("一二三四五六", "六", True),
+        ("一二三四五六七", "一", False),  # 語音名字最多 6 字
+        ("小美！", "美", False),  # 語音名字不能有標點
+        ("小美", "美美", False),  # 代號剛好 1 字
+        ("小美", "★", False),  # 代號不能是符號
+    ],
+)  # fmt: skip
+def test_spoken_name_and_mark_rules(
+    env: Env, client: TestClient, spoken: str, mark: str, ok: bool
+) -> None:
+    open_room(env, client)
+    body = {"password": "1234", "name": "★小美☆", "spoken": spoken, "mark": mark}
+    res = client.post("/api/join", json={**body, "pin": "1111", "device_id": "d1"})
+    if ok:
+        row = env.service.roster_rows()[0]
+        assert (row["name"], row["spoken"], row["mark"]) == ("★小美☆", spoken, mark)
+    else:
+        assert err(res) == "name_invalid"
+
+
+def test_spoken_name_and_mark_may_repeat(env: Env, client: TestClient) -> None:
+    """只有顯示名字不能重複；語音名字、代號可以和別人一樣（使用者決定）。"""
+    open_room(env, client)
+    for i, name in enumerate(["小美", "～小美～"]):
+        body = {"password": "1234", "name": name, "spoken": "小美", "mark": "美"}
+        res = client.post("/api/join", json={**body, "pin": "1111", "device_id": f"d{i}"})
+        assert res.status_code == 200, res.text
 
 
 def test_name_taken_and_device_taken(env: Env, client: TestClient) -> None:
@@ -1478,9 +1533,21 @@ def test_old_db_loses_kick_columns_and_can_still_save_players(tmp_path: Path) ->
     )
     old.close()
     db = Database(path)
-    assert "kicked" not in {row["name"] for row in db.rows("PRAGMA table_info(player)")}
+    columns = {row["name"] for row in db.rows("PRAGMA table_info(player)")}
+    assert "kicked" not in columns
+    assert {"spoken", "mark"} <= columns  # SPEC v4.40
     assert not db.rows("SELECT name FROM sqlite_master WHERE name='banned_device'")
     db.close()
+
+
+def test_old_players_get_spoken_name_and_mark_from_name() -> None:
+    """舊資料沒有語音名字與代號（SPEC v4.40）：由顯示名字推出，舊的 2 字名字照念、取第一個字。"""
+    old = RoomPlayer(id="p", device_id="d", name="小美", pin_hash="", seat=1, join_order=1)
+    assert (old.spoken_name(), old.mark_char()) == ("小美", "小")
+    fancy = RoomPlayer(
+        id="q", device_id="e", name="Oo風花雪月oO", pin_hash="", seat=2, join_order=2
+    )
+    assert (fancy.spoken_name(), fancy.mark_char()) == ("風花雪月", "風")
 
 
 def test_old_saves_with_kick_cause_upgrade_to_manual() -> None:

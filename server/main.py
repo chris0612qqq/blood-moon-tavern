@@ -267,13 +267,13 @@ def _install_player_routes(app: FastAPI) -> None:
     @app.post("/api/join")
     async def join(request: Request, body: protocol.Join) -> dict[str, Any]:
         service = _service(request)
-        name = protocol.validate_name(body.name)
+        names = protocol.names_for_join(body.name, body.spoken, body.mark)
         ip = _ip(request)
-        await service.submit(lambda: service.precheck_join(body, name, ip))
+        await service.submit(lambda: service.precheck_join(body, names[0], ip))
         pin_hash = await service.in_thread(lambda: auth.hash_secret(body.pin))
         token = _bearer(request)
         admin_hash = auth.token_hash(token) if token else None
-        return await service.submit(lambda: service.finish_join(body, name, pin_hash, admin_hash))
+        return await service.submit(lambda: service.finish_join(body, names, pin_hash, admin_hash))
 
     @app.post("/api/rejoin")
     async def rejoin(request: Request, body: protocol.Rejoin) -> dict[str, Any]:

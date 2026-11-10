@@ -62,6 +62,15 @@ class RoomPlayer:
     is_spectator: bool = False
     avatar_media_id: str | None = None
     prep: dict[str, bool] = field(default_factory=dict)
+    # 語音名字與代號（SPEC v4.40）；空字串＝舊資料，由顯示名字推出
+    spoken: str = ""
+    mark: str = ""
+
+    def spoken_name(self) -> str:
+        return self.spoken or protocol.default_spoken(self.name) or self.name
+
+    def mark_char(self) -> str:
+        return self.mark or self.spoken_name()[0]
 
 
 @dataclass
@@ -282,9 +291,15 @@ class RoomService:
             raise GameError(ErrorCode.FORBIDDEN)
 
     def finish_join(
-        self, body: protocol.Join, name: str, pin_hash: str, admin_token_hash: str | None
+        self,
+        body: protocol.Join,
+        names: tuple[str, str, str],
+        pin_hash: str,
+        admin_token_hash: str | None,
     ) -> dict[str, Any]:
+        """names 是（顯示名字, 語音名字, 代號），已驗證過（SPEC v4.40）。"""
         room = self.require_room()
+        name, spoken, mark = names
         self._check_can_join(body.device_id, name)
         is_admin = admin_token_hash in self.admin_tokens and room.mode is Mode.AUTO
         seat = len([p for p in self.players.values() if not p.is_spectator]) + 1
@@ -292,6 +307,8 @@ class RoomService:
             id=uuid.uuid4().hex[:12],
             device_id=body.device_id,
             name=name,
+            spoken=spoken,
+            mark=mark,
             pin_hash=pin_hash,
             seat=seat,
             join_order=max((p.join_order for p in self.players.values()), default=0) + 1,
@@ -701,6 +718,8 @@ class RoomService:
                 {
                     "id": player.id,
                     "name": player.name,
+                    "spoken": player.spoken_name(),
+                    "mark": player.mark_char(),
                     "seat": player.seat,
                     "join_order": player.join_order,
                     "is_spectator": player.is_spectator,
@@ -888,6 +907,7 @@ class RoomService:
             narrator_id=narrator,
             strict=self.strict,
             role_plan=plan,
+            spoken={p.id: p.spoken_name() for p in seated},
         )
         self.role_plan = {}  # 只用在這一局，下一局重新隨機
         engine.chat_seq = self.chat_seq
@@ -1059,7 +1079,7 @@ class RoomService:
             )
 
     def add_bots(self, count: int) -> list[str]:
-        """加入 N 個機器人。名字用「機」加一個字元，符合 2 字規則。"""
+        """加入 N 個機器人。名字用「機」加一個字元；代號用後面那個字，才分得出誰是誰。"""
         room = self.require_room()
         if room.state != _LOBBY:
             raise GameError(ErrorCode.FORBIDDEN)
@@ -1076,6 +1096,8 @@ class RoomService:
                 id=uuid.uuid4().hex[:12],
                 device_id=f"bot-{name}",
                 name=name,
+                spoken=name,
+                mark=name[-1],
                 pin_hash="",
                 seat=len([p for p in self.players.values() if not p.is_spectator]) + 1,
                 join_order=max((p.join_order for p in self.players.values()), default=0) + 1,
@@ -1267,6 +1289,8 @@ class RoomService:
                 is_spectator=bool(row["is_spectator"]),
                 avatar_media_id=row["avatar_media_id"],
                 prep=json.loads(row["prep_json"]),
+                spoken=row["spoken"],
+                mark=row["mark"],
             )
         # 機器人名單只在記憶體：重啟後要認回來，否則被當成斷線的真人，觸發斷線暫停且解不開
         self.bot_ids = [p.id for p in self.players.values() if _is_bot(p)]
@@ -1366,13 +1390,16 @@ def _is_bot(player: RoomPlayer) -> bool:
 
 def _player_statement(room_id: str, player: RoomPlayer) -> tuple[str, tuple[Any, ...]]:
     return (
-        "INSERT OR REPLACE INTO player(id, room_id, device_id, name, avatar_media_id, pin_hash, "
-        "seat, is_spectator, prep_json, join_order) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "INSERT OR REPLACE INTO player(id, room_id, device_id, name, spoken, mark, "
+        "avatar_media_id, pin_hash, seat, is_spectator, prep_json, join_order) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             player.id,
             room_id,
             player.device_id,
             player.name,
+            player.spoken,
+            player.mark,
             player.avatar_media_id,
             player.pin_hash,
             player.seat,

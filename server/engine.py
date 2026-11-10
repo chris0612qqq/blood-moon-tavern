@@ -126,13 +126,15 @@ class Engine:
         narrator_id: str | None = None,
         strict: bool = True,
         role_plan: Mapping[str, Role] | None = None,
+        spoken: Mapping[str, str] | None = None,
     ) -> Engine:
-        """發牌開局（SPEC A8.1）。`players` 為依座位排好的 (id, 名字)。"""
+        """發牌開局（SPEC A8.1）。`players` 為依座位排好的 (id, 名字)；spoken 是旁白念的名字。"""
         dealt = rules.deal([pid for pid, _ in players], history, rng, role_plan)
+        said = spoken or {}
         state = GameState(
             mode=mode,
             players=[
-                PlayerState(id=pid, name=name, seat=seat, role=dealt[pid])
+                PlayerState(id=pid, name=name, spoken=said.get(pid, ""), seat=seat, role=dealt[pid])
                 for seat, (pid, name) in enumerate(players, start=1)
             ],
             settings=dict(settings or {}),
@@ -553,11 +555,11 @@ class Engine:
 
     def _line_for(self, step: Step, speaker: str | None) -> tuple[str | None, str]:
         if step is Step.DEFENSE and speaker and self.state.step is not Step.DEFENSE:
-            names = [self.state.player(p).name for p in self.state.vote_round().nominees or []]
+            names = [self.state.player(p).voice() for p in self.state.vote_round().nominees or []]
             text = narration.render(
                 "defense_first",
                 names=narration.NAME_SEPARATOR.join(names),
-                name=self.state.player(speaker).name,
+                name=self.state.player(speaker).voice(),
             )
             return "defense", text
         if step is Step.REVEAL:
@@ -570,11 +572,11 @@ class Engine:
             exiled = self.state.player(exiled_id)
             # 放逐到狼就大聲宣布（使用者試玩回饋）
             exile_line = "exile_wolf" if is_wolf(exiled.role) else "exile"
-            return exile_line, narration.render(exile_line, name=exiled.name)
+            return exile_line, narration.render(exile_line, name=exiled.voice())
         line_id = STEP_LINES.get(step)
         if line_id is None:
             return None, ""
-        params = {"name": self.state.player(speaker).name} if speaker else {}
+        params = {"name": self.state.player(speaker).voice()} if speaker else {}
         return line_id, narration.render(line_id, **params)
 
     def narrate_current(self) -> None:
@@ -590,7 +592,7 @@ class Engine:
         elif line_id in ("exile", "exile_wolf"):
             exiled = state.vote_round().exiled
             assert exiled is not None
-            text = narration.render(line_id, name=state.player(exiled).name)
+            text = narration.render(line_id, name=state.player(exiled).voice())
         else:
             _, text = self._line_for(LINE_STEPS[line_id], state.current_speaker)
         self.emit(EventType.NARRATE, line_id=line_id, text=text, speak=True)
@@ -609,7 +611,7 @@ class Engine:
 
         def named(cause: DeathCause) -> list[tuple[str, Role]]:
             return [
-                (state.player(pid).name, rules.public_role(state.player(pid).role))
+                (state.player(pid).voice(), rules.public_role(state.player(pid).role))
                 for pid in state.dawn_deaths
                 if state.player(pid).death_cause is cause
             ]
@@ -617,7 +619,7 @@ class Engine:
         bitten = [name for name, _ in named(DeathCause.WOLF)]
         poisoned = named(DeathCause.POISON)
         saved = (
-            state.player(night.wolf_target).name
+            state.player(night.wolf_target).voice()
             if night.witch_saved and night.wolf_target
             else None
         )

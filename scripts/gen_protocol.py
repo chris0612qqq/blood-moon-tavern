@@ -56,7 +56,9 @@ def render() -> str:
         "STEP": {s.name: s.value for s in Step},
         "WINNER": {w.name: w.value for w in Winner},
         "LIMITS": {
-            "NAME_GRAPHEMES": protocol.NAME_GRAPHEMES,
+            "NAME_MAX_CHARS": protocol.NAME_MAX_CHARS,
+            "SPOKEN_MAX_CHARS": protocol.SPOKEN_MAX_CHARS,
+            "MARK_CHARS": protocol.MARK_CHARS,
             "PIN_DIGITS": config.PIN_DIGITS,
             "ROOM_PASSWORD_DIGITS": config.ROOM_PASSWORD_DIGITS,
             "CHAT_MAX_CHARS": config.CHAT_MAX_CHARS,
