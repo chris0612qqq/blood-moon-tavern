@@ -49,7 +49,9 @@ def test_agree_glows_then_claws_the_target(server_url: str) -> None:  # noqa: F8
         page = browser.new_context(viewport=MOBILE).new_page()
         preview(page, server_url)
         choose(page, "同伴已選")
-        assert "老王" in page.locator('[data-testid="pick-cell-p3"] .cell__marks').inner_text()
+        # 爪痕上寫同伴的代號，不是整個名字（SPEC v4.40）
+        claw = page.locator('[data-testid="pick-cell-p3"] .cell__marks').inner_text()
+        assert claw.strip() == "王"
         page.locator('[data-testid="pick-cell-p3"]').click()  # 跟同伴選一樣
         page.wait_for_selector('[data-testid="pick-cell-p3"].cell--confirming')
         wait(page, "wolf-victim", timeout=6000)  # 3 秒後自動確認

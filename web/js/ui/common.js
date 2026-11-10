@@ -1,6 +1,7 @@
 // 共用元件灰盒版（DEV_PLAN P4）：ActionButton、CountdownRing、PickGrid、Avatar、確認框。
 import { h } from '../dom.js';
 import { send, serverNow } from '../net.js';
+import { LIMITS } from '../protocol.js';
 import { changed, store } from '../store.js';
 import { uiSound } from '../sfx.js';
 import { errorText, t } from '../strings.js';
@@ -155,14 +156,20 @@ export function nameOf(server, id) {
   return row?.name ?? '';
 }
 
-/** 頭像：沒有大頭貼就顯示名字第一個字。 */
+/** 代號（SPEC v4.40）：爪痕、投票箭頭上用的一個字。 */
+export function markOf(server, id) {
+  const row = rosterRow(server, id);
+  return row?.mark ?? graphemes(nameOf(server, id))[0] ?? '';
+}
+
+/** 頭像：沒有大頭貼就顯示代號。 */
 export function avatar(server, id) {
   const row = rosterRow(server, id);
   const player = server.players?.find((p) => p.id === id);
   const dead = player && !player.alive;
   const name = player?.name ?? row?.name ?? '';
   return h('span', { class: `avatar ${dead ? 'avatar--dead' : ''}` },
-    row?.avatar_url ? h('img', { src: row.avatar_url, alt: name, loading: 'lazy' }) : name.slice(0, 1));
+    row?.avatar_url ? h('img', { src: row.avatar_url, alt: name, loading: 'lazy' }) : markOf(server, id));
 }
 
 /**
@@ -245,8 +252,12 @@ export function toast(key, params) {
   changed();
 }
 
-const INVISIBLE = /[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202f\u2060\ufeff]/gu;
-const NAME_CHARS = /^[\p{L}\p{N}]*$/u;
+// \u7570\u9ad4\u9078\u64c7\u5b57\u5143\u4e5f\u53bb\u6389\uff0c\u2665\ufe0f \u624d\u4e0d\u6703\u8b8a\u6210\u5f69\u8272\u5716\u6848\uff08\u548c\u4f3a\u670d\u5668 protocol.clean_text \u4e00\u81f4\uff09
+const INVISIBLE = /[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202f\u2060\ufe0e\ufe0f\ufeff]/gu;
+// \u4e09\u7a2e\u540d\u5b57\uff08SPEC v4.40\uff09\uff1a\u986f\u793a\u540d\u5b57\u591a\u6536\u6a19\u9ede\u8207\u7b26\u865f\uff1b\u8a9e\u97f3\u540d\u5b57\u3001\u4ee3\u865f\u53ea\u6536\u6587\u5b57\u8207\u6578\u5b57\uff1b\u90fd\u4e0d\u6536 emoji \u548c\u7a7a\u767d
+const EMOJI = /[\p{Emoji_Presentation}\u{1F000}-\u{1FAFF}]/u;
+const WORD_CHARS = /^[\p{L}\p{N}]*$/u;
+const DISPLAY_CHARS = /^[\p{L}\p{N}\p{P}\p{S}]*$/u;
 const segmenter = new Intl.Segmenter('zh-Hant', { granularity: 'grapheme' });
 
 /** 字素：「👍🏽」算一個字，和伺服器的計法一樣。 */
@@ -257,8 +268,23 @@ export function cleanName(raw, limit) {
   return graphemes(raw.replace(INVISIBLE, '').trim()).slice(0, limit).join('');
 }
 
-export const nameIsValid = (name) => NAME_CHARS.test(name);
+export const nameIsValid = (name) => DISPLAY_CHARS.test(name) && !EMOJI.test(name);
+export const wordIsValid = (text) => WORD_CHARS.test(text) && !EMOJI.test(text);
 export const graphemeCount = (text) => graphemes(text).length;
+
+/**
+ * 自動帶入的語音名字：有漢字只留漢字和數字（Oo風花雪月oO → 風花雪月，玩1 → 玩1），
+ * 否則留文字與數字。和伺服器 default_spoken 同規則。
+ */
+export function autoSpoken(name) {
+  const chars = graphemes(name);
+  const hasHan = chars.some((ch) => /^\p{Script=Han}$/u.test(ch));
+  const keep = hasHan ? /^[\p{Script=Han}\p{Nd}]$/u : /^[\p{L}\p{N}]$/u;
+  const words = chars.filter((ch) => keep.test(ch) && !EMOJI.test(ch));
+  return words.slice(0, LIMITS.SPOKEN_MAX_CHARS).join('');
+}
+
+export const autoMark = (spoken) => graphemes(spoken)[0] ?? '';
 const onlyDigits = (raw) => raw.replace(/\D/gu, '');
 
 // 元素沒有 oncompositionend 屬性，只能這樣聽：Chrome 選完字後不會再發 input，補發一次才收得到
@@ -267,7 +293,7 @@ document.addEventListener('compositionend', (e) => {
 });
 
 /**
- * 表單欄位：值存在 ui.form。o.clean 可清理輸入；數字欄位只收數字。
+ * 表單欄位：值存在 ui.form。o.clean 可清理輸入；數字欄位只收數字；o.oncommit 在使用者改值後呼叫。
  * 注音、倉頡組字中（K8）不清理也不更新畫面，否則打「ㄒㄧㄠˇ」就會被判超過字數。
  */
 export function field(name, label, o = {}) {
@@ -278,6 +304,7 @@ export function field(name, label, o = {}) {
     if (o.maxlength) value = value.slice(0, o.maxlength);
     if (value !== input.value) input.value = value;
     form[name] = value;
+    o.oncommit?.(value);
     changed();
   };
   return h('label', { class: 'field' }, label,
@@ -287,6 +314,7 @@ export function field(name, label, o = {}) {
       value: form[name] ?? '',
       type: o.type ?? 'text',
       inputmode: o.inputmode,
+      placeholder: o.placeholder,
       autocomplete: o.autocomplete ?? 'off',
       // iPhone 會把第一個字母自動變大寫、自動改字，帳號就對不上（使用者回報）
       autocapitalize: 'none',

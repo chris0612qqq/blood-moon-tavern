@@ -66,6 +66,8 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .cell--target { background: #2f4a5e; border-color: #6a9ab8; }
 .cell--on { border-color: #fc6; background: #665a33; }
 .cell--empty { border-style: dashed; }
+/* 名字最多 8 個字（SPEC v4.40）：格子窄，最多折兩行，再長就截斷 */
+.cell__name { max-width: 100%; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; text-align: center; line-height: 1.25; }
 .cell__seat { font-size: 14px; color: #ccc; }
 .cell__marks { font-size: 14px; color: #f99; line-height: 1.2; }
 .cell__marks:empty { display: none; }

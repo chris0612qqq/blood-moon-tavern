@@ -102,7 +102,7 @@
 | invalid_target | 目標不合法 | 不能選這個人，請重選 |
 | deadline_passed | 時間已到 | 時間到了 |
 | room_full / room_closed / no_room | 房間狀態 | 房間已滿／房間已關閉／還沒開房 |
-| name_invalid / name_taken | 名字問題 | 名字要剛好 2 個字／這個名字已經有人用了 |
+| name_invalid / name_taken | 名字問題 | 名字不符合規定（名字最多 8 字、旁白念的最多 6 字、代號剛好 1 字）／這個名字已經有人用了 |
 | wrong_password / wrong_pin / locked | 密碼問題 | 密碼不對／PIN 不對／錯太多次，請 X 秒後再試 |
 | rate_limited | 太頻繁 | 慢一點再送 |
 | storage_full / file_invalid / file_too_large | 上傳問題 | 伺服器空間不足／檔案格式不支援／檔案太大 |

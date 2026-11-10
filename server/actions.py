@@ -200,12 +200,12 @@ def _hunter_shoot(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None
 def resolve_hunter(engine: Engine, hunter: str, target: str | None) -> None:
     """獵人開槍或不開槍（SPEC A8.3）：公布結果，念完才往下。"""
     state = engine.state
-    name = state.player(hunter).name
+    name = state.player(hunter).voice()
     engine.emit(EventType.HUNTER_RESOLVED, hunter=hunter, target=target)
     if target is not None:
         victim = state.player(target)
         role = narration.ROLE_NAMES[rules.public_role(victim.role)]
-        text = narration.render("hunter_shot", name=name, target=victim.name, role=role)
+        text = narration.render("hunter_shot", name=name, target=victim.voice(), role=role)
         engine.emit(EventType.NARRATE, line_id="hunter_shot", text=text, speak=True)
         engine.kill(target, DeathCause.HUNTER)
     else:

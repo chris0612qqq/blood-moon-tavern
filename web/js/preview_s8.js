@@ -8,11 +8,15 @@ import { preloadRecordings, wolfHowl } from './sfx.js';
 import { changed, store, subscribe } from './store.js';
 import { tickClocks, watchFrames } from './ui/clock.js';
 
-const NAMES = ['阿狼', '小明', '大華', '美玲', '老王', '志強', '雅婷', '阿傑'];
+// 顯示名字、代號（SPEC v4.40）：混幾個 80 年代線上遊戲風的名字，看長名字在格子裡的樣子
+const NAMES = [
+  ['阿狼', '狼'], ['小明', '明'], ['大華', '華'], ['美玲', '玲'],
+  ['☆老王☆', '王'], ['Oo志強oO', '志'], ['～雅婷～', '婷'], ['殘月の阿傑', '傑'],
+];
 const ME = 'p1';
 const ALLY = 'p5';
 const WOLF_OPEN = '狼人請睜眼，請選擇今晚要殺的人';
-const players = NAMES.map((name, i) => ({ id: `p${i + 1}`, seat: i + 1, name, alive: true }));
+const players = NAMES.map(([name, mark], i) => ({ id: `p${i + 1}`, seat: i + 1, name, mark, alive: true }));
 let state = 'picking';
 let confirmTimer = null;
 

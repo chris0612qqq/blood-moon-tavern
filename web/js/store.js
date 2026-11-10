@@ -78,9 +78,21 @@ function patchMe(fields) {
   if (store.server?.me) store.server.me = { ...store.server.me, ...fields };
 }
 
+/**
+ * ♥、☆ 這類字有些手機會自動畫成彩色圖案；名字裡的一律補「黑白字形」選擇字元（SPEC v4.40）。
+ * ASCII 的 # * 0–9 也算 Emoji 屬性，不能動。
+ */
+const textGlyphs = (text) => text.replace(/\p{Emoji}/gu, (ch) => (ch.codePointAt(0) < 0x80 ? ch : `${ch}︎`));
+
+function styleNames(rows) {
+  for (const row of rows ?? []) if (row.name) row.name = textGlyphs(row.name);
+}
+
 const HANDLERS = {
   state(msg) {
     const previous = store.server;
+    styleNames(msg.roster);
+    styleNames(msg.players);
     store.server = msg;
     store.ui.chatEnd = {}; // 完整狀態只帶最近的訊息，舊的又可以往回翻
     if (msg.closes_at) store.closesAt = msg.closes_at;
@@ -167,6 +179,7 @@ const HANDLERS = {
     if (old && mine && old.seat !== mine.seat && s.phase === 'lobby') {
       store.ui.toast = { key: 'toast.seat', params: { seat: mine.seat } };
     }
+    styleNames(msg.players);
     s.roster = msg.players;
   },
   'roster.narrator'(msg) {

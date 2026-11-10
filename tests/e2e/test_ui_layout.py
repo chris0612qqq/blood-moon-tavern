@@ -183,7 +183,7 @@ def test_every_screen_fits_the_smallest_phone() -> None:
         pages = [new_page() for _ in range(PLAYERS)]
         audit.look(pages[0], "join")
         for i, page in enumerate(pages):
-            join_form(page, f"玩{chr(65 + i)}", password)  # 名字恰 2 字
+            join_form(page, f"玩{chr(65 + i)}", password)  # 短名字
         audit.look(pages[0], "lobby")
         audit.look(host, "lobby_full")
         # 管理員那列最擠：同時有標籤、把手和選單

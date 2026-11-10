@@ -7,4 +7,11 @@ export const saveAdminToken = (token) => save('admin_token', token);
 export const clearPlayerToken = () => remove('player_token');
 export const clearAdminToken = () => remove('admin_token');
 export const lastName = () => load('last_name');
-export const saveLastName = (name) => save('last_name', name);
+// 語音名字與代號（SPEC v4.40）也記住，下次一起帶入
+export const lastSpoken = () => load('last_spoken');
+export const lastMark = () => load('last_mark');
+export function saveLastNames(name, spoken, mark) {
+  save('last_name', name);
+  save('last_spoken', spoken);
+  save('last_mark', mark);
+}

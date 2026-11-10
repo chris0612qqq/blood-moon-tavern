@@ -23,12 +23,18 @@ SCHEMA_VERSION: Final = 2
 class PlayerState(BaseModel):
     id: str
     name: str
+    # 旁白念的名字（SPEC v4.40）；舊存檔沒有這欄就念顯示名字
+    spoken: str = ""
     seat: int
     role: Role
     alive: bool = True
     death_cause: DeathCause | None = None
     death_round: int | None = None
     acked: bool = False
+
+    def voice(self) -> str:
+        """旁白要念的名字。"""
+        return self.spoken or self.name
 
 
 class DisguisePeriod(BaseModel):

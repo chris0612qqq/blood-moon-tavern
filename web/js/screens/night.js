@@ -5,7 +5,7 @@ import { store, changed } from '../store.js';
 import { errorText, roleAbility, roleName, roleStory, stepName, t } from '../strings.js';
 import { clawSlash, d20Crest, roleEmblem, seerOrb, witchBrew } from '../ui/art.js';
 import {
-  actionButton, avatar, countdownRing, nameOf, pickGrid, selection, toast,
+  actionButton, avatar, countdownRing, markOf, nameOf, pickGrid, selection, toast,
 } from '../ui/common.js';
 
 /** 角色卡：長按才顯示，放開蓋回；秘密只在顯示時才進 DOM（CODING_RULES V18、V19）。 */
@@ -152,7 +152,7 @@ export function s8(server) {
   for (const [wolf, target] of Object.entries(picks)) {
     if (wolf === me.id) continue;
     const key = target ?? 'none';
-    marks[key] = [marks[key], nameOf(server, wolf)].filter(Boolean).join(' ');
+    marks[key] = [marks[key], markOf(server, wolf)].filter(Boolean).join(' ');
   }
   const mine = me.id in picks ? (picks[me.id] ?? 'none') : undefined;
   // 狼人例外：不用按確認，全員一致滿 3 秒自動確認（SPEC C8.1）
