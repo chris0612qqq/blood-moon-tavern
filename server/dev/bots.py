@@ -29,7 +29,7 @@ from server.views import HOST_VIEWER, OBSERVER_VIEWER, Viewer, ViewerKind, build
 TICK_SECONDS = 0.25
 MAX_TICKS = 2_000_000
 ROUND_LIMIT = 40
-_ROLE_TOKENS = re.compile(r'"(wolf|faceless|villager|seer|witch|hunter)"')
+_ROLE_TOKENS = re.compile(r'"(wolf|faceless|villager|seer|witch|hunter|guard)"')
 ADMIN = Actor(is_admin=True)
 HOST = Actor(is_admin=True, is_host=True)
 
@@ -134,6 +134,10 @@ class BotBrain:
         targets: list[str] = me.get("eligible_targets", [])
         if step is Step.DEAL:
             self.send(actor, Action.DEAL_ACK)
+        elif step is Step.GUARD:
+            # 偶爾不守，讓空守這條路也走得到
+            target = self._pick(targets) if targets and self._roll(0.8) else None
+            self.send(actor, Action.GUARD_PICK, {"target": target})
         elif step is Step.WOLF:
             self._wolf(actor, me, targets)
         elif step is Step.SEER:

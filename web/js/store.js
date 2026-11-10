@@ -152,7 +152,6 @@ const HANDLERS = {
     if (!store.server) return;
     store.server.announced = true;
     store.server.dawn_count = msg.count;
-    historyRow(store.server).saved = msg.saved;
   },
   'vote.reveal'(msg) {
     store.lastReveal = msg;
@@ -241,7 +240,7 @@ function historyRow(s) {
   s.history = s.history ?? [];
   let row = s.history.find((h) => h.round_no === s.round_no);
   if (!row) {
-    row = { round_no: s.round_no, deaths: [], causes: {}, saved: null };
+    row = { round_no: s.round_no, deaths: [], causes: {} };
     s.history.push(row);
   }
   return row;

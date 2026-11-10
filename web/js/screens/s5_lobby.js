@@ -1,7 +1,7 @@
 // S5 大廳（SPEC A4、C4）。
 import { h } from '../dom.js';
 import { api, send } from '../net.js';
-import { LIMITS, NO_HUNTER_PLAYER_COUNT, ROLE, ROLE_TABLE } from '../protocol.js';
+import { LIMITS, ROLE, ROLE_COUNTS } from '../protocol.js';
 import { loadTokens } from '../session.js';
 import { changed, store } from '../store.js';
 import { roleName, t } from '../strings.js';
@@ -88,22 +88,10 @@ function startDrag(event, players, id) {
 }
 
 // 開局前指定職業（SPEC v4.26）：選單照這個順序；千面狼固定一隻，算在狼人總數裡
-const PLAN_ROLES = [ROLE.WOLF, ROLE.FACELESS, ROLE.SEER, ROLE.WITCH, ROLE.HUNTER, ROLE.VILLAGER];
-const FACELESS_PER_GAME = 1;
+const PLAN_ROLES = [ROLE.WOLF, ROLE.FACELESS, ROLE.SEER, ROLE.WITCH, ROLE.GUARD, ROLE.HUNTER, ROLE.VILLAGER];
 
-/** 這個人數各職業有幾個名額；人數不在 6–20 時回 null。 */
-function roleLimits(n) {
-  if (!ROLE_TABLE[n]) return null;
-  const [wolves, villagers] = ROLE_TABLE[n];
-  return {
-    [ROLE.WOLF]: wolves - FACELESS_PER_GAME,
-    [ROLE.FACELESS]: FACELESS_PER_GAME,
-    [ROLE.SEER]: 1,
-    [ROLE.WITCH]: 1,
-    [ROLE.HUNTER]: n === NO_HUNTER_PLAYER_COUNT.value ? 0 : 1,
-    [ROLE.VILLAGER]: villagers,
-  };
-}
+/** 這個人數各職業有幾個名額（伺服器算好的表）；人數不在 6–20 時回 null。 */
+const roleLimits = (n) => ROLE_COUNTS[n] ?? null;
 
 /** 只算還坐在位子上的人：指定後離開的人不佔名額。 */
 function activePlan(server, players) {
@@ -227,13 +215,16 @@ export function lobbyMenu(server, playerId) {
 
 function startConfirm(players) {
   const n = players.length;
-  const [wolves, villagers] = ROLE_TABLE[n];
-  const hunter = n === NO_HUNTER_PLAYER_COUNT.value ? '' : t('s5.hunter');
+  const counts = ROLE_COUNTS[n];
+  const wolves = counts[ROLE.WOLF] + counts[ROLE.FACELESS];
+  const villagers = counts[ROLE.VILLAGER];
+  const hunter = counts[ROLE.HUNTER] ? t('s5.hunter') : '';
+  const guard = counts[ROLE.GUARD] ? t('s5.guard') : '';
   const offline = players.filter((p) => p.offline).map((p) => p.name).join('、');
   // 機器人不會回報，只列出回報過而且螢幕可能會關的人
   const screenOff = players.filter((p) => p.prep?.wakelock === false).map((p) => p.name).join('、');
   const planned = Object.keys(activePlan(store.server ?? {}, players)).length;
-  const lines = [t('s5.startConfirm', { n, wolves, hunter, villagers })];
+  const lines = [t('s5.startConfirm', { n, wolves, guard, hunter, villagers })];
   if (planned) lines.push(t('s5.plannedCount', { n: planned }));
   if (screenOff) lines.push(t('s5.wakeWarn', { names: screenOff }));
   if (offline) lines.push(t('s5.offlineWarn', { names: offline }));

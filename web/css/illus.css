@@ -84,6 +84,12 @@
 .art-steam path, .art-smoke path { stroke-dasharray: .35 .65; animation: drift 3s linear calc(var(--i) * -1.5s) infinite; }
 @keyframes drift { from { stroke-dashoffset: 0; opacity: .9; } to { stroke-dashoffset: -1; opacity: .9; } }
 
+/* 守衛（SPEC v4.42）：盾牌緩緩起伏；選好人後往前一頓、亮起金光 */
+.art-shield { transform-box: fill-box; transform-origin: 50% 100%; animation: shield-bob 3.2s ease-in-out infinite alternate; }
+@keyframes shield-bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+.art-shield--raised { animation: shield-raise .6s var(--ease-out) forwards; filter: drop-shadow(0 0 4px #e8c872); }
+@keyframes shield-raise { 0% { transform: scale(1); } 40% { transform: scale(1.12) translateY(-3px); } 100% { transform: scale(1.06); } }
+
 /* 天亮：太陽升起、光芒緩轉、白鳥飛過 */
 .art-sunrise { animation: sunrise var(--dur-night) ease-out backwards; }
 @keyframes sunrise { from { transform: translateY(26px); opacity: .3; } to { transform: none; opacity: 1; } }

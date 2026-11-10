@@ -28,6 +28,7 @@ class EventType(StrEnum):
     NIGHT_BEGAN = "night_began"
     ACTOR_DONE = "actor_done"
     DEAL_ACKED = "deal_acked"
+    GUARD_PICKED = "guard_picked"
     WOLF_PICKED = "wolf_picked"
     WOLF_PICK_CLEARED = "wolf_pick_cleared"
     WOLF_CONFIRMING = "wolf_confirming"
@@ -101,6 +102,12 @@ def _actor_done(state: GameState, data: dict[str, Any]) -> None:
 
 def _deal_acked(state: GameState, data: dict[str, Any]) -> None:
     state.player(data["player"]).acked = True
+
+
+def _guard_picked(state: GameState, data: dict[str, Any]) -> None:
+    night = state.night()
+    night.guard_acted = True
+    night.guard_target = data["target"]
 
 
 def _wolf_picked(state: GameState, data: dict[str, Any]) -> None:
@@ -316,6 +323,7 @@ _APPLIERS: dict[EventType, Callable[[GameState, dict[str, Any]], None]] = {
     EventType.NIGHT_BEGAN: _night_began,
     EventType.ACTOR_DONE: _actor_done,
     EventType.DEAL_ACKED: _deal_acked,
+    EventType.GUARD_PICKED: _guard_picked,
     EventType.WOLF_PICKED: _wolf_picked,
     EventType.WOLF_PICK_CLEARED: _wolf_pick_cleared,
     EventType.WOLF_CONFIRMING: _wolf_confirming,

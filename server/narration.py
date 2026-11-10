@@ -13,6 +13,7 @@ ROLE_NAMES: Final[dict[Role, str]] = {
     Role.SEER: "預言家",
     Role.WITCH: "女巫",
     Role.HUNTER: "獵人",
+    Role.GUARD: "守衛",
 }
 SIDE_NAMES: Final[dict[Winner, str]] = {
     Winner.VILLAGE: "好人陣營",
@@ -23,6 +24,8 @@ SIDE_NAMES: Final[dict[Winner, str]] = {
 NAME_SEPARATOR: Final = "、"
 LINES: Final[dict[str, str]] = {
     "night_start": "天黑請閉眼",
+    "guard_open": "守衛請睜眼，請選擇今晚要守護的人",
+    "guard_close": "守衛請閉眼",
     "wolf_open": "狼人請睜眼，請選擇今晚要殺的人",
     "wolf_close": "狼人請閉眼",
     "seer_open": "預言家請睜眼，請選擇要查驗的人",
@@ -60,16 +63,15 @@ def names_with_roles(entries: list[tuple[str, Role]]) -> str:
     return "、".join(f"{name}，身分是{ROLE_NAMES[role]}" for name, role in entries)
 
 
-def dawn_report(bitten: list[str], poisoned: list[tuple[str, Role]], saved: str | None) -> str:
-    """天亮宣布（SPEC v4.13）：誰被狼人咬死、誰被女巫毒死、誰被救。
+def dawn_report(bitten: list[str], poisoned: list[tuple[str, Role]]) -> str:
+    """天亮宣布（SPEC v4.13）：誰被狼人咬死、誰被女巫毒死。
 
     被咬死的人只念名字：狼咬狼是戰術，念出身分就破功；全部都不念，才不會因為沒念而露餡。
+    被救不宣布（SPEC v4.43）：說了等於告訴狼人解藥用掉了、也揭穿昨晚咬了誰。
     """
     parts = []
     if bitten:
         parts.append(f"昨晚 {'、'.join(bitten)} 被狼咬死了")
-    if saved:
-        parts.append(f"狼人咬了 {saved}，但被女巫救回來了")
     if poisoned:
         parts.append(f"女巫毒死了 {names_with_roles(poisoned)}")
     return "。".join(parts)
@@ -78,6 +80,8 @@ def dawn_report(bitten: list[str], poisoned: list[tuple[str, Role]], saved: str 
 # 主持人一直按同一句時，第一段是超過 4 次、第二段是超過 8 次（使用者試玩回饋）
 NAG_LINES: Final[dict[str, tuple[str, str]]] = {
     "night_start": ("閉眼啦，還在看", "喂！說你啦！眼睛閉起來！"),
+    "guard_open": ("乾，守衛，睜眼", "守衛是站著睡著喔？快選！"),
+    "guard_close": ("守衛閉眼啦", "盾牌放下，閉眼！"),
     "wolf_open": ("乾，狼人，睜眼", "狼人是睡死了喔？快給我選！"),
     "wolf_close": ("狼人閉眼啦，偷看什麼", "乾，狼人，閉眼！"),
     "seer_open": ("乾，預言家，睜眼", "預言家你是算不出來喔？快點！"),

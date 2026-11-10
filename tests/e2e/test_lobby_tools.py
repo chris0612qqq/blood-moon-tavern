@@ -664,6 +664,9 @@ def test_admin_removes_one_bot_or_all(server_url: str) -> None:  # noqa: F811
         press(page, f"lobby-menu-{bots[0]}")
         press(page, f"btn-remove-bot-{bots[0]}")
         page.wait_for_function("(n) => window.__bmt.server.roster.length === n", arg=len(order) - 1)
+        # 名單變短和選單關掉不是同一刻：等選單真的關了、名單不再移動才按，免得按到移動中的按鈕
+        page.wait_for_selector('[data-testid="lobby-menu-close"]', state="detached")
+        page.wait_for_timeout(300)
         press(page, "btn-remove-bots")
         page.wait_for_function("window.__bmt.server.roster.every((r) => !r.is_bot)")
         assert not has(page, "btn-remove-bots")

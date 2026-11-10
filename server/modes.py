@@ -36,6 +36,8 @@ _HOST_ACTIONS = frozenset(
 HOST_PUSHED_STEPS = frozenset(
     {
         Step.NIGHT_START,
+        Step.GUARD,
+        Step.GUARD_END,
         Step.WOLF,
         Step.WOLF_END,
         Step.SEER,

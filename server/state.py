@@ -54,6 +54,9 @@ class DisguiseState(BaseModel):
 
 class NightRecord(BaseModel):
     round_no: int
+    # 守衛（SPEC v4.42）：舊存檔沒有這兩欄，預設＝沒守
+    guard_acted: bool = False
+    guard_target: str | None = None
     wolf_picks: dict[str, str | None] = Field(default_factory=dict)
     wolf_decided: bool = False
     wolf_target: str | None = None

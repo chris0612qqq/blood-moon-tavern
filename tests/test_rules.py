@@ -33,9 +33,21 @@ class TestRoleCounts:
         with pytest.raises(ValueError):
             rules.role_counts(n)
 
+    def test_guard_from_ten_players_takes_a_villager_slot(self) -> None:
+        """守衛（SPEC v4.42）：10 人起才有，從村民扣；12 人＝4 狼、4 神、4 民。"""
+        assert rules.role_counts(9)[Role.GUARD] == 0
+        ten = rules.role_counts(10)
+        assert ten[Role.GUARD] == 1 and ten[Role.VILLAGER] == balance.ROLE_TABLE[10][1] - 1
+        twelve = rules.role_counts(12)
+        gods = sum(twelve[r] for r in (Role.SEER, Role.WITCH, Role.HUNTER, Role.GUARD))
+        assert (twelve[Role.WOLF] + twelve[Role.FACELESS], gods, twelve[Role.VILLAGER]) == (4, 4, 4)
+
     def test_registry_derived_orders(self) -> None:
-        assert deal_sequence() == [Role.FACELESS, Role.WOLF, Role.SEER, Role.WITCH, Role.HUNTER]
+        assert deal_sequence() == [
+            Role.FACELESS, Role.WOLF, Role.SEER, Role.WITCH, Role.GUARD, Role.HUNTER,
+        ]  # fmt: skip
         assert night_step_pairs() == [
+            (Step.GUARD, Step.GUARD_END),
             (Step.WOLF, Step.WOLF_END),
             (Step.SEER, Step.SEER_END),
             (Step.WITCH, Step.WITCH_END),
@@ -121,6 +133,19 @@ class TestTargets:
         state = make_state(EIGHT, dead={1: DeathCause.WOLF})
         targets = rules.eligible_targets(state, "p2", Action.SEER_CHECK)
         assert "p1" not in targets and "p2" not in targets and "p4" in targets
+
+    def test_guard_protects_others_not_same_person_twice(self) -> None:
+        """守衛只能守別人，不能連兩晚守同一個人；前一晚沒守就都能選（SPEC v4.42）。"""
+        state = make_state([Role.GUARD, Role.VILLAGER, Role.WOLF, Role.SEER], round_no=1)
+        assert rules.eligible_targets(state, "p1", Action.GUARD_PICK) == ["p2", "p3", "p4"]
+        state.night().guard_target = "p2"
+        state.round_no = 2
+        state.nights.append(NightRecord(round_no=2))
+        assert rules.eligible_targets(state, "p1", Action.GUARD_PICK) == ["p3", "p4"]
+        state.night().guard_acted = True  # 第 2 晚不守
+        state.round_no = 3
+        state.nights.append(NightRecord(round_no=3))
+        assert rules.eligible_targets(state, "p1", Action.GUARD_PICK) == ["p2", "p3", "p4"]
 
     def test_L16_hunter_with_no_targets(self) -> None:
         state = make_state([Role.HUNTER], dead={1: DeathCause.WOLF})
@@ -229,6 +254,19 @@ class TestResolveNight:
         assert rules.resolve_night(saved) == []
         both = NightRecord(round_no=1, wolf_target="a", witch_poison="b")
         assert rules.resolve_night(both) == [("a", DeathCause.WOLF), ("b", DeathCause.POISON)]
+
+    def test_guard_blocks_bite_but_not_poison(self) -> None:
+        """被守住就不會被咬死；守衛和女巫救同一人也活著；守衛擋不住毒（SPEC v4.42）。"""
+        guarded = NightRecord(round_no=1, guard_target="a", wolf_target="a")
+        assert rules.resolve_night(guarded) == []
+        both = NightRecord(round_no=1, guard_target="a", wolf_target="a", witch_saved=True)
+        assert rules.resolve_night(both) == []
+        elsewhere = NightRecord(round_no=1, guard_target="b", wolf_target="a")
+        assert rules.resolve_night(elsewhere) == [("a", DeathCause.WOLF)]
+        poisoned = NightRecord(round_no=1, guard_target="b", witch_poison="b")
+        assert rules.resolve_night(poisoned) == [("b", DeathCause.POISON)]
+        empty_knife = NightRecord(round_no=1, guard_target=None, wolf_target=None)
+        assert rules.resolve_night(empty_knife) == []
 
     def test_L19_knifed_and_poisoned_counts_once_as_poison(self) -> None:
         night = NightRecord(round_no=1, wolf_target="a", witch_poison="a")

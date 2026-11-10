@@ -31,7 +31,9 @@ def _rule(intents: Sequence[Action], exits: Sequence[Step]) -> StepRule:
 # CODING_RULES L6：步驟 → 允許的意圖 → 下一步。任何步驟都可因勝負或中途結束進 END。
 TRANSITIONS: Mapping[Step, StepRule] = {
     Step.DEAL: _rule([Action.DEAL_ACK], [Step.NIGHT_START]),
-    Step.NIGHT_START: _rule([], [Step.WOLF]),
+    Step.NIGHT_START: _rule([], [Step.GUARD, Step.WOLF]),
+    Step.GUARD: _rule([Action.GUARD_PICK], [Step.GUARD_END]),
+    Step.GUARD_END: _rule([], [Step.WOLF]),
     Step.WOLF: _rule([Action.WOLF_PICK], [Step.WOLF_END]),
     Step.WOLF_END: _rule([], [Step.SEER, Step.WITCH, Step.DAWN]),
     Step.SEER: _rule([Action.SEER_CHECK, Action.SEER_OK], [Step.SEER_END]),
@@ -51,6 +53,8 @@ TRANSITIONS: Mapping[Step, StepRule] = {
 
 STEP_LINES: Mapping[Step, str] = {
     Step.NIGHT_START: "night_start",
+    Step.GUARD: "guard_open",
+    Step.GUARD_END: "guard_close",
     Step.WOLF: "wolf_open",
     Step.WOLF_END: "wolf_close",
     Step.SEER: "seer_open",
@@ -71,6 +75,7 @@ LINE_STEPS: Mapping[str, Step] = {line: step for step, line in STEP_LINES.items(
 ACTION_STEPS = frozenset(
     {
         Step.DEAL,
+        Step.GUARD,
         Step.WOLF,
         Step.SEER,
         Step.WITCH,
@@ -318,6 +323,8 @@ class Engine:
             for pid in state.actors:
                 if pid not in state.done:
                     self.emit(EventType.DEAL_ACKED, player=pid)
+        elif state.step is Step.GUARD and not state.night().guard_acted:
+            self.emit(EventType.GUARD_PICKED, target=None)
         elif state.step is Step.WOLF and not state.night().wolf_decided:
             picks = state.night().wolf_picks
             actions.decide_wolf(self, rules.wolf_timeout_choice(picks, state.actors, self.rng))
@@ -453,6 +460,7 @@ class Engine:
         night = self.seconds("night", balance.NIGHT_STEP_SECONDS)
         table = {
             Step.DEAL: self.seconds("deal", balance.DEAL_SECONDS),
+            Step.GUARD: night,
             Step.WOLF: night,
             Step.SEER: night,
             Step.WITCH: night,
@@ -600,10 +608,9 @@ class Engine:
     # ---- 天亮與揭曉 ----
 
     def announce_dawn(self) -> None:
-        """天亮宣布（SPEC v4.13）：誰被狼人咬死、誰被女巫毒死、誰被救，念出來也寫出來。"""
+        """天亮宣布（SPEC v4.13、v4.43）：誰被狼人咬死、誰被女巫毒死，念出來也寫出來。"""
         state = self.state
-        night = state.night()
-        deaths = rules.resolve_night(night)
+        deaths = rules.resolve_night(state.night())
         self.emit(EventType.DAWN_ANNOUNCED, count=len(deaths))
         for player_id, cause in sorted(deaths, key=lambda d: state.player(d[0]).seat):
             if state.player(player_id).alive:
@@ -618,14 +625,10 @@ class Engine:
 
         bitten = [name for name, _ in named(DeathCause.WOLF)]
         poisoned = named(DeathCause.POISON)
-        saved = (
-            state.player(night.wolf_target).voice()
-            if night.witch_saved and night.wolf_target
-            else None
-        )
-        if bitten or poisoned or saved:
+        # 被女巫救、被守衛守住都只算平安夜，不說誰被咬過（SPEC v4.43）
+        if bitten or poisoned:
             line_id = "deaths"
-            report = narration.dawn_report(bitten, poisoned, saved)
+            report = narration.dawn_report(bitten, poisoned)
             text = narration.render("deaths", report=report)
             show = len(state.dawn_deaths) * balance.REVEAL_DEATH_EACH_SECONDS
         else:

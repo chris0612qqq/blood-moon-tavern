@@ -16,6 +16,7 @@ from server.state import GameState, PlayerState
 Message = dict[str, Any]
 
 _STEP_ACTIONS = {
+    Step.GUARD: Action.GUARD_PICK,
     Step.WOLF: Action.WOLF_PICK,
     Step.SEER: Action.SEER_CHECK,
     Step.WITCH: Action.WITCH_ACT,
@@ -72,15 +73,6 @@ def _timers(state: GameState, viewer: Viewer) -> Message:
 def public_cause(cause: DeathCause) -> str:
     """對外的死因代號。「咬死」不用 wolf，免得和角色代號混淆（保密掃描也靠這點）。"""
     return "bite" if cause is DeathCause.WOLF else cause.value
-
-
-def _saved_tonight(state: GameState, round_no: int) -> str | None:
-    """誰被女巫救了（SPEC v4.13）：天亮宣布之後才公開，夜晚不能先露出來。"""
-    announced = round_no < state.round_no or state.day_context is not None or _ended(state)
-    night = next((n for n in state.nights if n.round_no == round_no), None)
-    if not announced or night is None or not night.witch_saved:
-        return None
-    return night.wolf_target
 
 
 def _public_player(state: GameState, player: PlayerState, reveal_all: bool) -> Message:
@@ -167,7 +159,7 @@ def public_block(state: GameState) -> Message:
 
 
 def public_history(state: GameState) -> list[Message]:
-    """玩家 → 紀錄（SPEC C3）：每回合的死者與死因、誰被救、投票明細。"""
+    """玩家 → 紀錄（SPEC C3）：每回合的死者與死因、投票明細。誰被救不公開（SPEC v4.43）。"""
     rows = []
     for votes in state.votes:
         died = [p for p in state.players if p.death_round == votes.round_no]
@@ -175,7 +167,6 @@ def public_history(state: GameState) -> list[Message]:
             "round_no": votes.round_no,
             "deaths": [p.id for p in died],
             "causes": {p.id: public_cause(p.death_cause) for p in died if p.death_cause},
-            "saved": _saved_tonight(state, votes.round_no),
         }
         if votes.revealed:
             row["ballots"] = dict(votes.ballots)
@@ -210,6 +201,18 @@ def _seer_block(state: GameState) -> Message:
             for n in state.nights
             if n.seer_target is not None
         ]
+    }
+
+
+def _guard_block(state: GameState) -> Message:
+    """守衛自己看得到：每晚守了誰（None＝沒守），和今晚不能守的人（SPEC v4.42）。"""
+    return {
+        "guards": [
+            {"round_no": n.round_no, "target": n.guard_target}
+            for n in state.nights
+            if n.guard_acted
+        ],
+        "blocked": rules.last_guarded(state),
     }
 
 
@@ -263,6 +266,8 @@ def _me_block(state: GameState, player: PlayerState) -> Message:
         block["seer_info"] = _seer_block(state)
     if player.role is Role.WITCH:
         block["witch_info"] = _witch_block(state, player)
+    if player.role is Role.GUARD:
+        block["guard_info"] = _guard_block(state)
     if player.role is Role.FACELESS and state.disguise is not None:
         block["disguise_info"] = _disguise_block(state)
         block["can_disguise"] = disguise.can_disguise(state, player.id)
@@ -441,13 +446,7 @@ def public_messages(event: Event, state: GameState) -> list[Message]:
             assert state.pause is not None
             return [{"t": "paused", "reason": state.pause.reason.value, "resume_at": data["at"]}]
         case EventType.DAWN_ANNOUNCED:
-            return [
-                {
-                    "t": "dawn",
-                    "saved": _saved_tonight(state, state.round_no),
-                    "count": data["count"],
-                }
-            ]
+            return [{"t": "dawn", "count": data["count"]}]
         case EventType.NARRATOR_SET:
             return [narrator_message(data["player"])]
         case _:
@@ -487,7 +486,12 @@ def private_messages(
     ):
         if is_host or (me is not None and me.alive and is_wolf(me.role)):
             out.append({"t": "wolf.picks", **_wolf_picks(state)})
-    elif event.type in (EventType.SEER_CHECKED, EventType.WITCH_ACTED, EventType.ACTOR_DONE):
+    elif event.type in (
+        EventType.GUARD_PICKED,
+        EventType.SEER_CHECKED,
+        EventType.WITCH_ACTED,
+        EventType.ACTOR_DONE,
+    ):
         if me is not None and (me.id in state.actors or me.id in event.data.get("players", [])):
             out.append({"t": "me", **_me_block(state, me)})
     elif event.type is EventType.DISGUISE_CHANGED:
