@@ -39,6 +39,7 @@ class Game:
         roles: dict[str, Role] | None = None,
         mode: Mode = Mode.AUTO,
         seed: int = 1,
+        spoken: dict[str, str] | None = None,
     ) -> None:
         roles = roles or ROLES_8
         self.nominate: tuple[str, ...] = ()
@@ -47,7 +48,7 @@ class Game:
         players = [(pid, pid.upper()) for pid in roles]
         narrator = None if mode is Mode.GOD else "p1"
         self.engine = Engine.create(
-            players, mode, {}, self.clock, GameRng(seed), narrator_id=narrator
+            players, mode, {}, self.clock, GameRng(seed), narrator_id=narrator, spoken=spoken
         )
 
     @property
@@ -549,6 +550,17 @@ class TestDayFlow:
         report = next(d for d in said if d["line_id"] == "deaths")
         assert "P1 被狼咬死了" in report["text"] and "女巫毒死了 P7" in report["text"]
         assert report["speak"] is True
+
+    def test_narration_reads_spoken_names(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """旁白念語音名字，不念帶符號的顯示名字（SPEC v4.40）；沒填的人照念顯示名字。"""
+        game = Game(monkeypatch, spoken={"p1": "風花雪月", "p7": "小雨"})
+        game.to_wolf_step()
+        game.night("p1", witch={"poison": "p7"})
+        said = [e.data for e in game.engine.log if e.type is EventType.NARRATE]
+        report = next(d for d in said if d["line_id"] == "deaths")["text"]
+        assert "風花雪月 被狼咬死了" in report and "女巫毒死了 小雨" in report
+        assert game.state.player("p1").name == "P1"  # 畫面上的名字不變
+        assert game.state.player("p2").voice() == "P2"
 
     def test_wolf_bitten_by_wolf_identity_stays_hidden(self, game: Game) -> None:
         # 狼咬狼是戰術：只念名字，不能透露他是狼（使用者試玩回饋）

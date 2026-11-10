@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS room(
   created_at REAL NOT NULL, ended_at REAL, seed INTEGER, narrator_id TEXT);
 CREATE TABLE IF NOT EXISTS player(
   id TEXT PRIMARY KEY, room_id TEXT NOT NULL, device_id TEXT NOT NULL, name TEXT NOT NULL,
+  spoken TEXT NOT NULL DEFAULT '', mark TEXT NOT NULL DEFAULT '',
   avatar_media_id TEXT, pin_hash TEXT NOT NULL, seat INTEGER NOT NULL,
   is_spectator INTEGER NOT NULL, prep_json TEXT NOT NULL,
   join_order INTEGER NOT NULL);
@@ -85,6 +86,12 @@ class Database:
         columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(player)")}
         if "kicked" in columns:
             self.conn.execute("ALTER TABLE player DROP COLUMN kicked")
+        # 語音名字與代號（SPEC v4.40）：舊資料留空，讀出來時由顯示名字推出
+        for column in ("spoken", "mark"):
+            if column not in columns:
+                self.conn.execute(
+                    f"ALTER TABLE player ADD COLUMN {column} TEXT NOT NULL DEFAULT ''"
+                )
 
     def close(self) -> None:
         self.conn.close()

@@ -47,23 +47,49 @@ def test_ut3_inputs(server_url: str) -> None:  # noqa: F811
             ("小美", "小美"),
             (" 美 ", "美"),
             ("​美​", "美"),
-            ("ABC", "AB"),
-            ("😀😀😀", "😀😀"),
+            ("一二三四五六七八九", "一二三四五六七八"),  # 最多 8 個字（SPEC v4.40）
             ("👍🏽阿", "👍🏽阿"),  # 膚色符號和手勢算一個字
         ):
             fill(page, name, raw)
             assert value(page, name) == want
-        fill(page, name, "阿")
-        page.wait_for_timeout(100)
-        assert page.locator(join).is_disabled()  # 恰 2 個字
-        assert "還能打 1 個字" in page.locator("#app").inner_text()
         fill(page, name, "😀😀")
         page.wait_for_timeout(100)
         assert page.locator(join).is_disabled()
+        assert "不能用表情符號和空白" in page.locator("#app").inner_text()
+        # 80 年代風的名字：語音名字只留漢字和數字、代號取第一個字，都自動帶入（SPEC v4.40）
+        fill(page, name, "Oo風花雪月oO")
+        page.wait_for_timeout(100)
+        assert value(page, "input-join_spoken") == "風花雪月"
+        assert value(page, "input-join_mark") == "風"
+        preview = page.locator('[data-testid="name-preview"]').inner_text()
+        assert "旁白念「風花雪月」" in preview and "爪痕上是「風」" in preview
+        assert not page.locator(join).is_disabled()
+        fill(page, name, "玩1")  # 數字留著，旁白才分得出玩1、玩2
+        page.wait_for_timeout(100)
+        assert value(page, "input-join_spoken") == "玩1"
+        # 自己改過語音名字，名字再改也不會被蓋掉；代號跟著語音名字
+        fill(page, "input-join_spoken", "Moon")
+        fill(page, name, "★風花雪月★")
+        page.wait_for_timeout(100)
+        assert (value(page, "input-join_spoken"), value(page, "input-join_mark")) == ("Moon", "M")
+        fill(page, "input-join_spoken", "月！")
+        page.wait_for_timeout(100)
+        assert page.locator(join).is_disabled()  # 語音名字不能有標點
         assert "只能用中文、英文或數字" in page.locator("#app").inner_text()
-        fill(page, name, "小美")
+        fill(page, "input-join_spoken", "月亮")
+        fill(page, "input-join_mark", "★")
+        page.wait_for_timeout(100)
+        assert page.locator(join).is_disabled()  # 代號不能是符號
+        fill(page, "input-join_mark", "AB")
+        assert value(page, "input-join_mark") == "A"  # 代號只收 1 個字
         page.wait_for_timeout(100)
         assert not page.locator(join).is_disabled()
+        press(page, "btn-join")
+        page.wait_for_function(
+            "(window.__bmt.server?.roster ?? []).some((r) => r.name === '★風花雪月★')"
+        )
+        mine = store(page, "s.server.roster.find((r) => r.name === '★風花雪月★')")
+        assert (mine["spoken"], mine["mark"]) == ("月亮", "A")
         browser.close()
 
 

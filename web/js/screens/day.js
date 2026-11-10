@@ -5,7 +5,9 @@ import { changed, store } from '../store.js';
 import { causePlain, pauseReason, roleName, t } from '../strings.js';
 import { clawSlash, coin, dawnRise, hunterBow, roleEmblem, snuffedCandle } from '../ui/art.js';
 import { PUBLIC_CAUSE } from '../protocol.js';
-import { actionButton, avatar, button, countdownRing, nameOf, pickGrid, selection } from '../ui/common.js';
+import {
+  actionButton, avatar, button, countdownRing, markOf, nameOf, pickGrid, selection,
+} from '../ui/common.js';
 
 export function s11(server) {
   const row = (server.history ?? []).find((h_) => h_.round_no === server.round_no);
@@ -130,7 +132,7 @@ function suspectMarks(server) {
   for (const [voter, target] of Object.entries(server.suspect_picks ?? {})) {
     if (voter === server.me?.id) continue;
     const key = target ?? 'abstain';
-    marks[key] = [marks[key], nameOf(server, voter)].filter(Boolean).join(' ');
+    marks[key] = [marks[key], markOf(server, voter)].filter(Boolean).join(' ');
   }
   return marks;
 }
