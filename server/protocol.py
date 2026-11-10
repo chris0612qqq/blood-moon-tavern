@@ -255,6 +255,7 @@ CLIENT_MESSAGES: Final[dict[str, type[ClientFrame]]] = {
     "wolf.pick": WolfPick,
     "seer.check": Target,
     "seer.ok": Empty,
+    "guard.pick": OptionalTarget,
     "witch.act": WitchAct,
     "hunter.shoot": OptionalTarget,
     "speak.end": Empty,

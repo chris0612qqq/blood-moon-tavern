@@ -12,6 +12,7 @@ class Role(StrEnum):
     SEER = "seer"
     WITCH = "witch"
     HUNTER = "hunter"
+    GUARD = "guard"
 
 
 class Faction(StrEnum):
@@ -24,6 +25,8 @@ class Step(StrEnum):
 
     DEAL = "DEAL"
     NIGHT_START = "NIGHT_START"
+    GUARD = "GUARD"
+    GUARD_END = "GUARD_END"
     WOLF = "WOLF"
     WOLF_END = "WOLF_END"
     SEER = "SEER"
@@ -100,6 +103,7 @@ class Action(StrEnum):
     """客戶端意圖的代號，與協定訊息類型相同（CODING_RULES 命名：名詞.動詞）。"""
 
     DEAL_ACK = "deal.ack"
+    GUARD_PICK = "guard.pick"
     WOLF_PICK = "wolf.pick"
     SEER_CHECK = "seer.check"
     SEER_OK = "seer.ok"

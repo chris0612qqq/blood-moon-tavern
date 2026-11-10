@@ -1,5 +1,5 @@
 // 內建向量美術（ART 5.2、8、9.3、11.2；DEV_PLAN P8 量產第二輪）。全部用 SVG 畫，沒有圖檔。
-// 角色徽章：版畫風，金線＋局部填色，24 px 也認得出輪廓（兜帽狼頭、裂面具、燈籠、水晶球、藥瓶、長弓）。
+// 角色徽章：版畫風，金線＋局部填色，24 px 也認得出輪廓（兜帽狼頭、裂面具、燈籠、水晶球、藥瓶、金鐘盾、長弓）。
 // 畫面主圖：每個畫面一張，同一頁只會有一張，所以漸層 id 不會重複。
 // 動畫寫在 css/illus.css，只動 transform、opacity 和描線；舊手機掉幀與減少動態效果時關掉。
 import { s } from '../dom.js';
@@ -70,6 +70,14 @@ const EMBLEMS = {
   witch: () => [
     s('g', { transform: 'translate(2 4)' }, flask('save', '#b5373a', false)),
     s('g', { transform: 'translate(22 2)' }, flask('poison', '#3f8f5a', false)),
+  ],
+  // 守衛：青銅盾牌，盾心浮著一口金鐘（金鐘罩，SPEC v4.42）
+  guard: () => [
+    s('path', { d: 'M24 4L40 10V24Q40 37 24 45Q8 37 8 24V10Z', ...LINE, fill: '#3b4a52' }),
+    s('path', { d: 'M24 8V41', fill: 'none', stroke: 'rgba(201, 162, 74, .45)', 'stroke-width': 1 }),
+    s('path', { d: 'M19 31Q19 18 24 16Q29 18 29 31Z', fill: '#e8c872', stroke: '#7a5532', 'stroke-width': 1 }),
+    s('path', { d: 'M17 31H31', ...LINE }),
+    s('circle', { cx: 24, cy: 34, r: 1.6, fill: '#e8c872' }),
   ],
   // 獵人：長弓搭箭（箭袋只剩最後一支）
   hunter: () => [
@@ -151,6 +159,28 @@ export function seerOrb(result = null) {
     s('rect', { x: 66, y: 104, width: 68, height: 7, rx: 2, ...LINE, fill: '#3d2a18' }),
     star(40, 30, 3, 5), star(160, 22, 2.5, 6), star(166, 70, 2, 7), star(30, 78, 2, 8),
   ], result);
+}
+
+/**
+ * S28 守衛：夜裡的木門前立著一面大盾，提燈的光微微晃（SPEC v4.42）。
+ * raised＝今晚已經選了人：盾牌亮起金光、往前一頓，像擋在門前。
+ */
+export function guardShield(raised = false) {
+  return hero('guard', [
+    halo('hero-guard-halo', raised ? '#e8c872' : '#6a9ab8', 100, 60, 58),
+    // 木門：拱頂＋門縫＋門環
+    s('path', { d: 'M58 112V46Q58 18 100 18Q142 18 142 46V112Z', fill: '#2b1d12', stroke: '#7a5532', 'stroke-width': 2 }),
+    s('path', { d: 'M100 20V112M72 30V112M128 30V112', fill: 'none', stroke: 'rgba(122, 85, 50, .7)', 'stroke-width': 1.5 }),
+    s('circle', { cx: 112, cy: 72, r: 3, fill: 'none', stroke: GOLD, 'stroke-width': 1.5 }),
+    // 提燈：火光輕輕搖
+    s('path', { d: 'M160 30V40', ...LINE }),
+    s('path', { d: 'M152 40H168L166 58H154Z', ...LINE, fill: 'rgba(255, 207, 122, .22)' }),
+    s('ellipse', { class: 'art-flame', cx: 160, cy: 50, rx: 3, ry: 5, fill: '#ffcf7a' }),
+    // 大盾
+    // 位置放外層：CSS 動畫的 transform 會蓋掉同一層的 transform 屬性
+    s('g', { transform: 'translate(64 26) scale(1.5)' },
+      s('g', { class: `art-shield${raised ? ' art-shield--raised' : ''}` }, EMBLEMS.guard())),
+  ], raised ? 'raised' : '');
 }
 
 /** S10 女巫：冒泡的小鍋＋兩瓶藥，用過的變空瓶（ART 8）。

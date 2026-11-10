@@ -293,7 +293,8 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         spoken = [s["text"] for s in admin.evaluate("window.__spoken") if s["volume"] == 1]
         assert any(f"{name_of[seer]} 被狼咬死了" in text for text in spoken), spoken
         assert any(f"女巫毒死了 {name_of[villagers[2]]}" in text for text in spoken), spoken
-        assert any(f"{name_of[victim]}，但被女巫救回來了" in text for text in spoken), spoken
+        # 第 1 夜女巫救人：只念平安夜，不說咬了誰（SPEC v4.43）
+        assert "昨晚是平安夜" in spoken and not any("救" in text for text in spoken), spoken
         assert any(f"{name_of[hunter]} 被放逐" in text for text in spoken), spoken
         state = httpx.get(f"{url}/dev/state").json()["state"]
         causes = {p["id"]: p["death_cause"] for p in state["players"]}
@@ -307,7 +308,7 @@ def test_every_role_ability_through_the_ui(slow_server: str) -> None:
         assert f"{name_of[seer]}（被狼人咬死）" in log
         assert f"{name_of[villagers[2]]}（被女巫毒死）" in log
         assert f"{name_of[hunter]}（被放逐）" in log and f"{name_of[wolf]}（被獵人射死）" in log
-        assert f"被救：{name_of[victim]}" in log
+        assert "被救" not in log  # 被救不公開（SPEC v4.43）
         shot(villagers[1], "players_log")
         press(villagers[1], "tab-game")
 

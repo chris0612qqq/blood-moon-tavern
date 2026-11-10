@@ -138,16 +138,19 @@ class TestBuild:
         game.night("p1")
         assert views.build(game.state, player("p8"))["announced"] is True
 
-    def test_saved_hidden_until_dawn(self, game: Game) -> None:
+    def test_saved_never_public(self, game: Game) -> None:
+        """被救不公開（SPEC v4.43）：天亮後玩家的紀錄也沒有這一欄，只有主持人看得到。"""
         game.to_wolf_step()
         game.wolves_kill("p1")
         game.wait_for(Step.WITCH)
         game.act("p3", Action.WITCH_ACT, save=True)
-        assert views.build(game.state, player("p8"))["history"][0]["saved"] is None  # 夜晚不能露
         game.wait_until_announced()
-        assert views.build(game.state, player("p8"))["history"][0]["saved"] == "p1"
+        view = views.build(game.state, player("p8"))
+        assert "saved" not in view["history"][0]
+        assert "witch_saved" not in str(view)
+        assert views.build(game.state, HOST_VIEWER)["host"]["nights"][0]["witch_saved"] is True
 
-    def test_dawn_event_carries_saved(self, game: Game) -> None:
+    def test_dawn_event_hides_save(self, game: Game) -> None:
         game.to_wolf_step()
         game.wolves_kill("p1")
         game.wait_for(Step.WITCH)
@@ -159,9 +162,7 @@ class TestBuild:
             if game.state.announced:
                 break
         dawn = next(e for e in collected if e.type is EventType.DAWN_ANNOUNCED)
-        assert views.filter_event(dawn, player("p8"), game.state) == [
-            {"t": "dawn", "saved": "p1", "count": 0}
-        ]
+        assert views.filter_event(dawn, player("p8"), game.state) == [{"t": "dawn", "count": 0}]
 
     def test_host_sees_death_cause(self, god: Game) -> None:
         god.act(HOST, Action.HOST_SET_ALIVE, player="p1", alive=False)

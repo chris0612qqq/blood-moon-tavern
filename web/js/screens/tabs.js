@@ -17,7 +17,9 @@ const DAY_STEPS = new Set(['DAWN', 'HUNTER', 'LAST_WORDS', 'DAY_SPEAK', 'SUSPECT
 const CHAT_MAX = 500;
 const CHAT_WARN = 50;
 const FIRST_CHAT_ID = 1;
-export const NIGHT_STEPS = new Set(['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END']);
+export const NIGHT_STEPS = new Set([
+  'NIGHT_START', 'GUARD', 'GUARD_END', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END',
+]);
 
 function displayName(server, msg) {
   if (msg.kind === 'system') return t('chat.system');
@@ -273,7 +275,6 @@ export function playersTab(server) {
           ? row.deaths.map((id) => deathLabel(nameOf(server, id), row.causes?.[id])).join('、')
           : t('players.nobody'),
       })),
-      row.saved ? h('div', { testid: `log-saved-${row.round_no}` }, t('players.saved', { name: nameOf(server, row.saved) })) : null,
       row.ballots ? Object.entries(row.ballots).map(([from, to]) => h('div', { class: 'hint', key: from },
         t('s15.ballot', { from: nameOf(server, from), to: to ? nameOf(server, to) : t('s14.abstain') }))) : null)),
     canEnd
@@ -326,6 +327,22 @@ function seerRow(server, truth, night, name) {
   }));
 }
 
+/** 守衛那一列（SPEC v4.42）：這局沒有守衛（不到 10 人）就不列。 */
+function guardRow(server, truth, night, name) {
+  const guard = roleHolder(server, truth, ROLE.GUARD);
+  if (!guard) return null;
+  const label = t('s18.actGuard');
+  if (outBefore(truth, guard, night.round_no)) return actRow('guard', label, t('s18.outAlready', { who: name(guard) }));
+  if (!night.guard_target) return actRow('guard', label, t('s18.guardNone', { who: name(guard) }));
+  return actRow('guard', label, t('s18.guardPick', { who: name(guard), target: name(night.guard_target) }));
+}
+
+/** 狼人咬的人被守衛守住：結算和主持人才看得到（遊戲中只宣布平安夜）。 */
+export function guardedLine(night, name) {
+  const guarded = night.wolf_target && night.guard_target === night.wolf_target;
+  return guarded ? h('div', { testid: 'guarded' }, t('s18.guarded', { name: name(night.wolf_target) })) : null;
+}
+
 function witchRow(server, truth, night, name) {
   const witch = roleHolder(server, truth, ROLE.WITCH);
   if (!witch) return actRow('witch', t('s18.actWitch'), t('s18.noRole'));
@@ -345,12 +362,14 @@ function nightPanel(server, truth, night, name) {
   const shots = (truth.hunter_shots ?? []).filter((shot) => shot.round_no === n);
   const votes = (truth.votes ?? []).find((v) => v.round_no === n);
   return h('div', { testid: `truth-night-${n}` },
+    guardRow(server, truth, night, name),
     wolfRow(server, night, name),
     seerRow(server, truth, night, name),
     witchRow(server, truth, night, name),
     actRow('death', t('s18.actDeath'), [
       dawn.length ? dawn.map(label).join('、') : (night.witch_saved ? '' : t('s18.peaceful')),
       night.witch_saved ? h('div', {}, t('s18.saved', { name: name(night.wolf_target) })) : null,
+      guardedLine(night, name),
     ]),
     shots.map((shot) => actRow('hunter', t('s18.actHunter'), t(shot.target ? 's18.hunterShot' : 's18.hunterHolster', {
       who: name(shot.hunter),
@@ -524,6 +543,7 @@ export function s26() {
     h('p', {}, t('s26.night')),
     h('p', {}, t('s26.mask')),
     h('p', {}, t('s26.witch')),
+    h('p', { testid: 'rules-guard' }, t('s26.guard')),
     h('p', {}, t('s26.hunter')),
     h('p', {}, t('s26.terms')),
     button(t('common.close'), close, { testid: 'btn-rules-close' }),

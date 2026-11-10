@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 _STEP_BOUND = frozenset(
     {
         Action.DEAL_ACK,
+        Action.GUARD_PICK,
         Action.WOLF_PICK,
         Action.SEER_CHECK,
         Action.SEER_OK,
@@ -48,6 +49,7 @@ _STEP_BOUND = frozenset(
 _ACTOR_ACTIONS = frozenset(
     {
         Action.DEAL_ACK,
+        Action.GUARD_PICK,
         Action.WOLF_PICK,
         Action.SEER_CHECK,
         Action.SEER_OK,
@@ -79,7 +81,7 @@ def dispatch(
 
 
 # 角色不用等旁白念完就能選；步驟仍要念完才離開（使用者試玩回饋，SPEC A8.2）
-_ACT_DURING_NARRATION = frozenset({Step.WOLF, Step.SEER, Step.WITCH, Step.HUNTER})
+_ACT_DURING_NARRATION = frozenset({Step.GUARD, Step.WOLF, Step.SEER, Step.WITCH, Step.HUNTER})
 
 
 def _check_actor_action(engine: Engine, actor: Actor, action: Action) -> None:
@@ -121,6 +123,19 @@ def _deal_ack(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
     player_id = _player_id(actor)
     engine.emit(EventType.DEAL_ACKED, player=player_id)
     _mark_done(engine, player_id)
+
+
+def _guard_pick(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
+    """守衛選人或不守（SPEC v4.42）：一次定案，不能改。"""
+    guard = _player_id(actor)
+    state = engine.state
+    if state.night().guard_acted:
+        raise _fail(ErrorCode.FORBIDDEN)
+    target = payload.get("target")
+    if target is not None and target not in rules.eligible_targets(state, guard, Action.GUARD_PICK):
+        raise _fail(ErrorCode.INVALID_TARGET)
+    engine.emit(EventType.GUARD_PICKED, target=target)
+    _mark_done(engine, guard)
 
 
 def _wolf_pick(engine: Engine, actor: Actor, payload: dict[str, Any]) -> None:
@@ -639,6 +654,7 @@ def open_first_period(state: GameState) -> None:
 
 HANDLERS: dict[Action, Handler] = {
     Action.DEAL_ACK: _deal_ack,
+    Action.GUARD_PICK: _guard_pick,
     Action.WOLF_PICK: _wolf_pick,
     Action.SEER_CHECK: _seer_check,
     Action.SEER_OK: _seer_ok,

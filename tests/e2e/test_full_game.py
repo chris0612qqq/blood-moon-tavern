@@ -171,7 +171,7 @@ def act(page: Page) -> None:
             return
     screen = page.evaluate("document.documentElement.dataset.screen")
     me = store(page, "s.server && s.server.me && s.server.me.id")
-    if screen in ("S8", "S9", "S12", "S14"):
+    if screen in ("S8", "S9", "S12", "S14", "S28"):
         cells = page.locator('[data-testid^="pick-cell-"]')
         if cells.count() == 0:
             return
@@ -181,7 +181,7 @@ def act(page: Page) -> None:
             cells.first.click(timeout=800)
         except PlaywrightError:
             return  # 按的瞬間換步驟，格子被移除；下一輪再看畫面
-        for testid in ("btn-seer-check", "btn-hunter-shoot", "btn-vote"):
+        for testid in ("btn-seer-check", "btn-guard", "btn-hunter-shoot", "btn-vote"):
             if tap(page, testid):
                 return
 

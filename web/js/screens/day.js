@@ -16,7 +16,8 @@ export function s11(server) {
   if (!server.announced) {
     return [dawnRise(), h('h1', { class: 'center', testid: 'screen-s11' }, t('s11.title'))];
   }
-  const peaceful = !deaths.length && !row?.saved && !server.dawn_count;
+  // 被救、被守住也是平安夜，不說誰被咬過（SPEC v4.43）
+  const peaceful = !deaths.length && !server.dawn_count;
   return [
     dawnRise(peaceful),
     h('h1', { class: 'center', testid: 'screen-s11' }, t('s11.title')),
@@ -27,8 +28,7 @@ export function s11(server) {
         deaths.map((id, i) => deadRow(server, id, i)),
       ]
       // 公布和死者是兩則訊息，中間可能畫一次：有人要死就不能先說平安夜
-      : (row?.saved || server.dawn_count ? null : h('p', { class: 'big center', testid: 'peaceful' }, t('s11.peaceful'))),
-    row?.saved ? h('p', { class: 'center', testid: 'dawn-saved' }, t('s11.saved', { name: nameOf(server, row.saved) })) : null,
+      : (server.dawn_count ? null : h('p', { class: 'big center', testid: 'peaceful' }, t('s11.peaceful'))),
   ];
 }
 

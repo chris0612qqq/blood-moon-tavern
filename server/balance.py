@@ -27,6 +27,8 @@ ROLE_TABLE: Final[dict[int, tuple[int, int]]] = {
 }
 NO_HUNTER_PLAYER_COUNT: Final = 6
 FACELESS_PER_GAME: Final = 1
+# 這個人數起多一名守衛，從村民名額扣（SPEC v4.42）
+GUARD_MIN_PLAYERS: Final = 10
 
 # CODING_RULES L26：輪替權重用整數，對應 0.25／0.5／1
 WEIGHT_LAST_GAME: Final = 1
@@ -89,6 +91,7 @@ TRUTH_MAX_NIGHTS: Final = 7
 # 開場音效長度（ART 13.3），決定步驟間隔（SPEC A8.2）
 SFX_SECONDS: Final[dict[str, float]] = {
     "night_start": 2.0,
+    "guard_open": 1.2,
     "wolf_open": 1.8,
     "seer_open": 1.2,
     "witch_open": 1.5,

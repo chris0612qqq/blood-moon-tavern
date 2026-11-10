@@ -30,6 +30,8 @@ VOTE_STEPS = frozenset({Step.SUSPECT_VOTE, Step.VOTE})
 NIGHT_STEPS = frozenset(
     {
         Step.NIGHT_START,
+        Step.GUARD,
+        Step.GUARD_END,
         Step.WOLF,
         Step.WOLF_END,
         Step.SEER,
@@ -113,13 +115,16 @@ def role_counts(n: int) -> dict[Role, int]:
     if n not in balance.ROLE_TABLE:
         raise ValueError(f"unsupported player count: {n}")
     wolves, villagers = balance.ROLE_TABLE[n]
+    guards = 1 if n >= balance.GUARD_MIN_PLAYERS else 0
     return {
         Role.FACELESS: balance.FACELESS_PER_GAME,
         Role.WOLF: wolves - balance.FACELESS_PER_GAME,
         Role.SEER: 1,
         Role.WITCH: 1,
+        Role.GUARD: guards,
         Role.HUNTER: 0 if n == balance.NO_HUNTER_PLAYER_COUNT else 1,
-        Role.VILLAGER: villagers,
+        # 守衛從村民名額扣，總人數不變（SPEC v4.42）
+        Role.VILLAGER: villagers - guards,
     }
 
 
@@ -196,7 +201,16 @@ def eligible_targets(state: GameState, actor_id: str, action: Action) -> list[st
     if action is Action.VOTE_CAST and state.step is Step.VOTE:
         nominated = state.vote_round().nominees or []
         others = [p for p in others if p.id in nominated]
+    if action is Action.GUARD_PICK:
+        # 守衛只能守別人，也不能連兩晚守同一個人（SPEC v4.42）
+        others = [p for p in others if p.id != last_guarded(state)]
     return [p.id for p in sorted(others, key=lambda p: p.seat)]
+
+
+def last_guarded(state: GameState) -> str | None:
+    """前一晚守衛守的人；今晚不能再守他（SPEC v4.42）。"""
+    earlier = [n for n in state.nights if n.round_no < state.round_no]
+    return earlier[-1].guard_target if earlier else None
 
 
 def wolf_consensus(picks: Mapping[str, str | None], alive_wolf_ids: Sequence[str]) -> Consensus:
@@ -248,9 +262,13 @@ def validate_witch_act(state: GameState, witch_id: str, save: bool, poison: str 
 
 
 def resolve_night(night: NightRecord) -> list[tuple[str, DeathCause]]:
-    """夜晚死亡名單（SPEC A5.3）：同一人被刀又被毒算一次，死因為毒（L19）。"""
+    """夜晚死亡名單（SPEC A5.3）：同一人被刀又被毒算一次，死因為毒（L19）。
+
+    被守衛守住或被女巫救的人不會被咬死；兩個都有也照樣活著。守衛擋不住毒（SPEC v4.42）。
+    """
     deaths: dict[str, DeathCause] = {}
-    if night.wolf_target is not None and not night.witch_saved:
+    protected = night.witch_saved or night.guard_target == night.wolf_target
+    if night.wolf_target is not None and not protected:
         deaths[night.wolf_target] = DeathCause.WOLF
     if night.witch_poison is not None:
         deaths[night.witch_poison] = DeathCause.POISON

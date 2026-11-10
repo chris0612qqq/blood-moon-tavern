@@ -3,7 +3,9 @@ import { STEP } from './protocol.js';
 import { wantsInstallGuide } from './pwa.js';
 import { loadTokens } from './session.js';
 
-const NIGHT_ACTOR_SCREENS = { [STEP.WOLF]: 'S8', [STEP.SEER]: 'S9', [STEP.WITCH]: 'S10' };
+const NIGHT_ACTOR_SCREENS = {
+  [STEP.GUARD]: 'S28', [STEP.WOLF]: 'S8', [STEP.SEER]: 'S9', [STEP.WITCH]: 'S10',
+};
 const PUBLIC_SCREENS = {
   [STEP.DAWN]: 'S11',
   [STEP.HUNTER]: 'S12',

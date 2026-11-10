@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from server import balance, config, protocol, views  # noqa: E402
+from server import balance, config, protocol, rules, views  # noqa: E402
 from server.enums import (  # noqa: E402
     Action,
     Channel,
@@ -40,8 +40,11 @@ def render() -> str:
     data = {
         "PROTOCOL_VERSION": config.PROTOCOL_VERSION,
         "MESSAGES": messages,
-        "ROLE_TABLE": {str(n): list(row) for n, row in balance.ROLE_TABLE.items()},
-        "NO_HUNTER_PLAYER_COUNT": {"value": balance.NO_HUNTER_PLAYER_COUNT},
+        # 每個人數各職業幾個（SPEC A5.1、v4.42）：前端直接用，不自己算，免得和伺服器不一致
+        "ROLE_COUNTS": {
+            str(n): {role.value: count for role, count in rules.role_counts(n).items()}
+            for n in balance.ROLE_TABLE
+        },
         "ACTION": {a.name: a.value for a in Action},
         "CHANNEL": {c.name: c.value for c in Channel},
         "CHAT_KIND": {k.name: k.value for k in ChatKind},

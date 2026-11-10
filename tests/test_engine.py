@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -183,6 +183,75 @@ class TestDeal:
         assert disguise.periods[0].from_round == 1
 
 
+class TestGuard:
+    """守衛（SPEC v4.42）：最先睜眼、只能守別人、不能連兩晚守同一人、守住就是平安夜。"""
+
+    ROLES: ClassVar[dict[str, Role]] = {**ROLES_8, "p8": Role.GUARD}
+
+    def guard_step(self, game: Game) -> str:
+        game.wait_for(Step.GUARD)
+        return game.state.actors[0]
+
+    def test_guarded_bite_is_a_peaceful_night(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch, roles=self.ROLES)
+        game.ack_all()
+        guard = self.guard_step(game)
+        assert guard == "p8"
+        said = [e.data["line_id"] for e in game.engine.log if e.type is EventType.NARRATE]
+        assert said[-1] == "guard_open"  # 天黑之後先叫守衛，狼人還沒睜眼
+        with pytest.raises(GameError) as err:
+            game.act(guard, Action.GUARD_PICK, target=guard)  # 不能守自己
+        assert err.value.code is ErrorCode.INVALID_TARGET
+        game.act(guard, Action.GUARD_PICK, target="p1")
+        with pytest.raises(GameError):
+            game.act(guard, Action.GUARD_PICK, target="p2")  # 選了就不能改
+        game.wait_for(Step.WOLF)
+        game.night("p1")
+        assert game.state.player("p1").alive
+        lines = [e.data["line_id"] for e in game.engine.log if e.type is EventType.NARRATE]
+        assert "peaceful" in lines and "deaths" not in lines  # 不說是誰守的
+
+    def test_cannot_guard_same_person_two_nights(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch, roles=self.ROLES)
+        game.ack_all()
+        game.act(self.guard_step(game), Action.GUARD_PICK, target="p1")
+        game.wait_for(Step.WOLF)
+        game.night(None)
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.vote_all(None)
+        guard = self.guard_step(game)
+        with pytest.raises(GameError) as err:
+            game.act(guard, Action.GUARD_PICK, target="p1")
+        assert err.value.code is ErrorCode.INVALID_TARGET
+        game.act(guard, Action.GUARD_PICK, target="p2")
+        assert game.state.night().guard_target == "p2"
+
+    def test_timeout_means_no_guard(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch, roles=self.ROLES)
+        game.ack_all()
+        self.guard_step(game)
+        game.wait_for(Step.WOLF)
+        night = game.state.night()
+        assert night.guard_acted and night.guard_target is None
+        game.night("p1")
+        assert not game.state.player("p1").alive
+
+    def test_dead_guard_step_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        game = Game(monkeypatch, roles=self.ROLES)
+        game.ack_all()
+        game.act(self.guard_step(game), Action.GUARD_PICK, target=None)
+        game.wait_for(Step.WOLF)
+        game.night("p8")
+        game.wait_for(Step.DAY_SPEAK)
+        game.finish_speech()
+        game.vote_all(None)
+        game.wait_for(Step.WOLF)
+        steps = [e.data["step"] for e in game.engine.log if e.type is EventType.STEP_ENTERED]
+        second_night = steps[len(steps) - 1 - steps[::-1].index(Step.NIGHT_START.value) :]
+        assert Step.GUARD.value not in second_night
+
+
 class TestStepSeq:
     def test_L2_stale_step_rejected(self, game: Game) -> None:
         with pytest.raises(GameError) as err:
@@ -222,7 +291,10 @@ class TestTransitions:
         assert set(TRANSITIONS) == set(Step)
 
     def test_night_sequence_from_registry(self) -> None:
-        assert night_sequence()[:3] == [Step.NIGHT_START, Step.WOLF, Step.WOLF_END]
+        # 守衛最先（SPEC v4.42），再來狼人
+        assert night_sequence()[:5] == [
+            Step.NIGHT_START, Step.GUARD, Step.GUARD_END, Step.WOLF, Step.WOLF_END,
+        ]  # fmt: skip
         assert night_sequence()[-1] is Step.DAWN
 
     def test_action_outside_step_forbidden(self, game: Game) -> None:
@@ -570,11 +642,13 @@ class TestDayFlow:
         report = next(d for d in said if d["line_id"] == "deaths")["text"]
         assert "P5 被狼咬死了" in report and "身分" not in report and "狼人" not in report
 
-    def test_dawn_announces_save(self, game: Game) -> None:
+    def test_saved_night_is_just_peaceful(self, game: Game) -> None:
+        """被女巫救只念平安夜，不說咬了誰、也不說被救（SPEC v4.43）。"""
         game.to_wolf_step()
         game.night("p1", witch={"save": True})
-        said = [e.data["text"] for e in game.engine.log if e.type is EventType.NARRATE]
-        assert any("被女巫救回來了" in t and "P1" in t for t in said)
+        said = [e.data for e in game.engine.log if e.type is EventType.NARRATE]
+        assert said[-1]["line_id"] == "peaceful"
+        assert not any("救" in d["text"] or "P1" in d["text"] for d in said)
 
     def test_exiled_gets_last_words(self, game: Game) -> None:
         game.to_wolf_step()
