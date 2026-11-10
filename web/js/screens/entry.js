@@ -325,9 +325,9 @@ function nameFields(f) {
       oncommit: () => { f.mark_edited = true; },
       error: markOk || !mark ? null : t('s4.wordChars'),
     }),
-    nameOk && spokenOk && markOk
-      ? h('p', { class: 'hint', testid: 'name-preview' }, t('s4.preview', { name, spoken, mark }))
-      : null,
+    // 預覽一直佔著位置、只換內容：中途插進來會讓下面的 PIN 欄被換掉，正在打的 PIN 會不見
+    h('p', { class: 'hint', testid: 'name-preview', hidden: nameOk && spokenOk && markOk ? null : '' },
+      nameOk && spokenOk && markOk ? t('s4.preview', { name, spoken, mark }) : ''),
   ];
   return { fields, ok: nameOk && spokenOk && markOk, names: [name, spoken, mark] };
 }

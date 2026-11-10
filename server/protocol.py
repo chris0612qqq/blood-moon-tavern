@@ -82,9 +82,12 @@ def validate_mark(raw: str) -> str:
 
 
 def default_spoken(name: str) -> str:
-    """沒填語音名字時從顯示名字取：有漢字只留漢字，否則留文字數字（和前端自動帶入同規則）。"""
-    han = [ch for ch in name if _is_han(ch)]
-    words = han or [ch for ch in name if _is_word_char(ch)]
+    """沒填語音名字時從顯示名字取：有漢字只留漢字和數字（玩1 才不會變成「玩」），
+    否則留文字數字（和前端自動帶入同規則）。"""
+    if any(_is_han(ch) for ch in name):
+        words = [ch for ch in name if _is_han(ch) or unicodedata.category(ch) == "Nd"]
+    else:
+        words = [ch for ch in name if _is_word_char(ch)]
     return "".join(words[:SPOKEN_MAX_CHARS])
 
 

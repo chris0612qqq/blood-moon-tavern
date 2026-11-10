@@ -272,11 +272,15 @@ export const nameIsValid = (name) => DISPLAY_CHARS.test(name) && !EMOJI.test(nam
 export const wordIsValid = (text) => WORD_CHARS.test(text) && !EMOJI.test(text);
 export const graphemeCount = (text) => graphemes(text).length;
 
-/** 自動帶入的語音名字：有漢字只留漢字（Oo風花雪月oO → 風花雪月），否則留文字與數字。和伺服器 default_spoken 同規則。 */
+/**
+ * 自動帶入的語音名字：有漢字只留漢字和數字（Oo風花雪月oO → 風花雪月，玩1 → 玩1），
+ * 否則留文字與數字。和伺服器 default_spoken 同規則。
+ */
 export function autoSpoken(name) {
   const chars = graphemes(name);
-  const han = chars.filter((ch) => /^\p{Script=Han}$/u.test(ch));
-  const words = han.length ? han : chars.filter((ch) => wordIsValid(ch));
+  const hasHan = chars.some((ch) => /^\p{Script=Han}$/u.test(ch));
+  const keep = hasHan ? /^[\p{Script=Han}\p{Nd}]$/u : /^[\p{L}\p{N}]$/u;
+  const words = chars.filter((ch) => keep.test(ch) && !EMOJI.test(ch));
   return words.slice(0, LIMITS.SPOKEN_MAX_CHARS).join('');
 }
 

@@ -56,13 +56,17 @@ def test_ut3_inputs(server_url: str) -> None:  # noqa: F811
         page.wait_for_timeout(100)
         assert page.locator(join).is_disabled()
         assert "不能用表情符號和空白" in page.locator("#app").inner_text()
-        # 80 年代風的名字：語音名字只留漢字、代號取第一個字，都自動帶入（SPEC v4.40）
+        # 80 年代風的名字：語音名字只留漢字和數字、代號取第一個字，都自動帶入（SPEC v4.40）
         fill(page, name, "Oo風花雪月oO")
         page.wait_for_timeout(100)
-        assert (value(page, "input-join_spoken"), value(page, "input-join_mark")) == ("風花雪月", "風")
+        assert value(page, "input-join_spoken") == "風花雪月"
+        assert value(page, "input-join_mark") == "風"
         preview = page.locator('[data-testid="name-preview"]').inner_text()
         assert "旁白念「風花雪月」" in preview and "爪痕上是「風」" in preview
         assert not page.locator(join).is_disabled()
+        fill(page, name, "玩1")  # 數字留著，旁白才分得出玩1、玩2
+        page.wait_for_timeout(100)
+        assert value(page, "input-join_spoken") == "玩1"
         # 自己改過語音名字，名字再改也不會被蓋掉；代號跟著語音名字
         fill(page, "input-join_spoken", "Moon")
         fill(page, name, "★風花雪月★")

@@ -311,6 +311,11 @@ def test_three_names_default_from_display_name(env: Env, client: TestClient) -> 
     assert (rows["Oo風花雪月oO"]["spoken"], rows["Oo風花雪月oO"]["mark"]) == ("風花雪月", "風")
     # 異體選擇字元會去掉，存的是黑白字形的 ♥
     assert (rows["♥Ken"]["spoken"], rows["♥Ken"]["mark"]) == ("Ken", "K")
+    # 數字要留著，不然玩1、玩2 旁白都念「玩」，分不出誰是誰
+    assert join(client, "玩1").status_code == 200
+    assert join(client, "～小美2號～").status_code == 200
+    rows = {r["name"]: r for r in env.service.roster_rows()}
+    assert rows["玩1"]["spoken"] == "玩1" and rows["～小美2號～"]["spoken"] == "小美2號"
     # 名字全是符號、又沒填語音名字：念不出來，不能加入
     assert err(join(client, "★☆")) == "name_invalid"
 
