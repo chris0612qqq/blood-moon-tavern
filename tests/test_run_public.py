@@ -16,6 +16,15 @@ def test_finds_tunnel_url_in_cloudflared_output() -> None:
     assert run_public.find_tunnel_url("INF Registered tunnel connection") is None
 
 
+def test_cloudflare_api_error_is_not_a_tunnel_url() -> None:
+    """申請通道失敗的錯誤訊息裡有 api.trycloudflare.com，不能當成通道網址發布出去（v4.41）。"""
+    line = (
+        'ERR Error unmarshaling QuickTunnel response: error="Post '
+        '\\"https://api.trycloudflare.com/tunnel\\": dial tcp: i/o timeout"'
+    )
+    assert run_public.find_tunnel_url(line) is None
+
+
 def test_dev_mode_never_goes_public() -> None:
     with pytest.raises(SystemExit):
         run_public.refuse_dev_mode({"DEV_MODE": "1"})

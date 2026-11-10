@@ -29,7 +29,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PORT = 8770
 REPO = "chris0612qqq/blood-moon-tavern"
 PAGES_URL = "https://chris0612qqq.github.io/blood-moon-tavern/"
-TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+# api.trycloudflare.com 是申請通道的地方，連不上時會出現在錯誤訊息裡，不是通道網址（v4.41）
+TUNNEL_URL = re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com")
 TUNNEL_START_SECONDS = 60
 # Pages 部署成功後，有時要 6 分鐘以上外面才讀得到；等太短會換網址重來，永遠追不上（v4.39）
 PUBLISH_TIMEOUT_SECONDS = 900
