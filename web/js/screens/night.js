@@ -1,9 +1,11 @@
-// S6 發牌、S7 夜晚旁觀、S8 狼人、S9 預言家、S10 女巫、S19 千面狼面板。
+// S6 發牌、S7 夜晚旁觀、S8 狼人、S9 預言家、S10 女巫、S19 千面狼面板、S28 守衛。
 import { h, s } from '../dom.js';
 import { send } from '../net.js';
 import { store, changed } from '../store.js';
 import { errorText, roleAbility, roleName, roleStory, stepName, t } from '../strings.js';
-import { clawSlash, d20Crest, roleEmblem, seerOrb, witchBrew } from '../ui/art.js';
+import {
+  clawSlash, d20Crest, guardShield, roleEmblem, seerOrb, witchBrew,
+} from '../ui/art.js';
 import {
   actionButton, avatar, countdownRing, markOf, nameOf, pickGrid, selection, toast,
 } from '../ui/common.js';
@@ -65,6 +67,10 @@ function roleSecrets(server) {
         name: nameOf(server, c.target),
         result: t(c.is_wolf ? 'role.wolfResult' : 'role.goodResult'),
       }))),
+    (me.guard_info?.guards ?? []).map((g) => h('p', { key: `guard${g.round_no}`, testid: `role-guard-${g.round_no}` },
+      g.target
+        ? t('role.guardRow', { n: g.round_no, name: nameOf(server, g.target) })
+        : t('role.guardEmpty', { n: g.round_no }))),
   ];
 }
 
@@ -222,6 +228,46 @@ export function s9(server) {
         id: 'btn-seer-check',
         label: t('s9.check', { name: nameOf(server, sel.value) }),
         run: () => send('seer.check', { target: sel.value }),
+      })
+      : null,
+  ];
+}
+
+/** S28 守衛（SPEC v4.42）：選一個別人守護，或今晚不守；選了就定案。 */
+export function s28(server) {
+  const me = server.me;
+  const info = me.guard_info;
+  const tonight = info.guards.find((g) => g.round_no === server.round_no);
+  if (tonight || me.done) {
+    const target = tonight?.target;
+    return [
+      guardShield(Boolean(target)),
+      h('h1', { class: 'center', testid: 'guard-done' },
+        target ? t('s28.done', { name: nameOf(server, target) }) : t('s28.doneNone')),
+      h('p', { class: 'center' }, t('pending')),
+    ];
+  }
+  const sel = selection('guard');
+  return [
+    guardShield(),
+    h('h1', { testid: 'screen-s28' }, t('s28.title')),
+    countdownRing(server, t('s28.timeout')),
+    h('p', { class: 'center hint' }, t('s28.rule')),
+    info.blocked
+      ? h('p', { class: 'center hint', testid: 'guard-blocked' }, t('s28.blocked', { name: nameOf(server, info.blocked) }))
+      : null,
+    pickGrid({
+      ids: me.eligible_targets ?? [],
+      server,
+      selected: sel.value,
+      onPick: sel.set,
+      extra: [{ value: 'none', label: t('s28.none') }],
+    }),
+    sel.value
+      ? actionButton({
+        id: 'btn-guard',
+        label: sel.value === 'none' ? t('s28.none') : t('s28.guard', { name: nameOf(server, sel.value) }),
+        run: () => send('guard.pick', { target: sel.value === 'none' ? null : sel.value }),
       })
       : null,
   ];

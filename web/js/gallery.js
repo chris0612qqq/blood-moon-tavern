@@ -2,7 +2,7 @@
 import { h, render } from './dom.js';
 import { roleName } from './strings.js';
 import {
-  coin, d20Crest, dawnRise, hunterBow, roleEmblem, seerOrb, snuffedCandle, victory, witchBrew,
+  coin, d20Crest, dawnRise, guardShield, hunterBow, roleEmblem, seerOrb, snuffedCandle, victory, witchBrew,
 } from './ui/art.js';
 import { openingSound, preloadRecordings } from './sfx.js';
 import { s11 } from './screens/day.js';
@@ -20,7 +20,7 @@ const DAWN_DEMO = {
   ],
 };
 
-const ROLES = ['wolf', 'faceless', 'villager', 'seer', 'witch', 'hunter'];
+const ROLES = ['wolf', 'faceless', 'villager', 'seer', 'witch', 'guard', 'hunter'];
 
 const scene = (title, ...art) => h('section', { class: 'gallery__scene' }, h('h2', {}, title), art);
 
@@ -38,6 +38,8 @@ render(document.getElementById('app'), h('div', { class: 'main' },
   scene('女巫：解藥用過', witchBrew(true, false)),
   scene('女巫：救人（倒紅藥）', witchBrew(true, false, 'save')),
   scene('女巫：下毒（倒綠藥）', witchBrew(false, true, 'poison')),
+  scene('守衛：選人中', guardShield()),
+  scene('守衛：已守護（盾牌亮起）', guardShield(true)),
   scene('天亮', dawnRise()),
   scene('天亮：平安夜', dawnRise(true)),
   scene('獵人', hunterBow()),
@@ -71,6 +73,7 @@ render(document.getElementById('app'), h('div', { class: 'main' },
       ['狼人勝', () => openingSound('win', { winner: 'wolf' })],
       ['狼嚎', () => openingSound('wolf_open')],
       ['咬死', () => openingSound('deaths', { bites: [0] })],
+      ['守衛（合成）', () => openingSound('guard_open')],
     ].map(([label, play], i) => h('button', {
       class: 'btn btn--secondary btn--small', testid: `listen-${i}`, onclick: play,
     }, label))))));

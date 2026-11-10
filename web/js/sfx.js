@@ -308,6 +308,14 @@ const SOUNDS = {
     growl.frequency.linearRampToValueAtTime(58, at + 1.1);
     return 1300;
   },
+  // 守衛請睜眼之前：盾牌「鏘」一聲（金屬不和諧泛音＋撞擊雜音），尾音嗡嗡（SPEC v4.42）
+  guard_open(ac, at) {
+    burst(ac, { at, dur: 0.08, freq: 3000, q: 1.2, peak: 0.6 });
+    [420, 1093, 1785].forEach((freq, i) => {
+      tone(ac, { freq, at, decay: 1.0 - i * 0.25, peak: 0.28 - i * 0.07 });
+    });
+    return 1200;
+  },
   // 預言家請睜眼之前：水晶風鈴由低到高閃爍
   seer_open(ac, at) {
     [1200, 1500, 1800, 2250, 2700, 3000].forEach((freq, i) => {
@@ -410,7 +418,7 @@ SOUNDS.win = victorySound;
 // 伺服器有替這幾句預留音效時間（server/balance.py SFX_SECONDS）：放完才念。
 // 結算（win）沒有預留，但它是最後一句，後面沒有句子會打斷，所以也等前奏。
 // 其他句子沒有預留，等的話下一句會來打斷，所以音效和旁白一起出來。
-const LEAD_LINES = new Set(['night_start', 'wolf_open', 'seer_open', 'witch_open', 'dawn', 'win']);
+const LEAD_LINES = new Set(['night_start', 'guard_open', 'wolf_open', 'seer_open', 'witch_open', 'dawn', 'win']);
 
 /**
  * 旁白念這一句之前的音效（ART 12.4）。回傳要等幾毫秒再念；不用等或沒播出來回傳 0。

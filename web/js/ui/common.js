@@ -136,7 +136,7 @@ export function countdownRing(server, hint) {
 
 // 角色步驟旁白念的時候就能選（SPEC A8.2），其他步驟要等念完
 function prepText(server) {
-  return t(['WOLF', 'SEER', 'WITCH', 'HUNTER'].includes(server.step) ? 'prep.canAct' : 'prep');
+  return t(['GUARD', 'WOLF', 'SEER', 'WITCH', 'HUNTER'].includes(server.step) ? 'prep.canAct' : 'prep');
 }
 
 // 重繪時先放正確文字，時鐘下一影格才更新，避免數字閃掉

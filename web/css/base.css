@@ -125,6 +125,7 @@ input, select, textarea { font-size: 16px; width: 100%; min-height: 44px; paddin
 .act { border-left: 5px solid #888; background: #383838; padding: 8px 10px; margin: 6px 0; border-radius: 3px; }
 .act__label { display: block; font-size: 14px; }
 .act--wolf { border-color: #d9534f; } .act--wolf .act__label { color: #f08a86; }
+.act--guard { border-color: #6a9ab8; } .act--guard .act__label { color: #a9cde3; }
 .act--seer { border-color: #8d78d6; } .act--seer .act__label { color: #b6a7ee; }
 .act--witch { border-color: #3f8f5a; } .act--witch .act__label { color: #7fcf9b; }
 .act--hunter { border-color: #b98a55; } .act--hunter .act__label { color: #e0b98a; }

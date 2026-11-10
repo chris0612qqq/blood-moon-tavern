@@ -6,7 +6,7 @@ import { changed, store } from '../store.js';
 import { causePlain, LINE_ORDER, lineLabel, roleName, stepName, t } from '../strings.js';
 import { actionButton, avatar, button, countdown, nameOf, pauseToggle } from '../ui/common.js';
 import { suspectBoard, voteProgress } from './day.js';
-import { actRow } from './tabs.js';
+import { actRow, guardedLine } from './tabs.js';
 import { speakAfter } from '../narrator.js';
 import { cardGrid, cardText } from '../ui/cards.js';
 import { lobbyAdmin, lobbyList, lobbyMenu, seated, voiceWarning, wakeHint } from './s5_lobby.js';
@@ -184,7 +184,9 @@ function moreMenu(server) {
 }
 
 // 簡報牆的順序；白天的步驟都算過了夜晚
-const NIGHT_ORDER = ['NIGHT_START', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END', 'DAWN'];
+const NIGHT_ORDER = [
+  'NIGHT_START', 'GUARD', 'GUARD_END', 'WOLF', 'WOLF_END', 'SEER', 'SEER_END', 'WITCH', 'WITCH_END', 'DAWN',
+];
 
 function reached(server, step) {
   const at = NIGHT_ORDER.indexOf(server.step);
@@ -205,6 +207,16 @@ function wallWolf(server, night, row, name) {
 function holderOf(server, role, row) {
   const holder = server.host.players.find((p) => p.role === role);
   return holder && (holder.alive || row?.deaths?.includes(holder.id)) ? holder.id : null;
+}
+
+/** 守衛守誰（SPEC v4.42）：這局沒有守衛就不列。 */
+function wallGuard(server, night, row, name) {
+  const guard = holderOf(server, ROLE.GUARD, row);
+  if (!guard || !reached(server, 'GUARD')) return null;
+  let text = t('s18.guardNone', { who: name(guard) });
+  if (night.guard_target) text = t('s18.guardPick', { who: name(guard), target: name(night.guard_target) });
+  else if (server.step === 'GUARD') text = t('s20.wallPicking');
+  return actRow('guard', t('s18.actGuard'), text);
 }
 
 function wallSeer(server, night, row, name) {
@@ -237,7 +249,8 @@ function wallDawn(server, night, row, name) {
     dead.length
       ? dead.map((id) => t('s18.deathRow', { name: name(id), cause: causePlain(row.causes[id]) })).join('、')
       : (night.witch_saved ? '' : t('s18.peaceful')),
-    night.witch_saved ? h('div', {}, t('s18.saved', { name: name(night.wolf_target) })) : null);
+    night.witch_saved ? h('div', {}, t('s18.saved', { name: name(night.wolf_target) })) : null,
+    guardedLine(night, name));
 }
 
 /** 主持人手動判死的人：不屬於任何行動，但也是這回合的死亡。 */
@@ -290,6 +303,7 @@ function briefingWall(server) {
   const name = (id) => nameOf(server, id);
   return h('div', { testid: 'host-wall' },
     h('h2', {}, t('s20.wallTitle', { n })),
+    wallGuard(server, night, row, name),
     wallWolf(server, night, row, name),
     wallSeer(server, night, row, name),
     wallWitch(server, night, row, name),

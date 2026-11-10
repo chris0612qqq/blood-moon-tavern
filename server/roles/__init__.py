@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import Final
 
 from server.enums import Faction, Role, Step
-from server.roles import faceless, hunter, seer, villager, witch, wolf
+from server.roles import faceless, guard, hunter, seer, villager, witch, wolf
 from server.roles.base import RoleDef
 
 REGISTRY: Final[dict[Role, RoleDef]] = {
-    module.ROLE.code: module.ROLE for module in (wolf, faceless, villager, seer, witch, hunter)
+    module.ROLE.code: module.ROLE
+    for module in (wolf, faceless, villager, seer, witch, guard, hunter)
 }
 
 
@@ -24,7 +25,7 @@ def is_wolf(role: Role) -> bool:
 
 
 def deal_sequence() -> list[Role]:
-    """抽牌順序（SPEC A5.7）：千面狼 → 狼人 → 預言家 → 女巫 → 獵人；村民是剩下的人。"""
+    """抽牌順序（SPEC A5.7）：千面狼 → 狼人 → 預言家 → 女巫 → 守衛 → 獵人；村民是剩下的人。"""
     drawn = [r for r in REGISTRY.values() if r.deal_order is not None]
     return [r.code for r in sorted(drawn, key=lambda r: r.deal_order or 0)]
 
