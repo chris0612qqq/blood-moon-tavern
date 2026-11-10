@@ -9,6 +9,9 @@
 // audio/win_wolf.wav：OpenGameArt「String and piano horror stings」的 abyss.ogg（congusbongus，CC0）。
 // audio/claw_swipe.wav、audio/bite.wav：Gravity Sound 錄製，CC BY 4.0（要標示出處），取自 Wikimedia Commons
 // 「File:Sword Swipe (Gravity Sound).mp3」前 0.2 秒、「File:Big bite (Gravity Sound).wav」前 0.42 秒。
+// audio/shield_clash.wav、audio/shield_hit.wav：同樣是 Gravity Sound（CC BY 4.0，Wikimedia Commons），
+// 「File:Sword Clash (Gravity Sound).mp3」0.03–0.75 秒、「File:Metal Hit (Gravity Sound).mp3」前 0.45 秒。
+// 守衛睜眼前的「鏘」，先兩個都放，使用者在美術總覽聽過再選一個（SPEC v4.44）。
 // 都轉成單聲道並把峰值調到 −1 dBFS（iPhone 舊版 Safari 不一定解得開 ogg，所以用 wav）。
 
 import { WINNER } from './protocol.js';
@@ -21,8 +24,12 @@ const RECORDING_FILES = {
   win_wolf: 'audio/win_wolf.wav',
   slash: 'audio/claw_swipe.wav',
   bite: 'audio/bite.wav',
+  shield: 'audio/shield_clash.wav',
+  shield_hit: 'audio/shield_hit.wav',
 };
 const HOWL_S = 1.8;
+// 守衛的「鏘」：伺服器預留 1.2 秒（server/balance.py SFX_SECONDS），錄音比較短也等滿再念
+const GUARD_LEAD_MS = 1200;
 /** 合成狼嚎加回音的長度。 */
 const SYNTH_HOWL_MS = 2300;
 const AFTER_RECORDING_MS = 300; // 錄音放完稍停一下再念旁白
@@ -308,8 +315,14 @@ const SOUNDS = {
     growl.frequency.linearRampToValueAtTime(58, at + 1.1);
     return 1300;
   },
-  // 守衛請睜眼之前：盾牌「鏘」一聲（金屬不和諧泛音＋撞擊雜音），尾音嗡嗡（SPEC v4.42）
-  guard_open(ac, at) {
+  // 守衛請睜眼之前：盾牌「鏘」一聲。有錄音用錄音（SPEC v4.44），沒有就合成：撞擊雜音＋不和諧的金屬泛音
+  // take 是美術總覽試聽用：'hit' 放另一個候選錄音，'synth' 放合成版
+  guard_open(ac, at, { take = 'clash' } = {}) {
+    const recording = { clash: recordings.shield, hit: recordings.shield_hit }[take];
+    if (recording) {
+      playRecording(ac, recording, { at });
+      return GUARD_LEAD_MS;
+    }
     burst(ac, { at, dur: 0.08, freq: 3000, q: 1.2, peak: 0.6 });
     [420, 1093, 1785].forEach((freq, i) => {
       tone(ac, { freq, at, decay: 1.0 - i * 0.25, peak: 0.28 - i * 0.07 });
