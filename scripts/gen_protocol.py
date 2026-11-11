@@ -58,6 +58,7 @@ def render() -> str:
         "ROLE": {r.name: r.value for r in Role},
         "STEP": {s.name: s.value for s in Step},
         "WINNER": {w.name: w.value for w in Winner},
+        "NAME_SYMBOLS": list(protocol.NAME_SYMBOLS),
         "LIMITS": {
             "NAME_MAX_CHARS": protocol.NAME_MAX_CHARS,
             "SPOKEN_MAX_CHARS": protocol.SPOKEN_MAX_CHARS,

@@ -237,3 +237,35 @@ def test_witch_wait_rule(server_url: str) -> None:  # noqa: F811
         )
         assert result == [100, 100, None, None, None]
         browser.close()
+
+
+def test_symbol_buttons_insert_at_cursor(server_url: str) -> None:  # noqa: F811
+    """名字欄下面的常用符號：點一下插進游標位置，語音名字不念，滿 8 字不加（SPEC v4.46）。"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        admin = browser.new_context(viewport=MOBILE).new_page()
+        admin.goto(server_url)
+        admin_open_room(admin, "god")
+        page = join_page(server_url, browser.new_context(viewport=MOBILE))
+        name = "input-join_name"
+        symbols = page.locator('[data-testid="name-symbols"] button')
+        assert symbols.count() == 15
+        texts = symbols.all_inner_texts()
+        fill(page, name, "小美")
+        page.locator(f'[data-testid="name-symbol-{texts.index("彡")}"]').click()
+        assert value(page, name) == "小美彡"
+        # 游標移到最前面再點：插在前面
+        page.locator(f'[data-testid="{name}"]').evaluate("(el) => el.setSelectionRange(0, 0)")
+        page.locator(f'[data-testid="name-symbol-{texts.index("★")}"]').click()
+        assert value(page, name) == "★小美彡"
+        page.wait_for_timeout(100)
+        assert value(page, "input-join_spoken") == "小美"  # 彡 不念
+        fill(page, name, "一二三四五六七八")
+        page.locator('[data-testid="name-symbol-0"]').click()
+        assert value(page, name) == "一二三四五六七八"  # 滿了不加
+        wait(page, "toast")
+        assert "加不下了" in page.locator('[data-testid="toast"]').inner_text()
+        # 最小的手機也不能左右滑
+        root = "document.documentElement"
+        assert page.evaluate(f"{root}.scrollWidth <= {root}.clientWidth")
+        browser.close()

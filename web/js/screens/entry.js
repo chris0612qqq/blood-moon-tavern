@@ -3,7 +3,7 @@
 import { h } from '../dom.js';
 import { api, connect } from '../net.js';
 import { speak } from '../narrator.js';
-import { LIMITS } from '../protocol.js';
+import { LIMITS, NAME_SYMBOLS } from '../protocol.js';
 import {
   clearAdminToken, clearPlayerToken, lastMark, lastName, lastSpoken, loadTokens, saveAdminToken, saveLastNames,
   savePlayerToken,
@@ -293,11 +293,41 @@ function afterJoin(data, names = null) {
   changed();
 }
 
-const nameField = (o = {}) => field('join_name', t('s4.name'), {
-  ...o,
-  placeholder: t('s4.namePlaceholder'),
-  clean: (raw) => cleanName(raw, LIMITS.NAME_MAX_CHARS),
-});
+const nameField = (o = {}) => [
+  field('join_name', t('s4.name'), {
+    ...o,
+    placeholder: t('s4.namePlaceholder'),
+    clean: (raw) => cleanName(raw, LIMITS.NAME_MAX_CHARS),
+  }),
+  symbolButtons(),
+];
+
+/** 點一下把符號插進名字的游標位置（SPEC v4.46）；滿 8 個字就不加。 */
+function insertSymbol(symbol) {
+  const f = form();
+  const input = document.querySelector('[data-testid="input-join_name"]');
+  const value = f.join_name ?? '';
+  const start = input?.selectionStart ?? value.length;
+  const end = input?.selectionEnd ?? start;
+  const next = value.slice(0, start) + symbol + value.slice(end);
+  if (graphemeCount(next) > LIMITS.NAME_MAX_CHARS) {
+    toast('s4.nameFull');
+    return;
+  }
+  f.join_name = next;
+  if (input) {
+    input.value = next;
+    input.focus();
+    input.setSelectionRange(start + symbol.length, start + symbol.length);
+  }
+  changed();
+}
+
+const symbolButtons = () => h('div', { class: 'symbols', testid: 'name-symbols' },
+  NAME_SYMBOLS.map((symbol, i) => h('button', {
+    type: 'button', class: 'btn btn--secondary btn--small symbols__btn', testid: `name-symbol-${i}`,
+    onclick: () => insertSymbol(symbol),
+  }, symbol)));
 
 /** 三種名字（SPEC v4.40）：語音名字、代號沒自己改過就跟著名字自動帶入。 */
 function nameFields(f) {
