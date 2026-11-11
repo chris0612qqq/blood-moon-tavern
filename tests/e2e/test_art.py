@@ -177,7 +177,7 @@ WIN = """async (winner) => {
     }
 }"""
 HOWL_S, WIN_VILLAGE_S, WIN_WOLF_S, CLAW_S, BITE_S = 2.8, 8.6, 7.5, 0.2, 0.4
-SHIELD_CLASH_S, SHIELD_HIT_S = 0.7, 0.5
+SHIELD_CLASH_S = 0.7
 
 
 def open_sound(page: Page) -> None:
@@ -213,7 +213,7 @@ def test_opening_sounds_wait_only_where_the_server_leaves_time(server_url: str) 
         # 守衛的「鏘」用錄音，伺服器預留 1.2 秒，放完才念（SPEC v4.44）
         guard = WIN.replace("openingSound('win', { winner })", "openingSound('guard_open', { take: winner })")
         assert page.evaluate(guard, "clash") == {"ms": 1200, "started": [SHIELD_CLASH_S]}
-        assert page.evaluate(guard, "hit") == {"ms": 1200, "started": [SHIELD_HIT_S]}
+        assert page.evaluate(guard, "synth")["ms"] == 1200  # 合成版也預留 1.2 秒
         assert errors == []
         browser.close()
 
@@ -281,7 +281,7 @@ def test_only_narrator_phones_download_recordings(server_url: str) -> None:  # n
         page.evaluate("async () => { await import('/js/sfx.js'); }")
         page.mouse.click(2, 2)  # 第一次點擊才開聲音
         page.wait_for_timeout(500)
-        assert len(fetched) == 8  # 總覽頁說要下載：八個都抓（含守衛兩個候選，SPEC v4.44）
+        assert len(fetched) == 7  # 總覽頁說要下載：七個都抓（守衛只留刀劍鏘，SPEC v4.45）
         plain = browser.new_context(viewport=MOBILE).new_page()
         plain_fetched: list[str] = []
         plain.on("request", lambda r: plain_fetched.append(r.url) if r.url.endswith(".wav") else None)
