@@ -73,9 +73,8 @@ render(document.getElementById('app'), h('div', { class: 'main' },
       ['狼人勝', () => openingSound('win', { winner: 'wolf' })],
       ['狼嚎', () => openingSound('wolf_open')],
       ['咬死', () => openingSound('deaths', { bites: [0] })],
-      ['守衛：刀劍鏘', () => openingSound('guard_open', { take: 'clash' })],
-      ['守衛：金屬敲', () => openingSound('guard_open', { take: 'hit' })],
-      ['守衛：合成', () => openingSound('guard_open', { take: 'synth' })],
+      ['守衛：鏘', () => openingSound('guard_open')],
+      ['守衛：合成版', () => openingSound('guard_open', { take: 'synth' })],
     ].map(([label, play], i) => h('button', {
       class: 'btn btn--secondary btn--small', testid: `listen-${i}`, onclick: play,
     }, label))))));
