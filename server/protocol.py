@@ -20,6 +20,9 @@ Id = Annotated[str, Field(min_length=1, max_length=64)]
 NAME_MAX_CHARS: Final = 8
 SPOKEN_MAX_CHARS: Final = 6
 MARK_CHARS: Final = 1
+# 名字欄下面的常用符號按鈕（SPEC v4.46）。
+# 彡乂〆の 手機當成文字，自動帶語音名字時要跳過，旁白才不會念出來
+NAME_SYMBOLS: Final = tuple("★☆♥♡♪～㊣の彡乂〆※〃°↗")
 # 異體選擇字元也去掉：♥️ 這類會被手機畫成彩色圖案，去掉後由前端統一用黑白字形
 _ZERO_WIDTH = frozenset("​‌‍⁠﻿︎️")
 # 預設就畫成彩色圖案的字（Unicode Emoji_Presentation，基本平面部分）；其餘補充平面圖案整段擋掉
@@ -83,7 +86,8 @@ def validate_mark(raw: str) -> str:
 
 def default_spoken(name: str) -> str:
     """沒填語音名字時從顯示名字取：有漢字只留漢字和數字（玩1 才不會變成「玩」），
-    否則留文字數字（和前端自動帶入同規則）。"""
+    否則留文字數字（和前端自動帶入同規則）。常用符號（彡、の…）先拿掉，不念。"""
+    name = "".join(ch for ch in name if ch not in NAME_SYMBOLS)
     if any(_is_han(ch) for ch in name):
         words = [ch for ch in name if _is_han(ch) or unicodedata.category(ch) == "Nd"]
     else:
