@@ -1,7 +1,7 @@
 // 共用元件灰盒版（DEV_PLAN P4）：ActionButton、CountdownRing、PickGrid、Avatar、確認框。
 import { h } from '../dom.js';
 import { send, serverNow } from '../net.js';
-import { LIMITS } from '../protocol.js';
+import { LIMITS, NAME_SYMBOLS } from '../protocol.js';
 import { changed, store } from '../store.js';
 import { uiSound } from '../sfx.js';
 import { errorText, t } from '../strings.js';
@@ -274,10 +274,10 @@ export const graphemeCount = (text) => graphemes(text).length;
 
 /**
  * 自動帶入的語音名字：有漢字只留漢字和數字（Oo風花雪月oO → 風花雪月，玩1 → 玩1），
- * 否則留文字與數字。和伺服器 default_spoken 同規則。
+ * 否則留文字與數字。常用符號按鈕的字（彡、の…）不念。和伺服器 default_spoken 同規則。
  */
 export function autoSpoken(name) {
-  const chars = graphemes(name);
+  const chars = graphemes(name).filter((ch) => !NAME_SYMBOLS.includes(ch));
   const hasHan = chars.some((ch) => /^\p{Script=Han}$/u.test(ch));
   const keep = hasHan ? /^[\p{Script=Han}\p{Nd}]$/u : /^[\p{L}\p{N}]$/u;
   const words = chars.filter((ch) => keep.test(ch) && !EMOJI.test(ch));

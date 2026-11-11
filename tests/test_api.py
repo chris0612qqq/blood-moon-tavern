@@ -320,6 +320,16 @@ def test_three_names_default_from_display_name(env: Env, client: TestClient) -> 
     assert err(join(client, "★☆")) == "name_invalid"
 
 
+def test_symbol_buttons_are_not_read_aloud() -> None:
+    """符號按鈕的字（彡、乂、〆、の 手機當成文字）自動帶語音名字時跳過（SPEC v4.46）。"""
+    assert protocol.default_spoken("彡小美彡") == "小美"
+    assert protocol.default_spoken("乂阿志乂") == "阿志"
+    assert protocol.default_spoken("〆Amyの") == "Amy"
+    assert protocol.default_spoken("㊣の夜") == "夜"
+    for symbol in protocol.NAME_SYMBOLS:  # 每個都能放進顯示名字
+        assert protocol.validate_name(f"小美{symbol}") == f"小美{symbol}"
+
+
 @pytest.mark.parametrize(
     ("spoken", "mark", "ok"),
     [
