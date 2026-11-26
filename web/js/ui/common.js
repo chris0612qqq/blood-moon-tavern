@@ -275,9 +275,10 @@ export const graphemeCount = (text) => graphemes(text).length;
 /**
  * 自動帶入的語音名字：有漢字只留漢字和數字（Oo風花雪月oO → 風花雪月，玩1 → 玩1），
  * 否則留文字與數字。常用符號按鈕的字（彡、の…）不念。和伺服器 default_spoken 同規則。
+ * keepSymbols：v4.46 以前的舊規則（不跳過符號），只用來認出舊版自動帶入的語音名字。
  */
-export function autoSpoken(name) {
-  const chars = graphemes(name).filter((ch) => !NAME_SYMBOLS.includes(ch));
+export function autoSpoken(name, { keepSymbols = false } = {}) {
+  const chars = graphemes(name).filter((ch) => keepSymbols || !NAME_SYMBOLS.includes(ch));
   const hasHan = chars.some((ch) => /^\p{Script=Han}$/u.test(ch));
   const keep = hasHan ? /^[\p{Script=Han}\p{Nd}]$/u : /^[\p{L}\p{N}]$/u;
   const words = chars.filter((ch) => keep.test(ch) && !EMOJI.test(ch));
@@ -323,6 +324,7 @@ export function field(name, label, o = {}) {
       oninput: (e) => {
         if (!e.isComposing) commit(e.target);
       },
+      onfocus: o.onfocus,
     }),
     o.hint ? h('div', { class: 'hint' }, o.hint) : null,
     o.error ? h('div', { class: 'error-text' }, `⚠ ${o.error}`) : null);
