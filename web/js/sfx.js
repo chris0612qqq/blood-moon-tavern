@@ -324,7 +324,7 @@ const SOUNDS = {
     [420, 1093, 1785].forEach((freq, i) => {
       tone(ac, { freq, at, decay: 1.0 - i * 0.25, peak: 0.28 - i * 0.07 });
     });
-    return 1200;
+    return GUARD_LEAD_MS;
   },
   // 預言家請睜眼之前：水晶風鈴由低到高閃爍
   seer_open(ac, at) {
