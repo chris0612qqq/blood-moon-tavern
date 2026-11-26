@@ -268,4 +268,17 @@ def test_symbol_buttons_insert_at_cursor(server_url: str) -> None:  # noqa: F811
         # 最小的手機也不能左右滑
         root = "document.documentElement"
         assert page.evaluate(f"{root}.scrollWidth <= {root}.clientWidth")
+        # 回來的玩家：上次舊版自動帶入的語音名字「彡小美彡」要改用新規則；沒點輸入框就加在最後
+        back = browser.new_context(viewport=MOBILE)
+        back.add_init_script(
+            "localStorage.setItem('bmt.last_name', JSON.stringify('彡小美彡'));"
+            "localStorage.setItem('bmt.last_spoken', JSON.stringify('彡小美彡'));"
+            "localStorage.setItem('bmt.last_mark', JSON.stringify('彡'));"
+        )
+        again = join_page(server_url, back)
+        again.wait_for_timeout(100)
+        assert value(again, "input-join_spoken") == "小美"
+        assert value(again, "input-join_mark") == "小"
+        again.locator(f'[data-testid="name-symbol-{texts.index("♥")}"]').click()
+        assert value(again, name) == "彡小美彡♥"
         browser.close()

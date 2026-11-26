@@ -272,11 +272,14 @@ export function s4() {
   if (f.join_name === undefined && lastName()) {
     f.join_name = lastName();
     // 上次自己改過的語音名字、代號才帶入；和自動帶入一樣的就讓它繼續跟著名字變
-    if (lastSpoken() && lastSpoken() !== autoSpoken(f.join_name)) {
+    // 舊版（v4.46 前）自動帶入會留下 彡、の 等符號，那也算自動的，改用新規則重算
+    const auto = [autoSpoken(f.join_name), autoSpoken(f.join_name, { keepSymbols: true })];
+    if (lastSpoken() && !auto.includes(lastSpoken())) {
       f.join_spoken = lastSpoken();
       f.spoken_edited = true;
     }
-    if (lastMark() && lastMark() !== autoMark(f.join_spoken ?? autoSpoken(f.join_name))) {
+    const autoMarks = f.spoken_edited ? [autoMark(f.join_spoken)] : auto.map(autoMark);
+    if (lastMark() && !autoMarks.includes(lastMark())) {
       f.join_mark = lastMark();
       f.mark_edited = true;
     }
@@ -298,17 +301,26 @@ const nameField = (o = {}) => [
     ...o,
     placeholder: t('s4.namePlaceholder'),
     clean: (raw) => cleanName(raw, LIMITS.NAME_MAX_CHARS),
+    // 點過輸入框，游標位置才是使用者選的；沒點過的話有些瀏覽器游標在最前面
+    // 不用 data- 屬性記：重繪時 dom.js 會把畫面沒寫的屬性清掉
+    onfocus: (e) => { touchedInputs.add(e.target); },
   }),
   symbolButtons(),
 ];
+const touchedInputs = new WeakSet();
 
-/** 點一下把符號插進名字的游標位置（SPEC v4.46）；滿 8 個字就不加。 */
+/**
+ * 點一下把符號插進名字的游標位置（SPEC v4.46）；滿 8 個字就不加。
+ * 以輸入框裡的字為準：注音還在組字時表單值還沒更新，用表單值會把剛打的字蓋掉。
+ * 沒點過輸入框就加在最後面；不重新聚焦，iPhone 鍵盤才不會每點一次就跳出來蓋住符號。
+ */
 function insertSymbol(symbol) {
   const f = form();
   const input = document.querySelector('[data-testid="input-join_name"]');
-  const value = f.join_name ?? '';
-  const start = input?.selectionStart ?? value.length;
-  const end = input?.selectionEnd ?? start;
+  const value = input?.value ?? f.join_name ?? '';
+  const caretKnown = Boolean(input) && touchedInputs.has(input);
+  const start = caretKnown ? input.selectionStart ?? value.length : value.length;
+  const end = caretKnown ? input.selectionEnd ?? start : start;
   const next = value.slice(0, start) + symbol + value.slice(end);
   if (graphemeCount(next) > LIMITS.NAME_MAX_CHARS) {
     toast('s4.nameFull');
@@ -317,7 +329,6 @@ function insertSymbol(symbol) {
   f.join_name = next;
   if (input) {
     input.value = next;
-    input.focus();
     input.setSelectionRange(start + symbol.length, start + symbol.length);
   }
   changed();
